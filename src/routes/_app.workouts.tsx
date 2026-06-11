@@ -7,7 +7,6 @@ import { workoutRecommendationService, type Category } from "@/lib/workouts";
 import {
   weeklyScheduleService,
   toggleCompletion,
-  loadCompletion,
   type WeeklyScheduleDay,
 } from "@/lib/weeklySchedule";
 import { WorkoutCardTile } from "@/components/WorkoutCard";
@@ -363,5 +362,3 @@ function Pill({ icon: Icon, children }: { icon: typeof Clock; children: React.Re
   );
 }
 
-// Ensure loadCompletion gets bundled even though it's only re-exported.
-void loadCompletion;
