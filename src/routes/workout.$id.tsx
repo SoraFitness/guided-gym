@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Clock, Flame, Play, Heart } from "lucide-react";
-import { getWorkout } from "@/lib/workouts";
+import { getWorkout, type Workout } from "@/lib/workouts";
 
 export const Route = createFileRoute("/workout/$id")({
   head: ({ params }) => ({
@@ -23,7 +23,8 @@ export const Route = createFileRoute("/workout/$id")({
 });
 
 function WorkoutDetail() {
-  const w = Route.useLoaderData();
+  const w = Route.useLoaderData() as Workout;
+
   const navigate = useNavigate();
 
   return (
