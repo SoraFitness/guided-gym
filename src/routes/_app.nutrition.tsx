@@ -5,9 +5,13 @@ import {
   Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
 } from "lucide-react";
 import {
-  foods, meals, loadLog, saveLog, entriesOn, macrosFor, entryFood, loadGoals,
-  type Meal, type LogEntry, type Food, type NutritionGoals,
+  foods, meals, entriesOn, macrosFor, entryFood,
+  type Meal, type LogEntry, type Food,
 } from "@/lib/foods";
+import {
+  useNutrition, addEntry as storeAdd, updateEntry as storeUpdate, removeEntry as storeRemove,
+} from "@/lib/nutritionStore";
+import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { foodLookupService, aiFoodScanService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { cn } from "@/lib/utils";
 
@@ -17,41 +21,19 @@ export const Route = createFileRoute("/_app/nutrition")({
 });
 
 function NutritionPage() {
-  const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [goals, setGoals] = useState<NutritionGoals>(loadGoals());
   const [day, setDay] = useState<Date>(new Date());
+  const { entries, goals } = useNutrition(day);
   const [addFor, setAddFor] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<LogEntry | null>(null);
-
-  useEffect(() => {
-    setEntries(loadLog());
-    setGoals(loadGoals());
-    const onFocus = () => setGoals(loadGoals());
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
 
   const today = useMemo(() => entriesOn(entries, day), [entries, day]);
   const totals = macrosFor(today);
 
   const add = (entry: Omit<LogEntry, "id" | "loggedAt">) => {
-    const next = [
-      ...entries,
-      { id: crypto.randomUUID(), loggedAt: day.toISOString(), ...entry },
-    ];
-    setEntries(next);
-    saveLog(next);
+    storeAdd({ ...entry, loggedAt: day.toISOString() });
   };
-  const update = (id: string, patch: Partial<LogEntry>) => {
-    const next = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
-    setEntries(next);
-    saveLog(next);
-  };
-  const remove = (id: string) => {
-    const next = entries.filter((e) => e.id !== id);
-    setEntries(next);
-    saveLog(next);
-  };
+  const update = (id: string, patch: Partial<LogEntry>) => storeUpdate(id, patch);
+  const remove = (id: string) => storeRemove(id);
 
   const isToday = day.toDateString() === new Date().toDateString();
   const dayLabel = isToday
