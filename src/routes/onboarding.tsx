@@ -75,11 +75,13 @@ function Onboarding() {
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 7: return d.name.trim().length >= 2 && d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0;
+      case 0: return d.name.trim().length >= 2;
       case 6: return d.focusAreas.length > 0;
+      case 7: return d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0 && d.goalWeightKg > 0;
       default: return true;
     }
   }, [step, d]);
+
 
   const goNext = () => {
     if (!canNext) return;
