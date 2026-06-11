@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronRight, Sparkles, Trash2 } from "lucide-react";
 import { deleteScan, useScans } from "@/lib/bodyScanStore";
 import { SCAN_DISCLAIMER } from "@/lib/bodyScan";
 
-export const Route = createFileRoute("/_app/scan/body")({
+export const Route = createFileRoute("/_app/scan/body/")({
   head: () => ({ meta: [{ title: "Body Scan — Pulse" }] }),
   component: BodyScanIntro,
 });
