@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Home, Dumbbell, Apple, BarChart3, User } from "lucide-react";
+import { Home, Dumbbell, Apple, ScanLine, User } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 
@@ -11,8 +11,8 @@ export const Route = createFileRoute("/_app")({
 const tabs = [
   { to: "/home", label: "Home", Icon: Home },
   { to: "/workouts", label: "Workouts", Icon: Dumbbell },
+  { to: "/scan", label: "Scan", Icon: ScanLine },
   { to: "/nutrition", label: "Nutrition", Icon: Apple },
-  { to: "/progress", label: "Progress", Icon: BarChart3 },
   { to: "/profile", label: "Profile", Icon: User },
 ] as const;
 
@@ -26,7 +26,10 @@ function AppShell() {
     if (ready && !profile) navigate({ to: "/onboarding" });
   }, [ready, profile, navigate]);
 
-  const hideTabs = pathname.startsWith("/workout/");
+  const hideTabs =
+    pathname.startsWith("/workout/") ||
+    pathname.startsWith("/scan/body/new") ||
+    pathname.startsWith("/scan/body/");
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
