@@ -1,86 +1,93 @@
-# Sync Home & Nutrition + Premium Food Visuals
+# Body Scan — premium physique analysis
 
-## Problem
-Home shows hardcoded `kcal = 380`, `mins = 22`, `streak = 6 days`. Nutrition reads real data from `loadLog()`. They never match. Meal/food visuals are bare emoji.
+## Architecture
 
-## 1. Shared nutrition + progress store
+**Storage**: localStorage. No backend exists; the user said "use localStorage if no Supabase." Skipping Cloud keeps the change focused and avoids forcing a database for v1. (Easy to migrate later — service layer is the only thing that needs swapping.)
 
-**New file**: `src/lib/nutritionStore.ts`
-- Tiny pub/sub on top of existing `loadLog`/`saveLog` in `src/lib/foods.ts` (keep storage key `fitness:foodlog` so nothing is lost).
-- Exports a `useNutrition()` hook returning:
-  - `entries`, `todayEntries`
-  - `totals` (kcal/protein/carbs/fat for today, via existing `macrosFor`)
-  - `goals` (from `loadGoals()`, recomputed when profile changes via `suggestNutrition`)
-  - `remaining`, `progress` (0–1 per macro)
-  - `addEntry`, `updateEntry`, `removeEntry` — all call `saveLog` and emit a change event so every subscriber re-renders.
-- Listens to `storage` event so cross-tab edits sync too.
+**AI analysis**: provision `LOVABLE_API_KEY` (via `ai_gateway--create`) and use Lovable AI Gateway with `google/gemini-2.5-flash` (multimodal: text+image→text) for real vision analysis. If the key call fails, we fall back to a deterministic local heuristic so the flow never breaks.
 
-**New file**: `src/lib/progressStore.ts`
-- `useProgress()` returning:
-  - `workoutMinutesToday`, `workoutMinutesTarget` (from `profile.sessionMinutes`)
-  - `completedThisWeek`, `streakDays`
-- Backed by `localStorage` key `fitness:workoutLog` (array of `{ id, date, minutes, workoutId }`). For now, the workout detail page's "complete" action and the weekly schedule "mark complete" can push into this; reads work immediately and default to 0/empty.
-
-Both stores are the **single source of truth**. Home and Nutrition import the same hook — no separate numbers anywhere.
-
-## 2. Home screen rewrite (`src/routes/_app.home.tsx`)
-
-Replace the hardcoded `kcal/mins/streak` block with:
-
-- **Today's Nutrition card**: ring shows `totals.kcal / goals.kcal`, 3 macro bars (P/C/F) with eaten / target. Empty state: "Start by scanning or logging your first meal" + CTA to `/nutrition`.
-- **Today's Activity card**: workout minutes ring, "X workouts this week", streak chip.
-- Keep the weekly plan + recommended sections unchanged.
-
-All values come from `useNutrition()` and `useProgress()`.
-
-## 3. Nutrition screen polish (`src/routes/_app.nutrition.tsx`)
-
-- Swap local state for `useNutrition()` so adds/removes propagate instantly.
-- Goals read from same hook; if user edits goals in Profile, Nutrition + Home update on next render (we emit on save).
-- Replace inline emoji meal headers with new `<MealThumbnail meal="breakfast" />`.
-- Replace per-food emoji with new `<FoodThumbnail food={f} />`.
-- Tighten visual: charcoal cards (`bg-surface`), `border border-white/[0.05]`, smaller pill "+ Add" buttons, lime accent reserved for active progress + primary CTA only.
-- Meal card layout:
-  - Thumbnail · Meal name · "N items · X kcal" · Add button
-  - Expanded list of food rows: thumbnail · name · `1 serving · P6 · C6 · F14` · `165 kcal` · swipe/tap → edit/delete (existing actions kept).
-
-## 4. Premium food/meal thumbnails
-
-**New file**: `src/components/FoodThumbnail.tsx`
-- Two exports: `FoodThumbnail` and `MealThumbnail`.
-- Rounded-2xl 44–56px tile with a per-category gradient background, subtle inner border, soft shadow, and a centered lucide icon (or emoji at smaller size with drop-shadow for fallback).
-- Category map (drives gradient + icon):
-  - breakfast → warm amber/orange gradient + `EggFried`/`Coffee` icon
-  - lunch → green/emerald gradient + `Salad` icon
-  - dinner → deep indigo/violet gradient + `UtensilsCrossed` icon
-  - snack → rose/pink gradient + `Cookie` icon
-  - protein (chicken, salmon, shake, yogurt, eggs) → red/orange gradient + `Drumstick`/`MilkOff` icon
-  - carbs (rice, oatmeal, toast, sweet potato, hashbrowns) → amber gradient + `Wheat` icon
-  - fats (avocado, almonds) → lime gradient + `Nut` icon
-  - fruit (apple, banana) → pink/red gradient + `Apple` icon
-  - drink (coffee/latte) → brown gradient + `Coffee` icon
-  - veg (broccoli) → green gradient + `Leaf` icon
-  - fallback → neutral charcoal + `Utensils` icon
-- Resolver: `categoryFor(food)` uses `food.tags` + id heuristics; works for both preset and custom logs.
-
-No external images — everything is CSS gradients + lucide icons, so it stays premium without childish emoji and without asset uploads.
-
-## 5. Profile → goals sync
-
-`_app.profile.tsx` already writes goals via `saveGoals`. We wrap `saveGoals` in `nutritionStore` to also emit a change event so Home/Nutrition update instantly without a refresh.
+**Server boundary**: `createServerFn` (POST) — typed RPC is the right shape (one-shot JSON, not streaming). The handler receives front/side/back as base64 data URLs plus a minimal profile blob, calls the gateway with an `Output.object` Zod schema (constrained JSON), and returns a `BodyScanResult`.
 
 ## Files
 
-- new: `src/lib/nutritionStore.ts`, `src/lib/progressStore.ts`, `src/components/FoodThumbnail.tsx`
-- edit: `src/routes/_app.home.tsx` (remove hardcoded numbers, use stores)
-- edit: `src/routes/_app.nutrition.tsx` (use store, swap thumbnails, polish)
-- edit: `src/lib/foods.ts` (re-export `saveGoals` through store wrapper, or have store call it + emit)
-- edit: `src/routes/_app.profile.tsx` (call store's `saveGoals` so subscribers update)
+**New types & service**
+- `src/lib/bodyScan.ts` — types (`BodyScanScores`, `BodyScanResult`, `BodyScanInput`), level mapping (0–35 Starting Point, 36–55 Building Base, 56–72 Athletic, 73–85 Strong, 86–100 Advanced), and the deterministic mock generator that derives stable scores from profile (goal, experience, weight/height BMI, days/week) — same input → same output.
+- `src/lib/bodyScan.functions.ts` — `analyzeBodyScan` server fn. Builds a multimodal chat message (text prompt + image_url blocks with data URLs), enforces Zod `Output.object`. Returns `{ source: "ai" | "mock", result }`. On any error (missing key, 429, 402, parsing): returns `{ source: "mock", result: mockFor(profile) }`.
+- `src/lib/bodyScanStore.ts` — same useSyncExternalStore pattern as `nutritionStore`. Functions: `saveScan`, `deleteScan`, `useScans`, `useLatestScan`. Key: `fitness:bodyScans`. Stores result + thumbnail (front image downscaled to ~480px JPEG via canvas before save to keep localStorage small).
+
+**New components**
+- `src/components/bodyscan/BodyScoreBar.tsx` — labeled lime progress bar, large numeral on the right, animated width with framer-motion.
+- `src/components/bodyscan/BodyScoreCard.tsx` — image preview card with overlaid "Overall Score 85" + level badge (matches reference screenshots: dark card, lime numerals, fine lime bars under labels).
+- `src/components/bodyscan/BodyPhotoUploader.tsx` — three slots (Front required, Side & Back optional). Each slot opens a sheet with "Take photo" (uses `<input type="file" accept="image/*" capture="environment">`) and "Upload photo". Shows preview, swap, remove. Returns data URLs.
+- `src/components/bodyscan/BodyScanAnalyzer.tsx` — fullscreen overlay with scanning-line animation over the front photo and rotating status text.
+
+**New routes** (all under existing `/_app` layout)
+- `src/routes/_app.scan.tsx` — Scan hub with two big tiles: **Food Scan** (links to `/nutrition` add modal) and **Body Scan** (links to `/scan/body`). Becomes the destination of the new bottom-nav "Scan" tab.
+- `src/routes/_app.scan.body.tsx` — Body Scan intro: hero, "Start Body Scan" CTA, history list, disclaimer.
+- `src/routes/_app.scan.body.new.tsx` — Multi-step flow inside one route, state machine: `guide → upload → analyzing → results`. Single page with framer-motion `AnimatePresence` between steps so transitions feel premium.
+- `src/routes/_app.scan.body.$id.tsx` — view a saved scan + previous-scan comparison (score deltas).
+
+**Edits**
+- `src/routes/_app.tsx` — bottom nav becomes Home / Workouts / **Scan** / Nutrition / Profile (5 tabs, Scan in the middle). Existing Progress moves into Profile (already linked from there) — or, to stay non-destructive, swap Progress for Scan in the nav and keep `/progress` reachable from Profile via a row link. I'll swap Progress→Scan in nav.
+- `src/routes/_app.profile.tsx` — add a small "View progress" row pointing to `/progress` so the route stays accessible.
+
+**Optional but planned**
+- Profile + Nutrition integration: results screen exposes "Apply suggested nutrition targets" → calls `setNutritionGoals()` (existing store) after a confirm. "Generate plan from scan" navigates to `/workouts` with a hint param.
+
+## Server function shape
+
+```ts
+// src/lib/bodyScan.functions.ts (sketch)
+export const analyzeBodyScan = createServerFn({ method: "POST" })
+  .inputValidator((d: { front: string; side?: string; back?: string; profile: ProfileSlim }) => d)
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) return { source: "mock", result: mockFor(data.profile) };
+    try {
+      const gateway = createLovableAiGatewayProvider(key);
+      const { output } = await generateText({
+        model: gateway("google/gemini-2.5-flash"),
+        output: Output.object({ schema: ScanSchema }),
+        messages: [{ role: "user", content: [
+          { type: "text", text: PROMPT(data.profile) },
+          { type: "image_url", image_url: { url: data.front } },
+          ...(data.side ? [{ type: "image_url", image_url: { url: data.side } }] : []),
+          ...(data.back ? [{ type: "image_url", image_url: { url: data.back } }] : []),
+        ]}],
+      });
+      return { source: "ai", result: { ...output, id: crypto.randomUUID(), createdAt: new Date().toISOString() } };
+    } catch {
+      return { source: "mock", result: mockFor(data.profile) };
+    }
+  });
+```
+
+`createLovableAiGatewayProvider` lives in `src/lib/ai-gateway.server.ts` (new, server-only).
+
+**Prompt** is explicit: visual fitness assessment only, no medical claims, score every field 0–100, return arrays with 3–5 items, include a disclaimer string.
+
+Will install `ai` and `@ai-sdk/openai-compatible` (and `zod` if not present) before writing the function file. Will run `ai_gateway--create` to ensure the key exists.
+
+## UX details from the reference screenshots
+
+- Dark card with photo bleeding to the edges, large "OVERALL SCORE" label + huge numeral overlay.
+- Two-column score grid (Posture / Symmetry / Proportions / Definition / Conditioning / Upper / Lower / Core) — label + thin lime bar + numeral, matching the references.
+- Level chip beside the overall score (Starting Point / Building Base / Athletic / Strong / Advanced).
+- Strengths and Improvements as separate glass cards with bullets (lime check / amber arrow).
+- Training Focus and Nutrition Focus cards below.
+- Sticky bottom bar with "Save scan" + "Retake."
+- Disclaimer fixed at the bottom of intro + results: *"Body Scan provides visual fitness feedback only. It is not medical advice and may not be perfectly accurate."*
+
+## Safety & privacy
+
+- Upload guidance copy + warning: "Upload fitness-appropriate photos only."
+- Privacy line: "Photos are only used to generate your scan and stay on this device unless you save them."
+- Delete button on every saved scan + bulk delete in history.
 
 ## Acceptance
 
-- Log Almonds (165 kcal, P6/C6/F14) in Nutrition → Home immediately shows 165/2100 kcal, 1935 remaining, P6/140, C6/230, F14/70.
-- Delete the entry → both screens drop to 0 in the same render.
-- Change calorie target in Profile → both screens reflect the new target without reload.
-- Refresh page → values persist (localStorage).
-- No hardcoded `380`, `22`, or `6 days` anywhere.
+- Front photo upload → preview → tap Analyze → scanning animation → real or mock result renders.
+- Save → appears in `/scan/body` history; tapping opens the saved result with previous-score comparison.
+- Bottom nav shows Scan tab; tapping it lands on the hub (Food Scan / Body Scan).
+- Nutrition / Home / Workouts continue to work; `useNutrition` + `useProgress` unchanged.
+- No TypeScript or import errors; `vite build` passes.
