@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check } from "lucide-react";
+import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check, BarChart3, ScanLine } from "lucide-react";
 import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS } from "@/lib/profile";
 import { loadGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
@@ -94,7 +94,13 @@ function ProfilePage() {
         </button>
       </section>
 
-      <section className="mt-6 rounded-3xl bg-surface divide-y divide-border">
+      <section className="mt-6 rounded-3xl bg-surface divide-y divide-border overflow-hidden">
+        <Link to="/progress" className="block">
+          <Row icon={BarChart3} label="Progress" value="View workouts & streaks" />
+        </Link>
+        <Link to="/scan/body" className="block">
+          <Row icon={ScanLine} label="Body Scan history" value="Track your physique over time" />
+        </Link>
         <Row icon={Target} label="Goal" value={GOAL_LABELS[profile.goal]} />
         <Row icon={Dumbbell} label="Equipment" value={EQUIPMENT_LABELS[profile.equipment]} />
         <Row icon={Apple} label="Injuries / notes" value={profile.injuries || "—"} />
