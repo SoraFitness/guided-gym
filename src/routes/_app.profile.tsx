@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check } from "lucide-react";
-import { useProfile } from "@/lib/profile";
+import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS } from "@/lib/profile";
 import { loadGoals, saveGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
 
 export const Route = createFileRoute("/_app/profile")({
