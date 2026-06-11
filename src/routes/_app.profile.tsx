@@ -30,7 +30,7 @@ function ProfilePage() {
     setSaved(false);
   };
   const save = () => {
-    saveGoals(goals);
+    setNutritionGoals(goals);
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
   };
