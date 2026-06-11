@@ -274,9 +274,7 @@ function MealSection({
                   className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl active:bg-white/[0.02] transition"
                   aria-expanded={open}
                 >
-                  <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base shrink-0">
-                    {f.emoji}
-                  </span>
+                  <FoodThumbnail food={{ id: e.foodId, name: f.name }} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
                       {f.name}
