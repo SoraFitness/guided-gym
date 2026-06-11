@@ -1,55 +1,84 @@
-## Fitness App — Neon Athlete
+# Weekly Schedule Tab
 
-Building an iOS-styled fitness web app (mobile-first, framed in an iPhone container for desktop preview). Look: black base with neon lime (#C6FF3D), inspired by your second screenshot.
+Add a personalized weekly workout schedule to the Workouts page, driven by onboarding answers (goal, experience, equipment, days/week, session length, focus areas).
 
-### Design tokens
-- Background `#0A0A0A`, surface `#1F1F1F`, accent neon `#C6FF3D`, text white
-- Typography: Sora (display) + Manrope (body)
-- Rounded-3xl cards, pill CTAs, soft glow shadows on accent
+## New top-level tabs on Workouts page
 
-### Onboarding flow (8 steps with progress bar)
-1. Welcome — animated gradient blob athlete doing reps (pure CSS/SVG morph + bounce loop)
-2. Name + age + gender
-3. Height + weight (unit toggle)
-4. Primary goal — Gain muscle / Lose weight / Body recomposition / Increase energy (icon cards like screenshot 1)
-5. Activity level — Sedentary → Very active (slider)
-6. Workout location + equipment — Home / Gym + chips (bodyweight, dumbbells, bands, full gym)
-7. Diet preference + injuries/limitations (multi-select chips + free text)
-8. Generating plan → animated figure loading screen → land in app
+Replace the current chip row with a 3-tab segmented control:
+- **Recommended** — current scored list (existing behavior)
+- **Weekly Schedule** — new personalized 7-day plan
+- **All Workouts** — current category-filtered list, with the existing category chips moved below the tab
 
-Data persisted to localStorage (no backend yet) under `fitness:profile`. Onboarding is skipped on revisit; route guard sends completed users straight to `/home`.
+Tab state persists in component state; smooth Framer Motion transitions between tabs.
 
-### App shell (bottom tab bar, 4 tabs)
-- **Home** — "Hi, {name}" header, daily ring (calories/minutes/workouts), recommended workouts row, today's plan list
-- **Workouts** — search, Popular Workouts horizontal cards, category tabs (Cardio, Strength, Mobility), workout list
-- **Progress** — weekly streak, simple bar chart, stats cards
-- **Profile** — user info, goals, edit onboarding, units, reset
+## Weekly Schedule generation
 
-Plus a **Workout detail** route (`/workout/$id`) matching screenshot 2: hero image, time/kcal chips, description, Rounds list, "Let's Workout" pill CTA.
+New file: `src/lib/weeklySchedule.ts`
 
-### Animated gradient blob athlete
-Custom SVG component: layered gradient blobs (lime → white → dark) with CSS keyframe morph + a stylized figure silhouette that cycles squat/pushup/jump frames via `@keyframes`. Used on welcome screen and the "generating your plan" screen. No external lottie/3d libs.
-
-### Routes
-```
-/                       → redirect to /onboarding or /home
-/onboarding             → multi-step flow (internal state, no sub-routes)
-/home                   → dashboard (in tab shell)
-/workouts               → workout library
-/workout/$id            → detail page
-/progress               → stats
-/profile                → settings
+```text
+WeeklyScheduleDay {
+  id, dayName, date?, workoutId?, workoutTitle, focus,
+  duration, difficulty, equipment, estimatedCalories,
+  exercises: string[],   // exercise name previews
+  isRestDay, isToday, isCompleted
+}
 ```
 
-### Technical notes
-- TanStack Start file-based routing under `src/routes/`
-- `_app.tsx` layout = tab shell (only mounts on `/home`, `/workouts`, `/progress`, `/profile`)
-- Profile state via small Zustand-free context + localStorage hook
-- Mock workout data in `src/lib/workouts.ts`
-- All colors as semantic tokens in `src/styles.css`; no hardcoded hex in components
-- Sample images for workout cards generated via `imagegen` (athletes in motion, neon lighting)
+`weeklyScheduleService.generateSchedule(profile)` returns 7 days (Mon–Sun) using these splits:
 
-### Out of scope (ask if needed)
-- Real auth / cloud sync (currently localStorage)
-- Video playback for exercises
-- Push notifications
+- 2d: Full Body Strength, Rest, Full Body Conditioning, Rest, Rest, Rest, Rest
+- 3d: Push, Rest, Pull, Rest, Legs, Rest, Rest
+- 4d: Upper, Rest, Lower, Rest, Push, Pull+Core, Rest
+- 5d: Push, Pull, Legs, Rest, Upper, Conditioning/Core, Rest
+- 6d: Push, Pull, Legs, Rest, Push, Pull, Legs
+
+For each training day, the service:
+- Picks a matching workout from `workouts` (filtered by `profile.equipment`).
+- Builds a Gym-Mode exercise preview list using equipment-specific exercise pools:
+  - **gym**: barbell squat, bench press, lat pulldown, leg press, cable row, shoulder press, hamstring curl, triceps pushdown, bicep curl, cable crunch
+  - **dumbbells**: DB bench, DB row, goblet squat, RDL, DB shoulder press, hammer curl, skullcrusher, DB lunge
+  - **none**: push ups, squats, lunges, glute bridge, plank, mountain climbers, pike push ups
+- Tunes duration to `profile.sessionMinutes`, difficulty to `profile.experience`, and biases workout pick toward `profile.focusAreas` and `profile.goal`.
+- Marks `isToday` based on `new Date().getDay()`.
+
+Completion stored in `localStorage` key `fitness:weeklyCompletion` as `{ weekStartISO: string, completed: Record<dayId, true> }`. New week (different Monday) resets completion.
+
+`rebuildSchedule()` simply regenerates from the current profile and clears completion for days in the past week if profile changed.
+
+## UI
+
+`src/routes/_app.workouts.tsx` updated to render the new tabs. Weekly Schedule renders a vertical stack of day cards:
+
+**Training day card** (rounded, dark elevated surface, lime accent on Today badge & Start button):
+- Top row: Day name (large) + status badge (Today / Completed / Upcoming)
+- Workout title
+- Focus area subtitle (e.g. "Chest, Shoulders, Triceps")
+- Meta row: duration · difficulty · equipment
+- Exercise preview chips (first 4 names)
+- Estimated calories pill
+- Buttons: **Start Workout** (primary lime) → `/workout/$id`, **View Details** (ghost) → same route, **Mark Complete** (icon toggle)
+
+**Rest day card**: softer muted surface, "Rest & Recovery" + "Stretch, walk, hydrate, and recover.", optional "Mobility Session" button linking to `mobility-recovery` workout.
+
+Sticky header area inside Weekly Schedule with **Rebuild Weekly Plan** button; on tap, regenerates schedule and shows a brief toast/inline confirmation "Plan rebuilt".
+
+Framer Motion: stagger-fade day cards on mount and on rebuild; tab content cross-fades.
+
+Bottom padding `pb-28` so cards clear the bottom nav.
+
+## Files
+
+- **New**: `src/lib/weeklySchedule.ts` (types + service + localStorage helpers)
+- **Edit**: `src/routes/_app.workouts.tsx` (tabs, Weekly Schedule UI, Recommended + All sub-views preserved)
+- **Edit**: `src/lib/workouts.ts` *(only if needed)* — export a small helper to look up workout by split label; otherwise reuse existing `workoutRecommendationService`
+
+No changes to onboarding, profile, or other routes. No new deps (Framer Motion, Tailwind already installed).
+
+## Acceptance
+
+- Recommended and All Workouts tabs continue to work exactly as today.
+- Weekly Schedule reflects `profile.daysPerWeek`, equipment, experience.
+- Today badge appears on the correct weekday.
+- Marking a day complete persists across reload.
+- Rebuild button regenerates and shows confirmation.
+- Build and dev both pass with no TS errors.

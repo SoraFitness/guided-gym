@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check } from "lucide-react";
-import { useProfile } from "@/lib/profile";
+import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS } from "@/lib/profile";
 import { loadGoals, saveGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
 
 export const Route = createFileRoute("/_app/profile")({
@@ -9,12 +9,6 @@ export const Route = createFileRoute("/_app/profile")({
   component: ProfilePage,
 });
 
-const goalLabels: Record<string, string> = {
-  muscle: "Gain muscle",
-  lose: "Lose weight",
-  recomp: "Body recomposition",
-  energy: "Increase energy",
-};
 
 function ProfilePage() {
   const { profile, setProfile } = useProfile();
@@ -40,7 +34,7 @@ function ProfilePage() {
     setTimeout(() => setSaved(false), 1800);
   };
   const suggest = () => {
-    setGoalsState(suggestGoals(profile.weightKg));
+    setGoalsState(suggestGoals(profile.currentWeightKg));
     setSaved(false);
   };
 
@@ -60,15 +54,15 @@ function ProfilePage() {
         <div className="flex-1">
           <h2 className="text-xl font-bold">{profile.name}</h2>
           <p className="text-sm text-muted-foreground">
-            {profile.age} yrs · {profile.heightCm} cm · {profile.weightKg} kg
+            {profile.age} yrs · {profile.heightCm} cm · {profile.currentWeightKg} kg
           </p>
         </div>
       </section>
 
       <section className="mt-5 grid grid-cols-3 gap-3">
-        <Mini label="Goal" value={goalLabels[profile.goal]?.split(" ")[0] ?? "—"} />
-        <Mini label="Level" value={`${profile.activityLevel}/5`} />
-        <Mini label="Trains at" value={profile.location === "home" ? "Home" : "Gym"} />
+        <Mini label="Goal" value={GOAL_LABELS[profile.goal].split(" ")[0]} />
+        <Mini label="Level" value={EXPERIENCE_LABELS[profile.experience]} />
+        <Mini label="Trains" value={profile.equipment === "gym" ? "Gym" : profile.equipment === "none" ? "Home" : "Mixed"} />
       </section>
 
       {/* Nutrition Goals */}
@@ -100,9 +94,9 @@ function ProfilePage() {
       </section>
 
       <section className="mt-6 rounded-3xl bg-surface divide-y divide-border">
-        <Row icon={Target} label="Goal" value={goalLabels[profile.goal]} />
-        <Row icon={Dumbbell} label="Equipment" value={profile.equipment.join(", ") || "—"} />
-        <Row icon={Apple} label="Diet" value={profile.diet || "—"} />
+        <Row icon={Target} label="Goal" value={GOAL_LABELS[profile.goal]} />
+        <Row icon={Dumbbell} label="Equipment" value={EQUIPMENT_LABELS[profile.equipment]} />
+        <Row icon={Apple} label="Injuries / notes" value={profile.injuries || "—"} />
       </section>
 
       <button

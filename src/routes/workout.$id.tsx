@@ -53,11 +53,11 @@ function WorkoutDetail() {
         <div className="absolute bottom-4 left-5 flex gap-2">
           <span className="px-3 py-1.5 rounded-full bg-black/50 backdrop-blur text-xs flex items-center gap-1.5">
             <Clock className="size-3.5 text-neon" />
-            {w.minutes} min
+            {w.duration} min
           </span>
           <span className="px-3 py-1.5 rounded-full bg-black/50 backdrop-blur text-xs flex items-center gap-1.5">
             <Flame className="size-3.5 text-neon" />
-            {w.kcal} kcal
+            {w.calories} kcal
           </span>
         </div>
       </div>
@@ -66,24 +66,26 @@ function WorkoutDetail() {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{w.category}</span>
           <span>·</span>
-          <span>{w.level}</span>
+          <span>{w.difficulty}</span>
         </div>
         <h1 className="mt-1 text-3xl font-extrabold">{w.title}</h1>
         <p className="mt-3 text-muted-foreground leading-relaxed">{w.description}</p>
 
         <div className="mt-7 flex items-center justify-between">
-          <h2 className="font-bold text-lg">Rounds</h2>
-          <span className="text-xs text-muted-foreground">{w.rounds.length} exercises</span>
+          <h2 className="font-bold text-lg">Exercises</h2>
+          <span className="text-xs text-muted-foreground">{w.exercises.length} exercises</span>
         </div>
         <ol className="mt-3 space-y-3">
-          {w.rounds.map((r, i) => (
-            <li key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-surface border border-border">
+          {w.exercises.map((ex, i) => (
+            <li key={ex.id} className="flex items-center gap-4 p-3 rounded-2xl bg-surface border border-border">
               <div className="size-12 rounded-xl bg-surface-2 grid place-items-center font-bold text-neon">
                 {String(i + 1).padStart(2, "0")}
               </div>
               <div className="flex-1">
-                <div className="font-semibold">{r.name}</div>
-                <div className="text-xs text-muted-foreground">{r.duration}</div>
+                <div className="font-semibold">{ex.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {ex.sets} sets · {ex.reps ?? ex.time} · rest {ex.rest}
+                </div>
               </div>
               <Play className="size-5 text-neon" />
             </li>
