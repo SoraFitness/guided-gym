@@ -413,16 +413,50 @@ function FocusStep({ value, onChange }: { value: FocusArea[]; onChange: (v: Focu
 }
 
 function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+  const imperial = d.units === "imperial";
   return (
     <div>
       <StepHeader title="A bit about your body" sub="We use this to calibrate calorie and macro targets." />
+
+      {/* Units toggle */}
+      <div className="mb-4 inline-flex rounded-full bg-white/[0.04] border border-white/[0.06] p-1">
+        {(["metric", "imperial"] as const).map((u) => (
+          <button
+            key={u}
+            onClick={() => update("units", u)}
+            className={cn(
+              "px-4 h-9 rounded-full text-xs font-semibold uppercase tracking-wider transition",
+              d.units === u ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+            )}
+          >
+            {u === "metric" ? "kg · cm" : "lb · in"}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-4">
         <Slider label="Age" value={d.age} min={14} max={80} suffix="years" onChange={(v) => update("age", v)} />
-        <Slider label="Height" value={d.heightCm} min={140} max={220} suffix="cm" onChange={(v) => update("heightCm", v)} />
+
+        {imperial ? (
+          <HeightImperialSlider valueCm={d.heightCm} onChange={(cm) => update("heightCm", cm)} />
+        ) : (
+          <Slider label="Height" value={d.heightCm} min={140} max={220} suffix="cm" onChange={(v) => update("heightCm", v)} />
+        )}
+
         <div className="grid grid-cols-2 gap-3">
-          <Slider label="Current weight" value={d.currentWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("currentWeightKg", v)} />
-          <Slider label="Goal weight" value={d.goalWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("goalWeightKg", v)} />
+          {imperial ? (
+            <>
+              <WeightImperialSlider label="Current weight" valueKg={d.currentWeightKg} onChange={(kg) => update("currentWeightKg", kg)} />
+              <WeightImperialSlider label="Goal weight" valueKg={d.goalWeightKg} onChange={(kg) => update("goalWeightKg", kg)} />
+            </>
+          ) : (
+            <>
+              <Slider label="Current weight" value={d.currentWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("currentWeightKg", v)} />
+              <Slider label="Goal weight" value={d.goalWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("goalWeightKg", v)} />
+            </>
+          )}
         </div>
+
         <div>
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Gender</div>
           <div className="grid grid-cols-3 gap-2">
@@ -464,6 +498,47 @@ function Slider({
     </div>
   );
 }
+
+function HeightImperialSlider({ valueCm, onChange }: { valueCm: number; onChange: (cm: number) => void }) {
+  const totalInches = Math.round(valueCm / 2.54);
+  const ft = Math.floor(totalInches / 12);
+  const inches = totalInches % 12;
+  return (
+    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Height</span>
+        <span className="text-lg font-extrabold tabular-nums">
+          {ft}'{inches}"<span className="text-xs text-muted-foreground ml-2">{totalInches} in</span>
+        </span>
+      </div>
+      <input
+        type="range" min={55} max={87} value={totalInches}
+        onChange={(e) => onChange(Math.round(Number(e.target.value) * 2.54))}
+        className="w-full accent-[var(--color-neon)]"
+      />
+    </div>
+  );
+}
+
+function WeightImperialSlider({ label, valueKg, onChange }: { label: string; valueKg: number; onChange: (kg: number) => void }) {
+  const lb = Math.round(valueKg * 2.20462);
+  return (
+    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-lg font-extrabold tabular-nums">
+          {lb}<span className="text-xs text-muted-foreground ml-1">lb</span>
+        </span>
+      </div>
+      <input
+        type="range" min={88} max={400} value={lb}
+        onChange={(e) => onChange(Number(e.target.value) / 2.20462)}
+        className="w-full accent-[var(--color-neon)]"
+      />
+    </div>
+  );
+}
+
 
 function NutritionStep({ value, onChange }: { value: NutritionPlan; onChange: (v: NutritionPlan) => void }) {
   const items: { id: NutritionPlan; sub: string; icon: typeof Flame }[] = [
