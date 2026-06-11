@@ -1,84 +1,86 @@
-# Weekly Schedule Tab
+# Sync Home & Nutrition + Premium Food Visuals
 
-Add a personalized weekly workout schedule to the Workouts page, driven by onboarding answers (goal, experience, equipment, days/week, session length, focus areas).
+## Problem
+Home shows hardcoded `kcal = 380`, `mins = 22`, `streak = 6 days`. Nutrition reads real data from `loadLog()`. They never match. Meal/food visuals are bare emoji.
 
-## New top-level tabs on Workouts page
+## 1. Shared nutrition + progress store
 
-Replace the current chip row with a 3-tab segmented control:
-- **Recommended** — current scored list (existing behavior)
-- **Weekly Schedule** — new personalized 7-day plan
-- **All Workouts** — current category-filtered list, with the existing category chips moved below the tab
+**New file**: `src/lib/nutritionStore.ts`
+- Tiny pub/sub on top of existing `loadLog`/`saveLog` in `src/lib/foods.ts` (keep storage key `fitness:foodlog` so nothing is lost).
+- Exports a `useNutrition()` hook returning:
+  - `entries`, `todayEntries`
+  - `totals` (kcal/protein/carbs/fat for today, via existing `macrosFor`)
+  - `goals` (from `loadGoals()`, recomputed when profile changes via `suggestNutrition`)
+  - `remaining`, `progress` (0–1 per macro)
+  - `addEntry`, `updateEntry`, `removeEntry` — all call `saveLog` and emit a change event so every subscriber re-renders.
+- Listens to `storage` event so cross-tab edits sync too.
 
-Tab state persists in component state; smooth Framer Motion transitions between tabs.
+**New file**: `src/lib/progressStore.ts`
+- `useProgress()` returning:
+  - `workoutMinutesToday`, `workoutMinutesTarget` (from `profile.sessionMinutes`)
+  - `completedThisWeek`, `streakDays`
+- Backed by `localStorage` key `fitness:workoutLog` (array of `{ id, date, minutes, workoutId }`). For now, the workout detail page's "complete" action and the weekly schedule "mark complete" can push into this; reads work immediately and default to 0/empty.
 
-## Weekly Schedule generation
+Both stores are the **single source of truth**. Home and Nutrition import the same hook — no separate numbers anywhere.
 
-New file: `src/lib/weeklySchedule.ts`
+## 2. Home screen rewrite (`src/routes/_app.home.tsx`)
 
-```text
-WeeklyScheduleDay {
-  id, dayName, date?, workoutId?, workoutTitle, focus,
-  duration, difficulty, equipment, estimatedCalories,
-  exercises: string[],   // exercise name previews
-  isRestDay, isToday, isCompleted
-}
-```
+Replace the hardcoded `kcal/mins/streak` block with:
 
-`weeklyScheduleService.generateSchedule(profile)` returns 7 days (Mon–Sun) using these splits:
+- **Today's Nutrition card**: ring shows `totals.kcal / goals.kcal`, 3 macro bars (P/C/F) with eaten / target. Empty state: "Start by scanning or logging your first meal" + CTA to `/nutrition`.
+- **Today's Activity card**: workout minutes ring, "X workouts this week", streak chip.
+- Keep the weekly plan + recommended sections unchanged.
 
-- 2d: Full Body Strength, Rest, Full Body Conditioning, Rest, Rest, Rest, Rest
-- 3d: Push, Rest, Pull, Rest, Legs, Rest, Rest
-- 4d: Upper, Rest, Lower, Rest, Push, Pull+Core, Rest
-- 5d: Push, Pull, Legs, Rest, Upper, Conditioning/Core, Rest
-- 6d: Push, Pull, Legs, Rest, Push, Pull, Legs
+All values come from `useNutrition()` and `useProgress()`.
 
-For each training day, the service:
-- Picks a matching workout from `workouts` (filtered by `profile.equipment`).
-- Builds a Gym-Mode exercise preview list using equipment-specific exercise pools:
-  - **gym**: barbell squat, bench press, lat pulldown, leg press, cable row, shoulder press, hamstring curl, triceps pushdown, bicep curl, cable crunch
-  - **dumbbells**: DB bench, DB row, goblet squat, RDL, DB shoulder press, hammer curl, skullcrusher, DB lunge
-  - **none**: push ups, squats, lunges, glute bridge, plank, mountain climbers, pike push ups
-- Tunes duration to `profile.sessionMinutes`, difficulty to `profile.experience`, and biases workout pick toward `profile.focusAreas` and `profile.goal`.
-- Marks `isToday` based on `new Date().getDay()`.
+## 3. Nutrition screen polish (`src/routes/_app.nutrition.tsx`)
 
-Completion stored in `localStorage` key `fitness:weeklyCompletion` as `{ weekStartISO: string, completed: Record<dayId, true> }`. New week (different Monday) resets completion.
+- Swap local state for `useNutrition()` so adds/removes propagate instantly.
+- Goals read from same hook; if user edits goals in Profile, Nutrition + Home update on next render (we emit on save).
+- Replace inline emoji meal headers with new `<MealThumbnail meal="breakfast" />`.
+- Replace per-food emoji with new `<FoodThumbnail food={f} />`.
+- Tighten visual: charcoal cards (`bg-surface`), `border border-white/[0.05]`, smaller pill "+ Add" buttons, lime accent reserved for active progress + primary CTA only.
+- Meal card layout:
+  - Thumbnail · Meal name · "N items · X kcal" · Add button
+  - Expanded list of food rows: thumbnail · name · `1 serving · P6 · C6 · F14` · `165 kcal` · swipe/tap → edit/delete (existing actions kept).
 
-`rebuildSchedule()` simply regenerates from the current profile and clears completion for days in the past week if profile changed.
+## 4. Premium food/meal thumbnails
 
-## UI
+**New file**: `src/components/FoodThumbnail.tsx`
+- Two exports: `FoodThumbnail` and `MealThumbnail`.
+- Rounded-2xl 44–56px tile with a per-category gradient background, subtle inner border, soft shadow, and a centered lucide icon (or emoji at smaller size with drop-shadow for fallback).
+- Category map (drives gradient + icon):
+  - breakfast → warm amber/orange gradient + `EggFried`/`Coffee` icon
+  - lunch → green/emerald gradient + `Salad` icon
+  - dinner → deep indigo/violet gradient + `UtensilsCrossed` icon
+  - snack → rose/pink gradient + `Cookie` icon
+  - protein (chicken, salmon, shake, yogurt, eggs) → red/orange gradient + `Drumstick`/`MilkOff` icon
+  - carbs (rice, oatmeal, toast, sweet potato, hashbrowns) → amber gradient + `Wheat` icon
+  - fats (avocado, almonds) → lime gradient + `Nut` icon
+  - fruit (apple, banana) → pink/red gradient + `Apple` icon
+  - drink (coffee/latte) → brown gradient + `Coffee` icon
+  - veg (broccoli) → green gradient + `Leaf` icon
+  - fallback → neutral charcoal + `Utensils` icon
+- Resolver: `categoryFor(food)` uses `food.tags` + id heuristics; works for both preset and custom logs.
 
-`src/routes/_app.workouts.tsx` updated to render the new tabs. Weekly Schedule renders a vertical stack of day cards:
+No external images — everything is CSS gradients + lucide icons, so it stays premium without childish emoji and without asset uploads.
 
-**Training day card** (rounded, dark elevated surface, lime accent on Today badge & Start button):
-- Top row: Day name (large) + status badge (Today / Completed / Upcoming)
-- Workout title
-- Focus area subtitle (e.g. "Chest, Shoulders, Triceps")
-- Meta row: duration · difficulty · equipment
-- Exercise preview chips (first 4 names)
-- Estimated calories pill
-- Buttons: **Start Workout** (primary lime) → `/workout/$id`, **View Details** (ghost) → same route, **Mark Complete** (icon toggle)
+## 5. Profile → goals sync
 
-**Rest day card**: softer muted surface, "Rest & Recovery" + "Stretch, walk, hydrate, and recover.", optional "Mobility Session" button linking to `mobility-recovery` workout.
-
-Sticky header area inside Weekly Schedule with **Rebuild Weekly Plan** button; on tap, regenerates schedule and shows a brief toast/inline confirmation "Plan rebuilt".
-
-Framer Motion: stagger-fade day cards on mount and on rebuild; tab content cross-fades.
-
-Bottom padding `pb-28` so cards clear the bottom nav.
+`_app.profile.tsx` already writes goals via `saveGoals`. We wrap `saveGoals` in `nutritionStore` to also emit a change event so Home/Nutrition update instantly without a refresh.
 
 ## Files
 
-- **New**: `src/lib/weeklySchedule.ts` (types + service + localStorage helpers)
-- **Edit**: `src/routes/_app.workouts.tsx` (tabs, Weekly Schedule UI, Recommended + All sub-views preserved)
-- **Edit**: `src/lib/workouts.ts` *(only if needed)* — export a small helper to look up workout by split label; otherwise reuse existing `workoutRecommendationService`
-
-No changes to onboarding, profile, or other routes. No new deps (Framer Motion, Tailwind already installed).
+- new: `src/lib/nutritionStore.ts`, `src/lib/progressStore.ts`, `src/components/FoodThumbnail.tsx`
+- edit: `src/routes/_app.home.tsx` (remove hardcoded numbers, use stores)
+- edit: `src/routes/_app.nutrition.tsx` (use store, swap thumbnails, polish)
+- edit: `src/lib/foods.ts` (re-export `saveGoals` through store wrapper, or have store call it + emit)
+- edit: `src/routes/_app.profile.tsx` (call store's `saveGoals` so subscribers update)
 
 ## Acceptance
 
-- Recommended and All Workouts tabs continue to work exactly as today.
-- Weekly Schedule reflects `profile.daysPerWeek`, equipment, experience.
-- Today badge appears on the correct weekday.
-- Marking a day complete persists across reload.
-- Rebuild button regenerates and shows confirmation.
-- Build and dev both pass with no TS errors.
+- Log Almonds (165 kcal, P6/C6/F14) in Nutrition → Home immediately shows 165/2100 kcal, 1935 remaining, P6/140, C6/230, F14/70.
+- Delete the entry → both screens drop to 0 in the same render.
+- Change calorie target in Profile → both screens reflect the new target without reload.
+- Refresh page → values persist (localStorage).
+- No hardcoded `380`, `22`, or `6 days` anywhere.

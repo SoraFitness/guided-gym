@@ -5,9 +5,13 @@ import {
   Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
 } from "lucide-react";
 import {
-  foods, meals, loadLog, saveLog, entriesOn, macrosFor, entryFood, loadGoals,
-  type Meal, type LogEntry, type Food, type NutritionGoals,
+  foods, meals, entriesOn, macrosFor, entryFood,
+  type Meal, type LogEntry, type Food,
 } from "@/lib/foods";
+import {
+  useNutrition, addEntry as storeAdd, updateEntry as storeUpdate, removeEntry as storeRemove,
+} from "@/lib/nutritionStore";
+import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { foodLookupService, aiFoodScanService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { cn } from "@/lib/utils";
 
@@ -17,41 +21,19 @@ export const Route = createFileRoute("/_app/nutrition")({
 });
 
 function NutritionPage() {
-  const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [goals, setGoals] = useState<NutritionGoals>(loadGoals());
   const [day, setDay] = useState<Date>(new Date());
+  const { entries, goals } = useNutrition(day);
   const [addFor, setAddFor] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<LogEntry | null>(null);
-
-  useEffect(() => {
-    setEntries(loadLog());
-    setGoals(loadGoals());
-    const onFocus = () => setGoals(loadGoals());
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
 
   const today = useMemo(() => entriesOn(entries, day), [entries, day]);
   const totals = macrosFor(today);
 
   const add = (entry: Omit<LogEntry, "id" | "loggedAt">) => {
-    const next = [
-      ...entries,
-      { id: crypto.randomUUID(), loggedAt: day.toISOString(), ...entry },
-    ];
-    setEntries(next);
-    saveLog(next);
+    storeAdd({ ...entry, loggedAt: day.toISOString() });
   };
-  const update = (id: string, patch: Partial<LogEntry>) => {
-    const next = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
-    setEntries(next);
-    saveLog(next);
-  };
-  const remove = (id: string) => {
-    const next = entries.filter((e) => e.id !== id);
-    setEntries(next);
-    saveLog(next);
-  };
+  const update = (id: string, patch: Partial<LogEntry>) => storeUpdate(id, patch);
+  const remove = (id: string) => storeRemove(id);
 
   const isToday = day.toDateString() === new Date().toDateString();
   const dayLabel = isToday
@@ -256,15 +238,12 @@ function MealSection({
   onRemove: (id: string) => void;
   onServings: (id: string, s: number) => void;
 }) {
-  const emoji = { Breakfast: "☀️", Lunch: "🥗", Dinner: "🍽️", Snack: "🍪" }[meal];
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
     <section className="rounded-[22px] bg-white/[0.03] border border-white/[0.05] overflow-hidden">
       <div className="flex items-center gap-3 p-4">
-        <div className="size-10 rounded-2xl bg-white/[0.04] border border-white/[0.05] grid place-items-center text-lg">
-          {emoji}
-        </div>
+        <MealThumbnail meal={meal} size="md" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-[15px] leading-tight">{meal}</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -295,9 +274,7 @@ function MealSection({
                   className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl active:bg-white/[0.02] transition"
                   aria-expanded={open}
                 >
-                  <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base shrink-0">
-                    {f.emoji}
-                  </span>
+                  <FoodThumbnail food={{ id: e.foodId, name: f.name }} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
                       {f.name}
