@@ -21,6 +21,7 @@ function NutritionPage() {
   const [goals, setGoals] = useState<NutritionGoals>(loadGoals());
   const [day, setDay] = useState<Date>(new Date());
   const [addFor, setAddFor] = useState<Meal | null>(null);
+  const [editing, setEditing] = useState<LogEntry | null>(null);
 
   useEffect(() => {
     setEntries(loadLog());
@@ -38,6 +39,11 @@ function NutritionPage() {
       ...entries,
       { id: crypto.randomUUID(), loggedAt: day.toISOString(), ...entry },
     ];
+    setEntries(next);
+    saveLog(next);
+  };
+  const update = (id: string, patch: Partial<LogEntry>) => {
+    const next = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
     setEntries(next);
     saveLog(next);
   };
