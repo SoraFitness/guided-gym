@@ -40,6 +40,7 @@ interface Draft {
   age: number;
   gender: Gender;
   nutritionPlan: NutritionPlan;
+  units: "metric" | "imperial";
 }
 
 const DEFAULT_DRAFT: Draft = {
@@ -56,7 +57,9 @@ const DEFAULT_DRAFT: Draft = {
   age: 26,
   gender: "other",
   nutritionPlan: "muscle_gain",
+  units: "metric",
 };
+
 
 const TOTAL = 10; // 0 welcome + 9 question steps
 
