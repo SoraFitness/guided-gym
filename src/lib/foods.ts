@@ -1,6 +1,7 @@
 export interface Food {
   id: string;
   name: string;
+  brand?: string;
   emoji: string;
   serving: string;
   kcal: number;
@@ -31,13 +32,27 @@ export const foods: Food[] = [
 
 export const meals = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
 export type Meal = (typeof meals)[number];
+export type LogSource = "preset" | "manual" | "barcode" | "image";
 
 export interface LogEntry {
   id: string;
-  foodId: string;
   meal: Meal;
   servings: number;
   loggedAt: string; // ISO
+  // Either preset reference...
+  foodId?: string;
+  // ...or inline custom food (manual / barcode / image)
+  custom?: {
+    name: string;
+    brand?: string;
+    emoji?: string;
+    serving: string;
+    kcal: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    source: LogSource;
+  };
 }
 
 const KEY = "fitness:foodlog";
@@ -55,16 +70,25 @@ export function saveLog(entries: LogEntry[]) {
   localStorage.setItem(KEY, JSON.stringify(entries));
 }
 
-export function todayEntries(entries: LogEntry[]): LogEntry[] {
-  const today = new Date().toDateString();
-  return entries.filter((e) => new Date(e.loggedAt).toDateString() === today);
+export function entriesOn(entries: LogEntry[], date: Date): LogEntry[] {
+  const d = date.toDateString();
+  return entries.filter((e) => new Date(e.loggedAt).toDateString() === d);
+}
+
+export function entryFood(e: LogEntry): {
+  name: string; brand?: string; emoji: string; serving: string;
+  kcal: number; protein: number; carbs: number; fat: number;
+} {
+  if (e.custom) return { emoji: "🍽️", ...e.custom };
+  const f = foods.find((x) => x.id === e.foodId);
+  if (!f) return { name: "Unknown", emoji: "❓", serving: "", kcal: 0, protein: 0, carbs: 0, fat: 0 };
+  return f;
 }
 
 export function macrosFor(entries: LogEntry[]) {
   return entries.reduce(
     (acc, e) => {
-      const f = foods.find((x) => x.id === e.foodId);
-      if (!f) return acc;
+      const f = entryFood(e);
       acc.kcal += f.kcal * e.servings;
       acc.protein += f.protein * e.servings;
       acc.carbs += f.carbs * e.servings;
@@ -73,4 +97,36 @@ export function macrosFor(entries: LogEntry[]) {
     },
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
+}
+
+// ---------- Nutrition goals ----------
+export interface NutritionGoals {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+export const DEFAULT_GOALS: NutritionGoals = { kcal: 2100, protein: 140, carbs: 230, fat: 70 };
+const GOAL_KEY = "fitness:goals";
+
+export function loadGoals(): NutritionGoals {
+  if (typeof window === "undefined") return DEFAULT_GOALS;
+  try {
+    const raw = localStorage.getItem(GOAL_KEY);
+    return raw ? { ...DEFAULT_GOALS, ...JSON.parse(raw) } : DEFAULT_GOALS;
+  } catch {
+    return DEFAULT_GOALS;
+  }
+}
+export function saveGoals(g: NutritionGoals) {
+  localStorage.setItem(GOAL_KEY, JSON.stringify(g));
+}
+
+/** Quick suggestion from weight (Mifflin-ish) */
+export function suggestGoals(weightKg = 75): NutritionGoals {
+  const kcal = Math.round(weightKg * 30);
+  const protein = Math.round(weightKg * 1.8);
+  const fat = Math.round((kcal * 0.27) / 9);
+  const carbs = Math.round((kcal - protein * 4 - fat * 9) / 4);
+  return { kcal, protein, carbs, fat };
 }
