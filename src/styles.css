@@ -41,10 +41,10 @@
 
 :root {
   --radius: 1.25rem;
-  --background: oklch(0.14 0 0);
+  --background: oklch(0.16 0.005 250);
   --foreground: oklch(0.985 0 0);
-  --surface: oklch(0.2 0 0);
-  --surface-2: oklch(0.26 0 0);
+  --surface: oklch(0.21 0.005 250);
+  --surface-2: oklch(0.27 0.005 250);
   --card: oklch(0.2 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.2 0 0);
