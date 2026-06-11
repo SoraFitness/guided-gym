@@ -238,15 +238,12 @@ function MealSection({
   onRemove: (id: string) => void;
   onServings: (id: string, s: number) => void;
 }) {
-  const emoji = { Breakfast: "☀️", Lunch: "🥗", Dinner: "🍽️", Snack: "🍪" }[meal];
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
     <section className="rounded-[22px] bg-white/[0.03] border border-white/[0.05] overflow-hidden">
       <div className="flex items-center gap-3 p-4">
-        <div className="size-10 rounded-2xl bg-white/[0.04] border border-white/[0.05] grid place-items-center text-lg">
-          {emoji}
-        </div>
+        <MealThumbnail meal={meal} size="md" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-[15px] leading-tight">{meal}</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
