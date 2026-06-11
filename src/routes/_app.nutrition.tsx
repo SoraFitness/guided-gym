@@ -368,43 +368,56 @@ function MealSection({
 type Tab = "search" | "barcode" | "photo" | "manual";
 
 function AddFoodModal({
-  meal, onClose, onAdd,
+  meal, editEntry, onClose, onAdd,
 }: {
   meal: Meal;
+  editEntry?: LogEntry;
   onClose: () => void;
   onAdd: (entry: Omit<LogEntry, "id" | "loggedAt">) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("search");
-  const [prefill, setPrefill] = useState<LookupResult | null>(null);
+  // When editing, jump straight to manual prefilled from the entry
+  const initialPrefill: LookupResult | null = editEntry
+    ? (() => {
+        const f = entryFood(editEntry);
+        return { name: f.name, brand: f.brand, serving: f.serving, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat };
+      })()
+    : null;
+  const [tab, setTab] = useState<Tab>(editEntry ? "manual" : "search");
+  const [prefill, setPrefill] = useState<LookupResult | null>(initialPrefill);
 
-  // When we get a scan result, switch to manual to confirm/edit
   const handleResult = (r: LookupResult, source: "barcode" | "image") => {
     setPrefill({ ...r });
     setTab("manual");
     (window as { __scanSource?: string }).__scanSource = source;
   };
 
+  const editSource = editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
+    ? editEntry.custom.source
+    : "manual";
+
   return (
-    <Sheet onClose={onClose} title={`Add to ${meal}`}>
-      <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
-        {([
-          { id: "search", label: "Search", Icon: Search },
-          { id: "barcode", label: "Barcode", Icon: Barcode },
-          { id: "photo", label: "Photo", Icon: ImageIcon },
-          { id: "manual", label: "Manual", Icon: Pencil },
-        ] as { id: Tab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
-              tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground"
-            )}
-          >
-            <Icon className="size-3.5" /> {label}
-          </button>
-        ))}
-      </div>
+    <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
+      {!editEntry && (
+        <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
+          {([
+            { id: "search", label: "Search", Icon: Search },
+            { id: "barcode", label: "Barcode", Icon: Barcode },
+            { id: "photo", label: "Photo", Icon: ImageIcon },
+            { id: "manual", label: "Manual", Icon: Pencil },
+          ] as { id: Tab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
+                tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+              )}
+            >
+              <Icon className="size-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 pb-6">
         {tab === "search" && <SearchPanel meal={meal} onAdd={onAdd} />}
@@ -414,7 +427,9 @@ function AddFoodModal({
           <ManualPanel
             meal={meal}
             prefill={prefill}
-            source={(window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual"}
+            servings={editEntry?.servings ?? 1}
+            source={editEntry ? editSource : ((window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual")}
+            submitLabel={editEntry ? "Save changes" : `Save to ${meal}`}
             onAdd={onAdd}
           />
         )}
