@@ -676,11 +676,13 @@ function PhotoPanel({ onResult }: { onResult: (r: LookupResult) => void }) {
 }
 
 function ManualPanel({
-  meal, prefill, source, onAdd,
+  meal, prefill, servings = 1, source, submitLabel, onAdd,
 }: {
   meal: Meal;
   prefill: LookupResult | null;
+  servings?: number;
   source: "manual" | "barcode" | "image";
+  submitLabel?: string;
   onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void;
 }) {
   const [name, setName] = useState(prefill?.name ?? "");
@@ -697,7 +699,7 @@ function ManualPanel({
     if (!canSave) return;
     onAdd({
       meal,
-      servings: 1,
+      servings,
       custom: {
         name: name.trim(),
         brand: brand.trim() || undefined,
