@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera, Search, Plus, X, ScanLine, Sparkles, Trash2, Check, ChevronLeft, ChevronRight,
-  Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload,
+  Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
 } from "lucide-react";
 import {
   foods, meals, loadLog, saveLog, entriesOn, macrosFor, entryFood, loadGoals,
