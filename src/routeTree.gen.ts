@@ -14,11 +14,11 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
 import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
-import { Route as AppScanRouteImport } from './routes/_app.scan'
 import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
 import { Route as AppScanBodyRouteImport } from './routes/_app.scan.body'
 import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
@@ -47,11 +47,6 @@ const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
   path: '/workouts',
   getParentRoute: () => AppRoute,
 } as any)
-const AppScanRoute = AppScanRouteImport.update({
-  id: '/scan',
-  path: '/scan',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppProgressRoute = AppProgressRouteImport.update({
   id: '/progress',
   path: '/progress',
@@ -72,10 +67,15 @@ const AppHomeRoute = AppHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppRoute,
 } as any)
+const AppScanIndexRoute = AppScanIndexRouteImport.update({
+  id: '/scan/',
+  path: '/scan/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppScanBodyRoute = AppScanBodyRouteImport.update({
-  id: '/body',
-  path: '/body',
-  getParentRoute: () => AppScanRoute,
+  id: '/scan/body',
+  path: '/scan/body',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppScanBodyNewRoute = AppScanBodyNewRouteImport.update({
   id: '/new',
@@ -95,10 +95,10 @@ export interface FileRoutesByFullPath {
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
-  '/scan': typeof AppScanRouteWithChildren
   '/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRoute
   '/scan/body': typeof AppScanBodyRouteWithChildren
+  '/scan/': typeof AppScanIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
 }
@@ -109,10 +109,10 @@ export interface FileRoutesByTo {
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
-  '/scan': typeof AppScanRouteWithChildren
   '/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRoute
   '/scan/body': typeof AppScanBodyRouteWithChildren
+  '/scan': typeof AppScanIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
 }
@@ -125,10 +125,10 @@ export interface FileRoutesById {
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/progress': typeof AppProgressRoute
-  '/_app/scan': typeof AppScanRouteWithChildren
   '/_app/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRoute
   '/_app/scan/body': typeof AppScanBodyRouteWithChildren
+  '/_app/scan/': typeof AppScanIndexRoute
   '/_app/scan/body/$id': typeof AppScanBodyIdRoute
   '/_app/scan/body/new': typeof AppScanBodyNewRoute
 }
@@ -141,10 +141,10 @@ export interface FileRouteTypes {
     | '/nutrition'
     | '/profile'
     | '/progress'
-    | '/scan'
     | '/workouts'
     | '/workout/$id'
     | '/scan/body'
+    | '/scan/'
     | '/scan/body/$id'
     | '/scan/body/new'
   fileRoutesByTo: FileRoutesByTo
@@ -155,10 +155,10 @@ export interface FileRouteTypes {
     | '/nutrition'
     | '/profile'
     | '/progress'
-    | '/scan'
     | '/workouts'
     | '/workout/$id'
     | '/scan/body'
+    | '/scan'
     | '/scan/body/$id'
     | '/scan/body/new'
   id:
@@ -170,10 +170,10 @@ export interface FileRouteTypes {
     | '/_app/nutrition'
     | '/_app/profile'
     | '/_app/progress'
-    | '/_app/scan'
     | '/_app/workouts'
     | '/workout/$id'
     | '/_app/scan/body'
+    | '/_app/scan/'
     | '/_app/scan/body/$id'
     | '/_app/scan/body/new'
   fileRoutesById: FileRoutesById
@@ -222,13 +222,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkoutsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/scan': {
-      id: '/_app/scan'
-      path: '/scan'
-      fullPath: '/scan'
-      preLoaderRoute: typeof AppScanRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/progress': {
       id: '/_app/progress'
       path: '/progress'
@@ -257,12 +250,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/scan/': {
+      id: '/_app/scan/'
+      path: '/scan'
+      fullPath: '/scan/'
+      preLoaderRoute: typeof AppScanIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/scan/body': {
       id: '/_app/scan/body'
-      path: '/body'
+      path: '/scan/body'
       fullPath: '/scan/body'
       preLoaderRoute: typeof AppScanBodyRouteImport
-      parentRoute: typeof AppScanRoute
+      parentRoute: typeof AppRoute
     }
     '/_app/scan/body/new': {
       id: '/_app/scan/body/new'
@@ -295,24 +295,14 @@ const AppScanBodyRouteWithChildren = AppScanBodyRoute._addFileChildren(
   AppScanBodyRouteChildren,
 )
 
-interface AppScanRouteChildren {
-  AppScanBodyRoute: typeof AppScanBodyRouteWithChildren
-}
-
-const AppScanRouteChildren: AppScanRouteChildren = {
-  AppScanBodyRoute: AppScanBodyRouteWithChildren,
-}
-
-const AppScanRouteWithChildren =
-  AppScanRoute._addFileChildren(AppScanRouteChildren)
-
 interface AppRouteChildren {
   AppHomeRoute: typeof AppHomeRoute
   AppNutritionRoute: typeof AppNutritionRoute
   AppProfileRoute: typeof AppProfileRoute
   AppProgressRoute: typeof AppProgressRoute
-  AppScanRoute: typeof AppScanRouteWithChildren
   AppWorkoutsRoute: typeof AppWorkoutsRoute
+  AppScanBodyRoute: typeof AppScanBodyRouteWithChildren
+  AppScanIndexRoute: typeof AppScanIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -320,8 +310,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppNutritionRoute: AppNutritionRoute,
   AppProfileRoute: AppProfileRoute,
   AppProgressRoute: AppProgressRoute,
-  AppScanRoute: AppScanRouteWithChildren,
   AppWorkoutsRoute: AppWorkoutsRoute,
+  AppScanBodyRoute: AppScanBodyRouteWithChildren,
+  AppScanIndexRoute: AppScanIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -335,3 +326,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

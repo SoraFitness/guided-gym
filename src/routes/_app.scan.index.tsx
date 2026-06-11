@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Apple, ScanLine, ChevronRight, Camera } from "lucide-react";
 
-export const Route = createFileRoute("/_app/scan")({
+export const Route = createFileRoute("/_app/scan/")({
   head: () => ({ meta: [{ title: "Scan — Pulse" }] }),
   component: ScanHub,
 });
