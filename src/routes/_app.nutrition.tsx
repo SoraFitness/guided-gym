@@ -135,7 +135,9 @@ function NutritionPage() {
               items={items}
               totals={mTotals}
               onAdd={() => setAddFor(m)}
+              onEdit={(e) => setEditing(e)}
               onRemove={remove}
+              onServings={(id, s) => update(id, { servings: Math.max(0.25, Math.round(s * 4) / 4) })}
             />
           );
         })}
@@ -146,6 +148,14 @@ function NutritionPage() {
           meal={addFor}
           onClose={() => setAddFor(null)}
           onAdd={(entry) => { add(entry); setAddFor(null); }}
+        />
+      )}
+      {editing && (
+        <AddFoodModal
+          meal={editing.meal}
+          editEntry={editing}
+          onClose={() => setEditing(null)}
+          onAdd={(entry) => { update(editing.id, entry); setEditing(null); }}
         />
       )}
     </div>
