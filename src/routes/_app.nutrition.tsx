@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera, Search, Plus, X, ScanLine, Sparkles, Trash2, Check, ChevronLeft, ChevronRight,
-  Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload,
+  Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
 } from "lucide-react";
 import {
   foods, meals, loadLog, saveLog, entriesOn, macrosFor, entryFood, loadGoals,
@@ -21,6 +21,7 @@ function NutritionPage() {
   const [goals, setGoals] = useState<NutritionGoals>(loadGoals());
   const [day, setDay] = useState<Date>(new Date());
   const [addFor, setAddFor] = useState<Meal | null>(null);
+  const [editing, setEditing] = useState<LogEntry | null>(null);
 
   useEffect(() => {
     setEntries(loadLog());
@@ -38,6 +39,11 @@ function NutritionPage() {
       ...entries,
       { id: crypto.randomUUID(), loggedAt: day.toISOString(), ...entry },
     ];
+    setEntries(next);
+    saveLog(next);
+  };
+  const update = (id: string, patch: Partial<LogEntry>) => {
+    const next = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
     setEntries(next);
     saveLog(next);
   };
@@ -129,7 +135,9 @@ function NutritionPage() {
               items={items}
               totals={mTotals}
               onAdd={() => setAddFor(m)}
+              onEdit={(e) => setEditing(e)}
               onRemove={remove}
+              onServings={(id, s) => update(id, { servings: Math.max(0.25, Math.round(s * 4) / 4) })}
             />
           );
         })}
@@ -140,6 +148,14 @@ function NutritionPage() {
           meal={addFor}
           onClose={() => setAddFor(null)}
           onAdd={(entry) => { add(entry); setAddFor(null); }}
+        />
+      )}
+      {editing && (
+        <AddFoodModal
+          meal={editing.meal}
+          editEntry={editing}
+          onClose={() => setEditing(null)}
+          onAdd={(entry) => { update(editing.id, entry); setEditing(null); }}
         />
       )}
     </div>
@@ -230,15 +246,19 @@ function MacroChip({ label, value, goal, hue }: { label: string; value: number; 
 }
 
 function MealSection({
-  meal, items, totals, onAdd, onRemove,
+  meal, items, totals, onAdd, onEdit, onRemove, onServings,
 }: {
   meal: Meal;
   items: LogEntry[];
   totals: { kcal: number; protein: number; carbs: number; fat: number };
   onAdd: () => void;
+  onEdit: (e: LogEntry) => void;
   onRemove: (id: string) => void;
+  onServings: (id: string, s: number) => void;
 }) {
   const emoji = { Breakfast: "☀️", Lunch: "🥗", Dinner: "🍽️", Snack: "🍪" }[meal];
+  const [openId, setOpenId] = useState<string | null>(null);
+
   return (
     <section className="rounded-[22px] bg-white/[0.03] border border-white/[0.05] overflow-hidden">
       <div className="flex items-center gap-3 p-4">
@@ -250,7 +270,7 @@ function MealSection({
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {items.length === 0
               ? "No items yet"
-              : `${Math.round(totals.kcal)} kcal · P${Math.round(totals.protein)} C${Math.round(totals.carbs)} F${Math.round(totals.fat)}`}
+              : `${items.length} item${items.length === 1 ? "" : "s"} · ${Math.round(totals.kcal)} kcal`}
           </p>
         </div>
         <button
@@ -261,26 +281,79 @@ function MealSection({
           <Plus className="size-5" />
         </button>
       </div>
+
       {items.length > 0 && (
-        <ul className="px-2 pb-2 space-y-1">
+        <ul className="px-2 pb-2 border-t border-white/[0.04]">
           {items.map((e) => {
             const f = entryFood(e);
+            const open = openId === e.id;
+            const kcal = Math.round(f.kcal * e.servings);
             return (
-              <li key={e.id} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-white/[0.02]">
-                <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base">{f.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{f.name}{f.brand ? <span className="text-muted-foreground"> · {f.brand}</span> : null}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {e.servings}× · {Math.round(f.kcal * e.servings)} kcal
+              <li key={e.id} className="border-b border-white/[0.04] last:border-b-0">
+                <button
+                  onClick={() => setOpenId(open ? null : e.id)}
+                  className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl active:bg-white/[0.02] transition"
+                  aria-expanded={open}
+                >
+                  <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base shrink-0">
+                    {f.emoji}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {f.name}
+                      {f.brand ? <span className="text-muted-foreground font-normal"> · {f.brand}</span> : null}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate tabular-nums">
+                      {e.servings}× · P{Math.round(f.protein * e.servings)} · C{Math.round(f.carbs * e.servings)} · F{Math.round(f.fat * e.servings)}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-bold text-neon tabular-nums leading-none">{kcal}</div>
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">kcal</div>
+                  </div>
+                </button>
+
+                <div
+                  className={cn(
+                    "grid transition-all duration-200",
+                    open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <div className="px-2 pb-2.5 pt-1 flex items-center gap-2">
+                      <div className="flex items-center gap-1 rounded-full bg-white/[0.05] border border-white/[0.05] p-1">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings - 0.5); }}
+                          disabled={e.servings <= 0.5}
+                          className="size-7 rounded-full grid place-items-center disabled:opacity-30 active:bg-white/10"
+                          aria-label="Decrease servings"
+                        >
+                          <Minus className="size-3.5" />
+                        </button>
+                        <span className="min-w-9 text-center text-xs font-semibold tabular-nums">{e.servings}×</span>
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings + 0.5); }}
+                          className="size-7 rounded-full grid place-items-center active:bg-white/10"
+                          aria-label="Increase servings"
+                        >
+                          <Plus className="size-3.5" />
+                        </button>
+                      </div>
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); setOpenId(null); onEdit(e); }}
+                        className="ml-auto h-8 px-3 rounded-full bg-white/[0.05] border border-white/[0.05] text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </button>
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); onRemove(e.id); }}
+                        className="h-8 px-3 rounded-full bg-destructive/15 text-destructive text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Trash2 className="size-3.5" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => onRemove(e.id)}
-                  className="size-8 rounded-full grid place-items-center text-muted-foreground hover:text-destructive active:scale-95"
-                  aria-label="Remove"
-                >
-                  <Trash2 className="size-4" />
-                </button>
               </li>
             );
           })}
@@ -295,43 +368,56 @@ function MealSection({
 type Tab = "search" | "barcode" | "photo" | "manual";
 
 function AddFoodModal({
-  meal, onClose, onAdd,
+  meal, editEntry, onClose, onAdd,
 }: {
   meal: Meal;
+  editEntry?: LogEntry;
   onClose: () => void;
   onAdd: (entry: Omit<LogEntry, "id" | "loggedAt">) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("search");
-  const [prefill, setPrefill] = useState<LookupResult | null>(null);
+  // When editing, jump straight to manual prefilled from the entry
+  const initialPrefill: LookupResult | null = editEntry
+    ? (() => {
+        const f = entryFood(editEntry);
+        return { name: f.name, brand: f.brand, serving: f.serving, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat };
+      })()
+    : null;
+  const [tab, setTab] = useState<Tab>(editEntry ? "manual" : "search");
+  const [prefill, setPrefill] = useState<LookupResult | null>(initialPrefill);
 
-  // When we get a scan result, switch to manual to confirm/edit
   const handleResult = (r: LookupResult, source: "barcode" | "image") => {
     setPrefill({ ...r });
     setTab("manual");
     (window as { __scanSource?: string }).__scanSource = source;
   };
 
+  const editSource = editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
+    ? editEntry.custom.source
+    : "manual";
+
   return (
-    <Sheet onClose={onClose} title={`Add to ${meal}`}>
-      <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
-        {([
-          { id: "search", label: "Search", Icon: Search },
-          { id: "barcode", label: "Barcode", Icon: Barcode },
-          { id: "photo", label: "Photo", Icon: ImageIcon },
-          { id: "manual", label: "Manual", Icon: Pencil },
-        ] as { id: Tab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
-              tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground"
-            )}
-          >
-            <Icon className="size-3.5" /> {label}
-          </button>
-        ))}
-      </div>
+    <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
+      {!editEntry && (
+        <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
+          {([
+            { id: "search", label: "Search", Icon: Search },
+            { id: "barcode", label: "Barcode", Icon: Barcode },
+            { id: "photo", label: "Photo", Icon: ImageIcon },
+            { id: "manual", label: "Manual", Icon: Pencil },
+          ] as { id: Tab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
+                tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+              )}
+            >
+              <Icon className="size-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 pb-6">
         {tab === "search" && <SearchPanel meal={meal} onAdd={onAdd} />}
@@ -341,7 +427,9 @@ function AddFoodModal({
           <ManualPanel
             meal={meal}
             prefill={prefill}
-            source={(window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual"}
+            servings={editEntry?.servings ?? 1}
+            source={editEntry ? editSource : ((window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual")}
+            submitLabel={editEntry ? "Save changes" : `Save to ${meal}`}
             onAdd={onAdd}
           />
         )}
@@ -588,11 +676,13 @@ function PhotoPanel({ onResult }: { onResult: (r: LookupResult) => void }) {
 }
 
 function ManualPanel({
-  meal, prefill, source, onAdd,
+  meal, prefill, servings = 1, source, submitLabel, onAdd,
 }: {
   meal: Meal;
   prefill: LookupResult | null;
+  servings?: number;
   source: "manual" | "barcode" | "image";
+  submitLabel?: string;
   onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void;
 }) {
   const [name, setName] = useState(prefill?.name ?? "");
@@ -609,7 +699,7 @@ function ManualPanel({
     if (!canSave) return;
     onAdd({
       meal,
-      servings: 1,
+      servings,
       custom: {
         name: name.trim(),
         brand: brand.trim() || undefined,
@@ -664,7 +754,7 @@ function ManualPanel({
         disabled={!canSave}
         className="mt-2 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
       >
-        <Check className="size-4" /> Save to {meal}
+        <Check className="size-4" /> {submitLabel ?? `Save to ${meal}`}
       </button>
     </div>
   );
