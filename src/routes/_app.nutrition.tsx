@@ -754,7 +754,7 @@ function ManualPanel({
         disabled={!canSave}
         className="mt-2 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
       >
-        <Check className="size-4" /> Save to {meal}
+        <Check className="size-4" /> {submitLabel ?? `Save to ${meal}`}
       </button>
     </div>
   );
