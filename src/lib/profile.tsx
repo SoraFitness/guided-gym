@@ -54,8 +54,10 @@ export interface Profile {
   // Nutrition
   nutritionPlan: NutritionPlan;
   // Misc
+  units?: "metric" | "imperial";
   injuries?: string;
   completedAt: string;
+
 }
 
 const KEY = "fitness:profile";
