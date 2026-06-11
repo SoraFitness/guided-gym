@@ -246,15 +246,19 @@ function MacroChip({ label, value, goal, hue }: { label: string; value: number; 
 }
 
 function MealSection({
-  meal, items, totals, onAdd, onRemove,
+  meal, items, totals, onAdd, onEdit, onRemove, onServings,
 }: {
   meal: Meal;
   items: LogEntry[];
   totals: { kcal: number; protein: number; carbs: number; fat: number };
   onAdd: () => void;
+  onEdit: (e: LogEntry) => void;
   onRemove: (id: string) => void;
+  onServings: (id: string, s: number) => void;
 }) {
   const emoji = { Breakfast: "☀️", Lunch: "🥗", Dinner: "🍽️", Snack: "🍪" }[meal];
+  const [openId, setOpenId] = useState<string | null>(null);
+
   return (
     <section className="rounded-[22px] bg-white/[0.03] border border-white/[0.05] overflow-hidden">
       <div className="flex items-center gap-3 p-4">
@@ -266,7 +270,7 @@ function MealSection({
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {items.length === 0
               ? "No items yet"
-              : `${Math.round(totals.kcal)} kcal · P${Math.round(totals.protein)} C${Math.round(totals.carbs)} F${Math.round(totals.fat)}`}
+              : `${items.length} item${items.length === 1 ? "" : "s"} · ${Math.round(totals.kcal)} kcal`}
           </p>
         </div>
         <button
@@ -277,26 +281,79 @@ function MealSection({
           <Plus className="size-5" />
         </button>
       </div>
+
       {items.length > 0 && (
-        <ul className="px-2 pb-2 space-y-1">
+        <ul className="px-2 pb-2 border-t border-white/[0.04]">
           {items.map((e) => {
             const f = entryFood(e);
+            const open = openId === e.id;
+            const kcal = Math.round(f.kcal * e.servings);
             return (
-              <li key={e.id} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-white/[0.02]">
-                <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base">{f.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{f.name}{f.brand ? <span className="text-muted-foreground"> · {f.brand}</span> : null}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {e.servings}× · {Math.round(f.kcal * e.servings)} kcal
+              <li key={e.id} className="border-b border-white/[0.04] last:border-b-0">
+                <button
+                  onClick={() => setOpenId(open ? null : e.id)}
+                  className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl active:bg-white/[0.02] transition"
+                  aria-expanded={open}
+                >
+                  <span className="size-9 rounded-xl bg-white/[0.04] grid place-items-center text-base shrink-0">
+                    {f.emoji}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {f.name}
+                      {f.brand ? <span className="text-muted-foreground font-normal"> · {f.brand}</span> : null}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate tabular-nums">
+                      {e.servings}× · P{Math.round(f.protein * e.servings)} · C{Math.round(f.carbs * e.servings)} · F{Math.round(f.fat * e.servings)}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-bold text-neon tabular-nums leading-none">{kcal}</div>
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">kcal</div>
+                  </div>
+                </button>
+
+                <div
+                  className={cn(
+                    "grid transition-all duration-200",
+                    open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <div className="px-2 pb-2.5 pt-1 flex items-center gap-2">
+                      <div className="flex items-center gap-1 rounded-full bg-white/[0.05] border border-white/[0.05] p-1">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings - 0.5); }}
+                          disabled={e.servings <= 0.5}
+                          className="size-7 rounded-full grid place-items-center disabled:opacity-30 active:bg-white/10"
+                          aria-label="Decrease servings"
+                        >
+                          <Minus className="size-3.5" />
+                        </button>
+                        <span className="min-w-9 text-center text-xs font-semibold tabular-nums">{e.servings}×</span>
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings + 0.5); }}
+                          className="size-7 rounded-full grid place-items-center active:bg-white/10"
+                          aria-label="Increase servings"
+                        >
+                          <Plus className="size-3.5" />
+                        </button>
+                      </div>
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); setOpenId(null); onEdit(e); }}
+                        className="ml-auto h-8 px-3 rounded-full bg-white/[0.05] border border-white/[0.05] text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </button>
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); onRemove(e.id); }}
+                        className="h-8 px-3 rounded-full bg-destructive/15 text-destructive text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Trash2 className="size-3.5" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => onRemove(e.id)}
-                  className="size-8 rounded-full grid place-items-center text-muted-foreground hover:text-destructive active:scale-95"
-                  aria-label="Remove"
-                >
-                  <Trash2 className="size-4" />
-                </button>
               </li>
             );
           })}
