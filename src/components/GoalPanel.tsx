@@ -237,13 +237,7 @@ export function GoalPanel() {
             <p className="mt-2 text-[12px] text-muted-foreground">{recal.suggestion}</p>
             <button
               onClick={() => {
-                // Apply observed maintenance into the macro plan by updating goals
-                const next = suggestNutrition({
-                  ...profile,
-                  // Approximate: shift goal weight projections using observed maintenance by
-                  // calling computePlan with override below and re-deriving macros.
-                });
-                // Re-compute with observed maintenance, then push macros
+                // Re-compute with observed maintenance, then derive macros from that plan.
                 const plan2 = computePlan({
                   gender: profile.gender, age: profile.age, heightCm: profile.heightCm,
                   currentWeightKg: profile.currentWeightKg, goalWeightKg: profile.goalWeightKg,
@@ -251,9 +245,10 @@ export function GoalPanel() {
                   targetDate, splitPreset: profile.deficitSplit, bulkPace: profile.bulkPace,
                   observedMaintenanceKcal: recal.blendedMaintenanceKcal,
                 });
+                const base = suggestNutrition(profile);
                 setNutritionGoals({
                   kcal: plan2.recommendedIntakeKcal,
-                  protein: next.protein, carbs: next.carbs, fat: next.fat,
+                  protein: base.protein, carbs: base.carbs, fat: base.fat,
                 });
               }}
               className="mt-3 w-full h-10 rounded-full bg-neon text-neon-foreground font-semibold text-xs"
