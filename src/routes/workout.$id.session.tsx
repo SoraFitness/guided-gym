@@ -1,17 +1,18 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Flag,
   Flame,
   Trophy,
   Home,
   RotateCcw,
+  SkipForward,
+  X,
+  Timer,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { getWorkout, type Workout } from "@/lib/workouts";
 import { useProfile } from "@/lib/profile";
@@ -45,12 +46,32 @@ function genderToAvatar(g: string | undefined): AvatarGender {
   return "neutral";
 }
 
+/** parse "60s", "1m", "90" → seconds */
+function parseRest(rest: string | undefined): number {
+  if (!rest) return 45;
+  const m = rest.trim().toLowerCase().match(/^(\d+)\s*([sm]?)$/);
+  if (!m) return 45;
+  const n = parseInt(m[1], 10);
+  return m[2] === "m" ? n * 60 : n;
+}
+
+function fmt(sec: number) {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+type Phase = "exercise" | "rest" | "complete";
+
 function SessionPage() {
   const w = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
   const { profile } = useProfile();
   const session = useActiveSession();
-  const [finished, setFinished] = useState(false);
+
+  const [phase, setPhase] = useState<Phase>("exercise");
+  const [restTotal, setRestTotal] = useState(45);
+  const [restLeft, setRestLeft] = useState(45);
+  const restTimer = useRef<number | null>(null);
 
   // Boot the session
   useEffect(() => {
@@ -63,11 +84,11 @@ function SessionPage() {
   const idx = session?.workoutId === w.id ? session.currentExerciseIndex : 0;
   const ex = w.exercises[Math.min(idx, w.exercises.length - 1)];
   const completedSetsForEx = session?.completedSets?.[ex.id] ?? 0;
+  const currentSet = Math.min(ex.sets, completedSetsForEx + 1);
 
   const totalSets = useMemo(() => w.exercises.reduce((s, e) => s + e.sets, 0), [w]);
   const doneSets = useMemo(
-    () =>
-      w.exercises.reduce((s, e) => s + Math.min(e.sets, session?.completedSets?.[e.id] ?? 0), 0),
+    () => w.exercises.reduce((s, e) => s + Math.min(e.sets, session?.completedSets?.[e.id] ?? 0), 0),
     [w, session],
   );
   const progressPct = totalSets ? (doneSets / totalSets) * 100 : 0;
@@ -75,53 +96,119 @@ function SessionPage() {
   const animation = detectAnimation(ex.name, ex.demoType);
   const gender = genderToAvatar(profile?.gender);
 
-  const handleMarkSet = () => {
-    incrementSet(ex.id);
-    // auto-advance when sets done
-    if (completedSetsForEx + 1 >= ex.sets) {
-      if (idx + 1 < w.exercises.length) {
-        updateSession({ currentExerciseIndex: idx + 1 });
-      }
-    }
-  };
-  const handlePrev = () => idx > 0 && updateSession({ currentExerciseIndex: idx - 1 });
-  const handleNext = () =>
-    idx + 1 < w.exercises.length && updateSession({ currentExerciseIndex: idx + 1 });
+  // ----- rest timer -----
+  const startRest = useCallback(
+    (seconds: number) => {
+      setRestTotal(seconds);
+      setRestLeft(seconds);
+      setPhase("rest");
+    },
+    [],
+  );
 
-  const handleFinish = () => {
+  useEffect(() => {
+    if (phase !== "rest") {
+      if (restTimer.current) {
+        window.clearInterval(restTimer.current);
+        restTimer.current = null;
+      }
+      return;
+    }
+    restTimer.current = window.setInterval(() => {
+      setRestLeft((r) => {
+        if (r <= 1) {
+          window.clearInterval(restTimer.current!);
+          restTimer.current = null;
+          setPhase("exercise");
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => {
+      if (restTimer.current) window.clearInterval(restTimer.current);
+      restTimer.current = null;
+    };
+  }, [phase]);
+
+  // ----- finish helpers -----
+  const finalize = useCallback(
+    (manual: boolean) => {
+      const startedAt = session ? new Date(session.startedAt).getTime() : Date.now();
+      const durationMin = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+      const completion = totalSets ? Math.min(1, doneSets / totalSets) : 1;
+      const calories = Math.round(w.calories * Math.max(0.3, completion));
+      const exercisesCompleted = w.exercises.filter(
+        (e) => (session?.completedSets[e.id] ?? 0) >= e.sets,
+      ).length;
+      saveCompletedWorkout({
+        id: crypto.randomUUID(),
+        workoutId: w.id,
+        workoutTitle: w.title,
+        completedAt: new Date().toISOString(),
+        durationMin,
+        calories,
+        exercisesCompleted,
+      });
+      logWorkout(durationMin, w.id);
+      clearSession();
+      setPhase("complete");
+      void manual;
+    },
+    [doneSets, session, totalSets, w],
+  );
+
+  // ----- actions -----
+  const handleCompleteSet = () => {
     if (!session) return;
-    const startedAt = new Date(session.startedAt).getTime();
-    const durationMin = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
-    // estimate calories proportional to completion
-    const completion = totalSets ? Math.min(1, doneSets / totalSets) : 1;
-    const calories = Math.round(w.calories * Math.max(0.3, completion));
-    const exercisesCompleted = w.exercises.filter(
-      (e) => (session.completedSets[e.id] ?? 0) >= e.sets,
-    ).length;
-    saveCompletedWorkout({
-      id: crypto.randomUUID(),
-      workoutId: w.id,
-      workoutTitle: w.title,
-      completedAt: new Date().toISOString(),
-      durationMin,
-      calories,
-      exercisesCompleted,
-    });
-    logWorkout(durationMin, w.id);
-    clearSession();
-    setFinished(true);
+    incrementSet(ex.id);
+    const isLastSet = currentSet >= ex.sets;
+    const isLastExercise = idx + 1 >= w.exercises.length;
+
+    if (isLastSet && isLastExercise) {
+      finalize(false);
+      return;
+    }
+    if (isLastSet) {
+      // advance exercise after rest
+      updateSession({ currentExerciseIndex: idx + 1 });
+    }
+    startRest(parseRest(ex.rest));
+  };
+
+  const handleSkipExercise = () => {
+    if (!session) return;
+    if (idx + 1 >= w.exercises.length) {
+      finalize(false);
+      return;
+    }
+    // mark remaining sets as done so progress reflects skip
+    const remaining = ex.sets - completedSetsForEx;
+    for (let i = 0; i < remaining; i++) incrementSet(ex.id);
+    updateSession({ currentExerciseIndex: idx + 1 });
+    setPhase("exercise");
+  };
+
+  const handleEndWorkout = () => {
+    if (confirm("End this workout? We'll save what you've completed so far.")) {
+      finalize(true);
+    }
   };
 
   const handleExit = () => {
-    if (confirm("End this session? Your progress so far won't be saved as completed.")) {
+    if (confirm("Exit without saving this session?")) {
       clearSession();
       navigate({ to: "/workout/$id", params: { id: w.id } });
     }
   };
 
-  if (finished) {
-    return <CompletionScreen workout={w} />;
-  }
+  if (phase === "complete") return <CompletionScreen workout={w} />;
+
+  // next-up info for rest screen
+  const nextExerciseIdx = currentSet >= ex.sets ? idx + 1 : idx;
+  const nextEx = w.exercises[Math.min(nextExerciseIdx, w.exercises.length - 1)];
+  const nextSetNo =
+    nextExerciseIdx === idx ? currentSet + 1 : 1;
 
   return (
     <div className="min-h-dvh bg-background flex flex-col pb-32">
@@ -157,105 +244,224 @@ function SessionPage() {
         </div>
       </div>
 
-      {/* current exercise */}
-      <div className="px-5 mt-4">
-        <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait">
+        {phase === "exercise" ? (
           <motion.div
-            key={ex.id}
-            initial={{ opacity: 0, y: 12 }}
+            key={`ex-${ex.id}-${currentSet}`}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.22 }}
+            className="flex-1 flex flex-col"
           >
-            <h1 className="text-2xl font-extrabold leading-tight">{ex.name}</h1>
-            <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              <Chip>{ex.muscleGroup}</Chip>
-              <Chip>{ex.difficulty}</Chip>
-              <Chip>
-                {ex.sets} × {ex.reps ?? ex.time}
-              </Chip>
-              <Chip>Rest {ex.rest}</Chip>
+            {/* exercise hero */}
+            <div className="px-5 mt-4">
+              <h1 className="text-3xl font-extrabold leading-tight">{ex.name}</h1>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                <Chip className="bg-neon/15 text-neon">
+                  Set {currentSet} of {ex.sets}
+                </Chip>
+                <Chip className="bg-white/10 font-bold text-sm px-3 py-1.5">
+                  {ex.reps ? `${ex.reps} reps` : ex.time}
+                </Chip>
+                <Chip>{ex.muscleGroup}</Chip>
+                <Chip>{ex.difficulty}</Chip>
+                <Chip>Rest {ex.rest}</Chip>
+              </div>
+            </div>
+
+            {/* 3D viewer */}
+            <div className="px-5 mt-4">
+              <Exercise3DViewer
+                animation={animation}
+                gender={gender}
+                showControls={false}
+                label={ex.name}
+              />
+            </div>
+
+            {/* set pip tracker */}
+            <div className="px-5 mt-4">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Sets progress</span>
+                <span className="tabular-nums">{completedSetsForEx}/{ex.sets}</span>
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                {Array.from({ length: ex.sets }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "h-2 flex-1 rounded-full " +
+                      (i < completedSetsForEx
+                        ? "bg-neon"
+                        : i === completedSetsForEx
+                        ? "bg-neon/40"
+                        : "bg-white/[0.08]")
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* actions */}
+            <div className="px-5 mt-5 flex flex-col gap-2">
+              <button
+                onClick={handleCompleteSet}
+                className="w-full h-14 rounded-full bg-neon text-neon-foreground font-bold text-base glow-neon active:scale-[0.98] transition flex items-center justify-center gap-2"
+              >
+                <Check className="size-5" /> Complete Set
+              </button>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => startRest(parseRest(ex.rest))}
+                  className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <Timer className="size-4" /> Rest
+                </button>
+                <button
+                  onClick={handleSkipExercise}
+                  className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <SkipForward className="size-4" /> Skip
+                </button>
+                <button
+                  onClick={handleEndWorkout}
+                  className="h-12 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <X className="size-4" /> End
+                </button>
+              </div>
             </div>
           </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* 3D viewer */}
-      <div className="px-5 mt-4">
-        <Exercise3DViewer animation={animation} gender={gender} />
-      </div>
-
-      {/* set tracker */}
-      <div className="px-5 mt-4">
-        <div className="rounded-3xl bg-surface border border-white/[0.05] p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Sets</div>
-            <div className="text-[11px] text-muted-foreground tabular-nums">
-              {completedSetsForEx}/{ex.sets} complete
-            </div>
-          </div>
-          <div className="mt-3 flex gap-1.5">
-            {Array.from({ length: ex.sets }).map((_, i) => (
-              <div
-                key={i}
-                className={
-                  "h-2 flex-1 rounded-full " +
-                  (i < completedSetsForEx ? "bg-neon" : "bg-white/[0.08]")
-                }
-              />
-            ))}
-          </div>
-          <button
-            onClick={handleMarkSet}
-            disabled={completedSetsForEx >= ex.sets}
-            className="mt-4 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm glow-neon active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
-          >
-            <Check className="size-4" />
-            {completedSetsForEx >= ex.sets ? "All sets done" : "Mark set complete"}
-          </button>
-        </div>
-      </div>
-
-      {/* nav buttons */}
-      <div className="px-5 mt-3 grid grid-cols-2 gap-2">
-        <button
-          onClick={handlePrev}
-          disabled={idx === 0}
-          className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-sm font-semibold flex items-center justify-center gap-1 disabled:opacity-40"
-        >
-          <ChevronLeft className="size-4" /> Previous
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={idx + 1 >= w.exercises.length}
-          className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-sm font-semibold flex items-center justify-center gap-1 disabled:opacity-40"
-        >
-          Next <ChevronRight className="size-4" />
-        </button>
-      </div>
-
-      <div className="px-5 mt-2 grid grid-cols-2 gap-2">
-        <Link
-          to="/workout/$id/demo/$exerciseId"
-          params={{ id: w.id, exerciseId: ex.id }}
-          className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-sm font-semibold flex items-center justify-center gap-1.5"
-        >
-          <Eye className="size-4" /> Watch 3D Demo
-        </Link>
-        <button
-          onClick={handleFinish}
-          className="h-12 rounded-full bg-emerald-400/20 border border-emerald-400/40 text-emerald-200 text-sm font-semibold flex items-center justify-center gap-1.5"
-        >
-          <Flag className="size-4" /> Finish workout
-        </button>
-      </div>
+        ) : (
+          <RestScreen
+            key="rest"
+            restLeft={restLeft}
+            restTotal={restTotal}
+            nextName={nextEx.name}
+            nextSet={nextSetNo}
+            nextSetsTotal={nextEx.sets}
+            nextReps={nextEx.reps ? `${nextEx.reps} reps` : nextEx.time ?? ""}
+            onAdjust={(d) => setRestLeft((r) => Math.max(5, r + d))}
+            onSkip={() => setPhase("exercise")}
+            onEnd={handleEndWorkout}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function Chip({ children }: { children: React.ReactNode }) {
+function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className="px-2 py-1 rounded-full bg-white/[0.06] text-[11px] font-medium">{children}</span>
+    <span
+      className={
+        "px-2 py-1 rounded-full bg-white/[0.06] text-[11px] font-medium " + (className ?? "")
+      }
+    >
+      {children}
+    </span>
+  );
+}
+
+function RestScreen({
+  restLeft,
+  restTotal,
+  nextName,
+  nextSet,
+  nextSetsTotal,
+  nextReps,
+  onAdjust,
+  onSkip,
+  onEnd,
+}: {
+  restLeft: number;
+  restTotal: number;
+  nextName: string;
+  nextSet: number;
+  nextSetsTotal: number;
+  nextReps: string;
+  onAdjust: (delta: number) => void;
+  onSkip: () => void;
+  onEnd: () => void;
+}) {
+  const pct = restTotal > 0 ? restLeft / restTotal : 0;
+  const r = 110;
+  const c = 2 * Math.PI * r;
+  const dash = c * pct;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.22 }}
+      className="flex-1 flex flex-col items-center px-5 mt-6"
+    >
+      <div className="text-xs uppercase tracking-widest text-neon font-bold">Rest</div>
+
+      <div className="relative mt-4">
+        <svg width="260" height="260" viewBox="0 0 260 260">
+          <circle cx="130" cy="130" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+          <circle
+            cx="130"
+            cy="130"
+            r={r}
+            fill="none"
+            stroke="oklch(0.92 0.21 130)"
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${c}`}
+            transform="rotate(-90 130 130)"
+            style={{ transition: "stroke-dasharray 0.9s linear" }}
+          />
+        </svg>
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="text-center">
+            <div className="text-5xl font-extrabold tabular-nums">{fmt(restLeft)}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">seconds remaining</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          onClick={() => onAdjust(-15)}
+          className="h-10 px-4 rounded-full bg-white/[0.06] text-sm font-semibold flex items-center gap-1.5"
+        >
+          <Minus className="size-3.5" /> 15s
+        </button>
+        <button
+          onClick={() => onAdjust(15)}
+          className="h-10 px-4 rounded-full bg-white/[0.06] text-sm font-semibold flex items-center gap-1.5"
+        >
+          <Plus className="size-3.5" /> 15s
+        </button>
+      </div>
+
+      <div className="mt-6 w-full max-w-sm rounded-3xl bg-surface border border-white/[0.05] p-4 text-center">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Up next</div>
+        <div className="mt-1 font-bold text-lg">{nextName}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          Set {nextSet} of {nextSetsTotal} · {nextReps}
+        </div>
+      </div>
+
+      <div className="mt-auto w-full max-w-sm flex flex-col gap-2 pb-4">
+        <button
+          onClick={onSkip}
+          className="w-full h-14 rounded-full bg-neon text-neon-foreground font-bold text-base glow-neon active:scale-[0.98] transition flex items-center justify-center gap-2"
+        >
+          <SkipForward className="size-5" /> Next Set
+        </button>
+        <button
+          onClick={onEnd}
+          className="w-full h-12 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[12px] font-semibold flex items-center justify-center gap-1.5"
+        >
+          <X className="size-4" /> End Workout
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -295,7 +501,6 @@ function CompletionScreen({ workout }: { workout: Workout }) {
             params={{ id: workout.id }}
             className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] font-semibold text-sm flex items-center justify-center gap-2"
             onClick={() => {
-              // restart fresh
               clearSession();
               startSession(workout.id);
             }}

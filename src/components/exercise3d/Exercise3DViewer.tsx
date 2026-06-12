@@ -1,20 +1,21 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows, Environment } from "@react-three/drei";
 import * as THREE from "three";
-import { Pause, Play, Gauge, RotateCcw } from "lucide-react";
+import { Pause, Play, Gauge, RotateCcw, Loader2 } from "lucide-react";
 import { AvatarModel, DEFAULT_POSE, type AvatarGender, type Pose } from "./AvatarModel";
 import { getPose } from "./ExerciseAnimationController";
 import type { AnimationType } from "@/lib/exerciseCoaching";
+import { ExerciseFallback } from "./ExerciseFallback";
 import { cn } from "@/lib/utils";
 
 interface Props {
   animation: AnimationType;
   gender: AvatarGender;
-  /** initial speed multiplier */
   defaultSpeed?: number;
   className?: string;
   showControls?: boolean;
+  label?: string;
 }
 
 function AnimatedAvatar({
@@ -39,48 +40,103 @@ function AnimatedAvatar({
   return <AvatarModel gender={gender} pose={pose} />;
 }
 
+class ViewerErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: unknown) {
+    // eslint-disable-next-line no-console
+    console.warn("[Exercise3DViewer] falling back to 2D", err);
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
+function supportsWebGL(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+function LoadingSkeleton({ label }: { label?: string }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-gradient-to-b from-[#0c0f14] to-[#05070a]">
+      <div className="flex flex-col items-center gap-2 text-white/70">
+        <Loader2 className="size-6 animate-spin text-neon" />
+        <div className="text-[11px] font-semibold">{label ?? "Loading 3D demo…"}</div>
+      </div>
+    </div>
+  );
+}
+
 export function Exercise3DViewer({
   animation,
   gender,
   defaultSpeed = 1,
   className,
   showControls = true,
+  label,
 }: Props) {
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(defaultSpeed);
   const [view, setView] = useState<"front" | "side">("side");
   const [mounted, setMounted] = useState(false);
+  const [webgl, setWebgl] = useState<boolean | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    setWebgl(supportsWebGL());
+  }, []);
 
   const cameraPos: [number, number, number] = view === "front" ? [0, 1.1, 3.2] : [2.8, 1.1, 1.6];
 
+  const fallback = <ExerciseFallback animation={animation} label={label} />;
+
   return (
-    <div className={cn("relative w-full rounded-3xl overflow-hidden bg-gradient-to-b from-[#0c0f14] to-[#05070a] border border-white/[0.06]", className)}>
-      <div className="aspect-[4/5] w-full">
-        {mounted && (
-          <Canvas
-            shadows
-            dpr={[1, 2]}
-            camera={{ position: cameraPos, fov: 32 }}
-            onCreated={({ camera }) => camera.lookAt(new THREE.Vector3(0, 1, 0))}
-          >
-            <color attach="background" args={["#070a0f"]} />
-            <ambientLight intensity={0.45} />
-            <directionalLight
-              position={[3, 5, 4]}
-              intensity={1.2}
-              castShadow
-              shadow-mapSize-width={1024}
-              shadow-mapSize-height={1024}
-            />
-            <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#7cf2c4" />
-            <Suspense fallback={null}>
-              <AnimatedAvatar animation={animation} gender={gender} playing={playing} speed={speed} />
-              <ContactShadows position={[0, 0, 0]} opacity={0.55} scale={6} blur={2.4} far={3} />
-              <Environment preset="city" />
+    <div
+      className={cn(
+        "relative w-full rounded-3xl overflow-hidden bg-gradient-to-b from-[#0c0f14] to-[#05070a] border border-white/[0.06]",
+        className,
+      )}
+    >
+      <div className="aspect-[4/5] w-full relative">
+        {!mounted || webgl === null ? (
+          <LoadingSkeleton />
+        ) : webgl === false ? (
+          fallback
+        ) : (
+          <ViewerErrorBoundary fallback={fallback}>
+            <Suspense fallback={<LoadingSkeleton />}>
+              <Canvas
+                shadows
+                dpr={[1, 2]}
+                frameloop="always"
+                gl={{ powerPreference: "high-performance", antialias: true, failIfMajorPerformanceCaveat: false }}
+                camera={{ position: cameraPos, fov: 32 }}
+                onCreated={({ camera }) => camera.lookAt(new THREE.Vector3(0, 1, 0))}
+              >
+                <color attach="background" args={["#070a0f"]} />
+                <ambientLight intensity={0.45} />
+                <directionalLight
+                  position={[3, 5, 4]}
+                  intensity={1.2}
+                  castShadow
+                  shadow-mapSize-width={1024}
+                  shadow-mapSize-height={1024}
+                />
+                <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#7cf2c4" />
+                <AnimatedAvatar animation={animation} gender={gender} playing={playing} speed={speed} />
+                <ContactShadows position={[0, 0, 0]} opacity={0.55} scale={6} blur={2.4} far={3} />
+                <Environment preset="city" />
+              </Canvas>
             </Suspense>
-          </Canvas>
+          </ViewerErrorBoundary>
         )}
       </div>
 
