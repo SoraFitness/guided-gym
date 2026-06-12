@@ -1,49 +1,30 @@
-import type { Profile, Gender, NutritionPlan, Goal } from "./profile";
+import type { Profile } from "./profile";
 import type { NutritionGoals } from "./foods";
+import { computePlan, macrosFromPlan } from "./calorieEngine";
 
 /**
- * Compute personalized daily nutrition targets from a Profile.
- * Uses Mifflin-St Jeor BMR × activity multiplier, then adjusts by goal
- * and the user's chosen nutrition plan.
+ * Compute personalized daily nutrition targets from a Profile by running the
+ * full calorie engine (BMR → TDEE → goal-driven deficit/surplus → split → macros).
+ * No hardcoded ±kcal numbers — everything is derived from profile data and the
+ * goal weight + target date.
  */
 export function suggestNutrition(profile: Profile): NutritionGoals {
-  const bmr = mifflinStJeor(profile.gender, profile.currentWeightKg, profile.heightCm, profile.age);
-  const activity = activityMultiplier(profile.daysPerWeek);
-  let tdee = bmr * activity;
+  const targetDate = profile.goalTargetDate
+    ? new Date(profile.goalTargetDate)
+    : (() => { const d = new Date(); d.setDate(d.getDate() + 84); return d; })();
 
-  // Plan overrides goal-based math (if user said "fat loss" explicitly etc.)
-  const plan = effectivePlan(profile.goal, profile.nutritionPlan);
-  if (plan === "fat_loss") tdee -= 400;
-  else if (plan === "muscle_gain") tdee += 250;
+  const plan = computePlan({
+    gender: profile.gender,
+    age: profile.age,
+    heightCm: profile.heightCm,
+    currentWeightKg: profile.currentWeightKg,
+    goalWeightKg: profile.goalWeightKg,
+    goalType: profile.goal,
+    activity: profile.activityLevel,
+    targetDate,
+    splitPreset: profile.deficitSplit,
+    bulkPace: profile.bulkPace,
+  });
 
-  const kcal = Math.round(Math.max(1200, tdee));
-
-  // Protein: 1.6 g/kg base; bump for muscle gain / recomp
-  const proteinPerKg = plan === "muscle_gain" ? 2.0 : plan === "fat_loss" ? 2.2 : 1.8;
-  const protein = Math.round(profile.currentWeightKg * proteinPerKg);
-
-  // Fat: 25% of calories (muscle_gain) up to 30% (other)
-  const fatPct = plan === "muscle_gain" ? 0.25 : 0.28;
-  const fat = Math.round((kcal * fatPct) / 9);
-
-  // Remaining → carbs
-  const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
-  return { kcal, protein, carbs, fat };
-}
-
-function mifflinStJeor(gender: Gender, kg: number, cm: number, age: number) {
-  const base = 10 * kg + 6.25 * cm - 5 * age;
-  return gender === "male" ? base + 5 : gender === "female" ? base - 161 : base - 78;
-}
-function activityMultiplier(days: number) {
-  if (days <= 2) return 1.375;
-  if (days <= 4) return 1.55;
-  return 1.725;
-}
-function effectivePlan(goal: Goal, plan: NutritionPlan): "fat_loss" | "muscle_gain" | "maintenance" {
-  if (plan === "fat_loss" || plan === "muscle_gain" || plan === "maintenance") return plan;
-  // custom → derive from goal
-  if (goal === "lose_weight") return "fat_loss";
-  if (goal === "build_muscle") return "muscle_gain";
-  return "maintenance";
+  return macrosFromPlan(plan, profile.currentWeightKg);
 }
