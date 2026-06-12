@@ -287,7 +287,7 @@ function TrainingDayCard({ day, onToggle }: { day: WeeklyScheduleDay; onToggle: 
       <div className="mt-4 flex items-center gap-2">
         {day.workoutId ? (
           <Link
-            to="/workout/$id"
+            to="/workout/$id/session"
             params={{ id: day.workoutId }}
             className="flex-1 h-11 rounded-full bg-neon text-neon-foreground font-semibold text-[13px] flex items-center justify-center gap-1.5 glow-neon active:scale-[0.98] transition"
           >
