@@ -73,16 +73,19 @@ function jitter(seed: number, n: number, range = 8) {
 }
 const clamp = (n: number) => Math.max(20, Math.min(98, Math.round(n)));
 
-export function mockScanFor(profile: Profile): BodyScanResult {
+export function mockScanFor(profile: Profile, photoSalt = ""): BodyScanResult {
   const seed = hash(
-    `${profile.goal}|${profile.experience}|${profile.daysPerWeek}|${profile.currentWeightKg}|${profile.heightCm}|${profile.age}`,
+    `${profile.goal}|${profile.experience}|${profile.daysPerWeek}|${profile.currentWeightKg}|${profile.heightCm}|${profile.age}|${photoSalt}`,
   );
 
   const bmi = profile.currentWeightKg / Math.pow(profile.heightCm / 100, 2);
   const baseFromExp =
     profile.experience === "advanced" ? 78 : profile.experience === "intermediate" ? 66 : 54;
   const bmiAdj = bmi >= 18.5 && bmi <= 26 ? 4 : -6;
-  const base = baseFromExp + bmiAdj;
+  // photo-driven swing so different photos yield meaningfully different scores
+  const photoSwing = photoSalt ? jitter(seed, 99, 14) : 0;
+  const base = baseFromExp + bmiAdj + photoSwing;
+
 
   const scores: BodyScanScores = {
     posture: clamp(base + jitter(seed, 1)),

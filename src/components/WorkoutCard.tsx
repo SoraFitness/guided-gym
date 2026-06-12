@@ -21,18 +21,25 @@ export function WorkoutCardHero({ w, className }: { w: Workout; className?: stri
       )}
     >
       <div
-        className="aspect-[4/5] relative"
+        className="aspect-[4/5] relative bg-surface-2"
         style={{ background: `linear-gradient(155deg, ${w.thumbnail.from} 0%, ${w.thumbnail.to} 100%)` }}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,oklch(1_0_0/0.25),transparent_55%)]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-        <span className="absolute top-3 left-3 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-black/40 backdrop-blur font-semibold">
+        {w.image && (
+          <img
+            src={w.image}
+            alt={w.title}
+            loading="lazy"
+            className="absolute inset-0 size-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/20" />
+        <span className="absolute top-3 left-3 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-black/50 backdrop-blur font-semibold">
           {w.category}
         </span>
-        <span className={cn("absolute top-3 right-3 text-[10px] font-semibold px-2 py-1 rounded-full backdrop-blur", diffBadge[w.difficulty])}>
+        <span className={cn("absolute top-3 right-3 text-[10px] font-semibold px-2 py-1 rounded-full backdrop-blur bg-black/40", diffBadge[w.difficulty])}>
           {w.difficulty}
         </span>
-        <span className="absolute bottom-32 right-3 text-5xl drop-shadow-lg">{w.thumbnail.emoji}</span>
+
 
         <div className="absolute inset-x-0 bottom-0 p-4">
           <h3 className="font-extrabold text-[17px] leading-tight">{w.title}</h3>
@@ -62,9 +69,14 @@ export function WorkoutCardRow({ w }: { w: Workout }) {
         className="size-16 rounded-2xl relative overflow-hidden shrink-0 grid place-items-center text-2xl"
         style={{ background: `linear-gradient(145deg, ${w.thumbnail.from}, ${w.thumbnail.to})` }}
       >
-        <span className="drop-shadow">{w.thumbnail.emoji}</span>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+        {w.image ? (
+          <img src={w.image} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />
+        ) : (
+          <span className="drop-shadow">{w.thumbnail.emoji}</span>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
+
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold truncate text-[14px]">{w.title}</h3>
@@ -97,11 +109,19 @@ export function WorkoutCardTile({ w }: { w: Workout }) {
         className="aspect-[4/5] relative"
         style={{ background: `linear-gradient(155deg, ${w.thumbnail.from}, ${w.thumbnail.to})` }}
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-        <span className={cn("absolute top-2 right-2 text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full backdrop-blur", diffBadge[w.difficulty])}>
+        {w.image && (
+          <img
+            src={w.image}
+            alt={w.title}
+            loading="lazy"
+            className="absolute inset-0 size-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
+        <span className={cn("absolute top-2 right-2 text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full backdrop-blur bg-black/40", diffBadge[w.difficulty])}>
           {w.difficulty}
         </span>
-        <span className="absolute top-12 right-3 text-3xl drop-shadow">{w.thumbnail.emoji}</span>
+
         <div className="absolute inset-x-0 bottom-0 p-3">
           <h3 className="font-bold text-[13px] leading-tight">{w.title}</h3>
           <div className="mt-1.5 flex items-center gap-1.5">

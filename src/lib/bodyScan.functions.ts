@@ -52,27 +52,41 @@ const ScanSchema = z.object({
 
 function buildPrompt(profile: z.infer<typeof ProfileSlim>) {
   return [
-    "You are a fitness physique reviewer. Provide a VISUAL fitness assessment only.",
-    "DO NOT give medical advice or diagnose conditions. Do not guess exact body-fat percentage.",
-    "Use the photos to estimate posture, symmetry, proportions, muscle definition, and conditioning.",
+    "You are an experienced strength coach giving a VISUAL physique assessment from photos.",
+    "DO NOT give medical advice. Do not state exact body-fat percentage.",
+    "Look carefully at the images: posture, shoulder/hip alignment, left-right symmetry,",
+    "waist-to-shoulder ratio, visible muscle definition, and overall conditioning.",
+    "",
+    "Scoring rules — IMPORTANT:",
+    "- Use the FULL 0-100 range. Untrained / out-of-shape physiques should score 20-45.",
+    "- Average recreational lifters: 45-65. Strong / athletic: 65-80. Elite / advanced: 80-95.",
+    "- Vary scores between categories — do NOT default every field to ~70.",
+    "- Each of the 8 scores must independently reflect what you actually see in the photos.",
     "",
     `User goal: ${profile.goal}. Experience: ${profile.experience}. Age: ${profile.age}. Gender: ${profile.gender}.`,
     `Height: ${profile.heightCm} cm. Weight: ${profile.currentWeightKg} kg. Goal weight: ${profile.goalWeightKg} kg.`,
     `Training: ${profile.daysPerWeek} days/week. Focus: ${profile.focusAreas.join(", ") || "balanced"}.`,
     "",
-    "Score every field 0-100 (higher = better). Provide 3-5 short bullet items in each list.",
-    "Tailor training and nutrition focus to the user's stated goal.",
-    "Be encouraging, specific and concise. No emojis.",
+    "Provide 3-5 short bullet items in each list. Be specific to what you SEE.",
+    "Tailor training and nutrition focus to the user's stated goal. No emojis.",
   ].join("\n");
 }
+
+function saltFromImage(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h);
+}
+
 
 export const analyzeBodyScan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<BodyScanResult> => {
     const profile = data.profile as unknown as Profile;
+    const salt = saltFromImage((data.front || "") + (data.side || "") + (data.back || ""));
     const key = process.env.LOVABLE_API_KEY;
     if (!key) {
-      return mockScanFor(profile);
+      return mockScanFor(profile, salt);
     }
 
     try {
@@ -95,6 +109,16 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
         messages: [{ role: "user", content: content as never }],
       });
 
+      // Guard: if the model collapses to a flat ~70 across the board, fall back
+      // to the salted mock so different photos yield different scores.
+      const vals = Object.values(output.scores);
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
+      if (variance < 4) {
+        console.warn("AI scan returned flat scores; using salted mock");
+        return mockScanFor(profile, salt);
+      }
+
       const overall = Math.round(output.overallScore);
       return {
         id: crypto.randomUUID(),
@@ -113,6 +137,7 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
       };
     } catch (err) {
       console.error("analyzeBodyScan failed, falling back to mock:", err);
-      return mockScanFor(profile);
+      return mockScanFor(profile, salt);
     }
+
   });

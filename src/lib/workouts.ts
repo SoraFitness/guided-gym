@@ -1,4 +1,16 @@
 import type { Goal, ExperienceLevel, EquipmentSetup, FocusArea, Profile } from "./profile";
+import imgLowerBodyBurn from "@/assets/workouts/lower-body-burn.jpg";
+import imgPushStrength from "@/assets/workouts/push-strength.jpg";
+import imgPullStrength from "@/assets/workouts/pull-strength.jpg";
+import imgFullBodySweat from "@/assets/workouts/full-body-sweat.jpg";
+import imgDumbbellBuilder from "@/assets/workouts/dumbbell-builder.jpg";
+import imgCoreCrusher from "@/assets/workouts/core-crusher.jpg";
+import imgFatLossHiit from "@/assets/workouts/fat-loss-hiit.jpg";
+import imgMobilityRecovery from "@/assets/workouts/mobility-recovery.jpg";
+import imgGluteBuilder from "@/assets/workouts/glute-builder.jpg";
+import imgUpperBodyStrength from "@/assets/workouts/upper-body-strength.jpg";
+import imgBodyweightStarter from "@/assets/workouts/bodyweight-starter.jpg";
+import imgEnduranceRun from "@/assets/workouts/endurance-run.jpg";
 
 export type Category = "Strength" | "Cardio" | "HIIT" | "Mobility" | "Core";
 export type Difficulty = "Beginner" | "Intermediate" | "Advanced";
@@ -27,6 +39,7 @@ export interface Workout {
   targetMuscles: FocusArea[];
   exercises: Exercise[];
   thumbnail: { from: string; to: string; emoji: string };
+  image?: string;
   recommendedForGoals: Goal[];
   recommendedForLevels: ExperienceLevel[];
 }
@@ -54,6 +67,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "mixed"],
     targetMuscles: ["legs", "glutes"],
     thumbnail: { from: "oklch(0.65 0.2 25)", to: "oklch(0.4 0.18 15)", emoji: "🔥" },
+    image: imgLowerBodyBurn,
     recommendedForGoals: ["lose_weight", "build_muscle", "recomp"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
@@ -73,6 +87,7 @@ export const workouts: Workout[] = [
     equipment: ["gym", "dumbbells", "mixed"],
     targetMuscles: ["chest", "arms"],
     thumbnail: { from: "oklch(0.62 0.18 250)", to: "oklch(0.32 0.12 260)", emoji: "💪" },
+    image: imgPushStrength,
     recommendedForGoals: ["build_muscle", "recomp", "maintain"],
     recommendedForLevels: ["intermediate", "advanced"],
     exercises: [
@@ -92,6 +107,7 @@ export const workouts: Workout[] = [
     equipment: ["gym", "dumbbells", "mixed"],
     targetMuscles: ["back", "arms"],
     thumbnail: { from: "oklch(0.6 0.18 290)", to: "oklch(0.3 0.12 290)", emoji: "🎯" },
+    image: imgPullStrength,
     recommendedForGoals: ["build_muscle", "recomp", "maintain"],
     recommendedForLevels: ["intermediate", "advanced"],
     exercises: [
@@ -111,6 +127,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["cardio", "legs", "chest", "core"],
     thumbnail: { from: "oklch(0.78 0.18 80)", to: "oklch(0.45 0.16 30)", emoji: "💦" },
+    image: imgFullBodySweat,
     recommendedForGoals: ["lose_weight", "endurance", "maintain"],
     recommendedForLevels: ["beginner", "intermediate"],
     exercises: [
@@ -130,6 +147,7 @@ export const workouts: Workout[] = [
     equipment: ["dumbbells", "gym", "mixed"],
     targetMuscles: ["chest", "back", "arms", "core"],
     thumbnail: { from: "oklch(0.65 0.2 130)", to: "oklch(0.35 0.15 150)", emoji: "🏋️" },
+    image: imgDumbbellBuilder,
     recommendedForGoals: ["build_muscle", "recomp"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
@@ -149,6 +167,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["core"],
     thumbnail: { from: "oklch(0.7 0.16 190)", to: "oklch(0.32 0.12 220)", emoji: "🧱" },
+    image: imgCoreCrusher,
     recommendedForGoals: ["lose_weight", "build_muscle", "recomp", "maintain"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
@@ -168,6 +187,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["cardio", "legs", "core"],
     thumbnail: { from: "oklch(0.7 0.22 40)", to: "oklch(0.35 0.2 10)", emoji: "⚡" },
+    image: imgFatLossHiit,
     recommendedForGoals: ["lose_weight", "endurance"],
     recommendedForLevels: ["intermediate", "advanced"],
     exercises: [
@@ -186,6 +206,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["mobility"],
     thumbnail: { from: "oklch(0.72 0.14 200)", to: "oklch(0.3 0.1 270)", emoji: "🧘" },
+    image: imgMobilityRecovery,
     recommendedForGoals: ["recomp", "maintain", "endurance", "build_muscle", "lose_weight"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
@@ -204,6 +225,7 @@ export const workouts: Workout[] = [
     equipment: ["dumbbells", "gym", "none", "mixed"],
     targetMuscles: ["glutes", "legs"],
     thumbnail: { from: "oklch(0.7 0.2 340)", to: "oklch(0.34 0.16 340)", emoji: "🍑" },
+    image: imgGluteBuilder,
     recommendedForGoals: ["build_muscle", "recomp"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
@@ -223,6 +245,7 @@ export const workouts: Workout[] = [
     equipment: ["gym", "dumbbells", "mixed"],
     targetMuscles: ["chest", "back", "arms"],
     thumbnail: { from: "oklch(0.6 0.18 60)", to: "oklch(0.28 0.1 50)", emoji: "🛡️" },
+    image: imgUpperBodyStrength,
     recommendedForGoals: ["build_muscle", "recomp"],
     recommendedForLevels: ["advanced", "intermediate"],
     exercises: [
@@ -242,6 +265,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["legs", "chest", "core"],
     thumbnail: { from: "oklch(0.78 0.16 140)", to: "oklch(0.35 0.13 160)", emoji: "🌱" },
+    image: imgBodyweightStarter,
     recommendedForGoals: ["maintain", "lose_weight", "build_muscle", "endurance"],
     recommendedForLevels: ["beginner"],
     exercises: [
@@ -260,6 +284,7 @@ export const workouts: Workout[] = [
     equipment: ["none", "dumbbells", "gym", "mixed"],
     targetMuscles: ["cardio", "legs"],
     thumbnail: { from: "oklch(0.7 0.18 170)", to: "oklch(0.3 0.12 200)", emoji: "🏃" },
+    image: imgEnduranceRun,
     recommendedForGoals: ["endurance", "lose_weight"],
     recommendedForLevels: ["beginner", "intermediate", "advanced"],
     exercises: [
