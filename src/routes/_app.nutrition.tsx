@@ -12,7 +12,10 @@ import {
   useNutrition, addEntry as storeAdd, updateEntry as storeUpdate, removeEntry as storeRemove,
 } from "@/lib/nutritionStore";
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
-import { foodLookupService, aiFoodScanService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
+import { foodLookupService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
+import { analyzeFoodImage, type FoodScanItem, type FoodScanResult } from "@/lib/foodScan.functions";
+import { useServerFn } from "@tanstack/react-start";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/nutrition")({
