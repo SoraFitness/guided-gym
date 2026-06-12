@@ -40,7 +40,7 @@ import {
   type ExerciseLog,
   type SetLog,
   type WeightUnit,
-  type WorkoutSession as _WS,
+  } from "@/lib/workoutSessionStore";
 } from "@/lib/workoutSessionStore";
 import { logWorkout } from "@/lib/progressStore";
 import { Exercise3DViewer } from "@/components/exercise3d/Exercise3DViewer";
