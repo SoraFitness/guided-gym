@@ -101,7 +101,7 @@ function Onboarding() {
     saveGoals(suggestNutrition(profile));
     setTimeout(() => {
       setProfile(profile);
-      navigate({ to: "/home" });
+      navigate({ to: "/paywall" });
     }, 1800);
   };
 
