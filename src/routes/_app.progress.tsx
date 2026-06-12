@@ -68,6 +68,10 @@ function ProgressPage() {
         </Link>
       </div>
 
+      <div className="mt-6">
+        <GoalPanel />
+      </div>
+
       <div className="mt-6 grid grid-cols-2 gap-3">
         <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
         <StatCard
