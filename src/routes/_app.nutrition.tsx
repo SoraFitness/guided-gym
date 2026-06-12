@@ -585,25 +585,122 @@ function BarcodePanel({ onResult }: { onResult: (r: LookupResult) => void }) {
   );
 }
 
-function PhotoPanel({ onResult }: { onResult: (r: LookupResult) => void }) {
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+function fileToDataUrl(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+}
+
+function PhotoPanel({
+  meal,
+  onAdd,
+  onEditManually,
+  onDone,
+}: {
+  meal: Meal;
+  onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void;
+  onEditManually: (r: LookupResult) => void;
+  onDone: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [result, setResult] = useState<FoodScanResult | null>(null);
+  const analyzeFn = useServerFn(analyzeFoodImage);
+
+  const reset = () => {
+    setFile(null);
+    setPreview("");
+    setResult(null);
+    setError("");
+  };
 
   const pick = (f: File) => {
+    if (f.size > MAX_IMAGE_BYTES) {
+      setError("Image is too large (max 8 MB). Try a smaller photo.");
+      return;
+    }
+    setError("");
+    setResult(null);
     setFile(f);
     setPreview(URL.createObjectURL(f));
   };
 
-  const analyze = async () => {
+  const runAnalyze = async () => {
     if (!file) return;
     setLoading(true);
-    const r = await aiFoodScanService.analyzeImage(file);
-    setLoading(false);
-    onResult(r);
+    setError("");
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const resp = await analyzeFn({ data: { image: dataUrl } });
+      if (resp.ok) {
+        setResult(resp.result);
+      } else {
+        setError(
+          resp.reason === "no_key"
+            ? "AI is not configured yet. Please add foods manually."
+            : "Couldn't detect this meal clearly. Try another photo or add food manually.",
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Couldn't detect this meal clearly. Try another photo or add food manually.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // ---------- Confirmation screen ----------
+  if (result) {
+    return (
+      <PhotoConfirm
+        meal={meal}
+        preview={preview}
+        result={result}
+        onReanalyze={runAnalyze}
+        onEditManually={() => {
+          // Collapse all items into a single combined prefill for ManualPanel
+          const t = result.total;
+          onEditManually({
+            name: result.meal_name,
+            serving: result.items.map((i) => `${i.name} ${i.estimated_amount}`).join(", ").slice(0, 60),
+            kcal: t.calories,
+            protein: t.protein,
+            carbs: t.carbs,
+            fat: t.fat,
+            confidence: result.confidence,
+          });
+        }}
+        onSave={(items) => {
+          for (const it of items) {
+            onAdd({
+              meal,
+              servings: 1,
+              custom: {
+                name: it.name,
+                serving: it.estimated_amount || "1 serving",
+                kcal: it.calories,
+                protein: it.protein,
+                carbs: it.carbs,
+                fat: it.fat,
+                source: "image",
+              },
+            });
+          }
+          onDone();
+        }}
+      />
+    );
+  }
+
+  // ---------- Pick / preview screen ----------
   return (
     <div>
       <input
@@ -614,6 +711,14 @@ function PhotoPanel({ onResult }: { onResult: (r: LookupResult) => void }) {
         hidden
         onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])}
       />
+
+      {!preview && (
+        <div className="mb-3 flex items-start gap-2 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5 text-[11px] text-muted-foreground">
+          <Sparkles className="size-3.5 text-neon shrink-0 mt-0.5" />
+          <span>For best results, take the photo from above with the full plate visible.</span>
+        </div>
+      )}
+
       {!preview ? (
         <button
           onClick={() => inputRef.current?.click()}
@@ -624,41 +729,242 @@ function PhotoPanel({ onResult }: { onResult: (r: LookupResult) => void }) {
               <Upload className="size-6 text-neon" />
             </div>
             <p className="font-semibold text-sm">Take or upload a meal photo</p>
-            <p className="text-[11px] text-muted-foreground mt-1">We'll estimate calories and macros</p>
+            <p className="text-[11px] text-muted-foreground mt-1">We'll analyze it with AI</p>
           </div>
         </button>
       ) : (
         <div className="aspect-[4/5] rounded-3xl overflow-hidden relative border border-white/[0.06]">
           <img src={preview} alt="meal" className="size-full object-cover" />
           <button
-            onClick={() => { setFile(null); setPreview(""); }}
+            onClick={reset}
             className="absolute top-3 right-3 size-9 rounded-full bg-black/60 grid place-items-center"
             aria-label="Remove"
           >
             <X className="size-4" />
           </button>
           {loading && (
-            <div className="absolute inset-0 bg-black/60 grid place-items-center">
+            <div className="absolute inset-0 bg-black/70 grid place-items-center">
               <div className="text-center">
                 <Loader2 className="size-7 text-neon mx-auto animate-spin" />
-                <p className="mt-2 text-xs text-neon font-medium">Analyzing meal…</p>
+                <p className="mt-2 text-xs text-neon font-medium">Analyzing your meal…</p>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {preview && !loading && (
+      {error && (
+        <div className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-[12px] text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+          <div className="mt-3 flex gap-2">
+            {preview && (
+              <button
+                onClick={runAnalyze}
+                className="flex-1 h-10 rounded-full bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw className="size-3.5" /> Try again
+              </button>
+            )}
+            <button
+              onClick={() =>
+                onEditManually({ name: "", serving: "1 serving", kcal: 0, protein: 0, carbs: 0, fat: 0 })
+              }
+              className="flex-1 h-10 rounded-full bg-neon text-neon-foreground text-xs font-semibold"
+            >
+              Add manually
+            </button>
+          </div>
+        </div>
+      )}
+
+      {preview && !loading && !error && (
         <button
-          onClick={analyze}
+          onClick={runAnalyze}
           className="mt-4 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon active:scale-[0.98]"
         >
           <Sparkles className="size-4" /> Analyze meal
         </button>
       )}
       <p className="mt-3 text-[10px] text-muted-foreground text-center">
-        AI estimates are for guidance only.
+        AI estimates — confirm before saving.
       </p>
+    </div>
+  );
+}
+
+function PhotoConfirm({
+  meal,
+  preview,
+  result,
+  onSave,
+  onReanalyze,
+  onEditManually,
+}: {
+  meal: Meal;
+  preview: string;
+  result: FoodScanResult;
+  onSave: (items: FoodScanItem[]) => void;
+  onReanalyze: () => void;
+  onEditManually: () => void;
+}) {
+  const [items, setItems] = useState<FoodScanItem[]>(result.items);
+
+  const updateItem = (idx: number, patch: Partial<FoodScanItem>) => {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  };
+  const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
+  const addItem = () =>
+    setItems((prev) => [
+      ...prev,
+      { name: "", estimated_amount: "1 serving", confidence: 1, calories: 0, protein: 0, carbs: 0, fat: 0 },
+    ]);
+
+  const total = items.reduce(
+    (a, i) => ({
+      calories: a.calories + (Number(i.calories) || 0),
+      protein: a.protein + (Number(i.protein) || 0),
+      carbs: a.carbs + (Number(i.carbs) || 0),
+      fat: a.fat + (Number(i.fat) || 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  const lowConfidence = result.needs_user_confirmation || result.confidence < 0.7;
+  const confColor =
+    result.confidence >= 0.85
+      ? "bg-emerald-400/15 text-emerald-300 border-emerald-400/30"
+      : result.confidence >= 0.7
+      ? "bg-neon/15 text-neon border-neon/30"
+      : "bg-amber-400/15 text-amber-300 border-amber-400/30";
+
+  const canSave = items.length > 0 && items.every((i) => i.name.trim().length > 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        {preview && (
+          <img src={preview} alt="meal" className="size-16 rounded-2xl object-cover border border-white/10" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Confirm your meal</p>
+          <h3 className="font-bold text-base truncate">{result.meal_name}</h3>
+          <span
+            className={cn(
+              "mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold",
+              confColor,
+            )}
+          >
+            {Math.round(result.confidence * 100)}% confidence
+          </span>
+        </div>
+      </div>
+
+      {lowConfidence && (
+        <div className="flex items-start gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-[11px] text-amber-200">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+          <span>We're not fully sure. Please confirm the foods and portions below.</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {items.map((it, idx) => (
+          <div key={idx} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <input
+                value={it.name}
+                onChange={(e) => updateItem(idx, { name: e.target.value })}
+                placeholder="Food name"
+                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] px-2.5 text-sm outline-none focus:border-neon/40"
+                maxLength={60}
+              />
+              <button
+                onClick={() => removeItem(idx)}
+                className="size-9 rounded-lg bg-white/[0.04] grid place-items-center text-muted-foreground"
+                aria-label="Remove item"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={it.estimated_amount}
+                onChange={(e) => updateItem(idx, { estimated_amount: e.target.value })}
+                placeholder="Portion (e.g. 150g)"
+                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] px-2.5 text-xs outline-none focus:border-neon/40"
+                maxLength={30}
+              />
+              {it.confidence < 0.7 && (
+                <span className="text-[10px] text-amber-300 font-medium whitespace-nowrap">
+                  {Math.round(it.confidence * 100)}%
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(["calories", "protein", "carbs", "fat"] as const).map((k) => (
+                <label key={k} className="block">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                    {k === "calories" ? "kcal" : k.slice(0, 1).toUpperCase() + "(g)"}
+                  </span>
+                  <input
+                    inputMode="numeric"
+                    value={String(it[k] ?? 0)}
+                    onChange={(e) =>
+                      updateItem(idx, {
+                        [k]: Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0),
+                      } as Partial<FoodScanItem>)
+                    }
+                    className="mt-0.5 h-9 w-full rounded-lg bg-white/[0.04] border border-white/[0.06] px-2 text-xs outline-none focus:border-neon/40 tabular-nums"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={addItem}
+          className="w-full h-10 rounded-2xl border border-dashed border-white/15 text-[11px] text-muted-foreground flex items-center justify-center gap-1.5"
+        >
+          <Plus className="size-3.5" /> Add another item
+        </button>
+      </div>
+
+      <div className="rounded-2xl bg-neon/10 border border-neon/20 p-3">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[10px] uppercase tracking-wider text-neon">Total</span>
+          <span className="text-base font-bold tabular-nums">{total.calories} kcal</span>
+        </div>
+        <div className="mt-1 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+          <span>P <span className="text-foreground font-semibold tabular-nums">{total.protein}g</span></span>
+          <span>C <span className="text-foreground font-semibold tabular-nums">{total.carbs}g</span></span>
+          <span>F <span className="text-foreground font-semibold tabular-nums">{total.fat}g</span></span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => onSave(items)}
+        disabled={!canSave}
+        className="w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+      >
+        <Check className="size-4" /> Save meal to {meal}
+      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={onReanalyze}
+          className="h-10 rounded-full bg-white/[0.05] text-xs font-semibold flex items-center justify-center gap-1.5"
+        >
+          <RotateCcw className="size-3.5" /> Re-analyze
+        </button>
+        <button
+          onClick={onEditManually}
+          className="h-10 rounded-full bg-white/[0.05] text-xs font-semibold flex items-center justify-center gap-1.5"
+        >
+          <Pencil className="size-3.5" /> Edit manually
+        </button>
+      </div>
     </div>
   );
 }
