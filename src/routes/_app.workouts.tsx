@@ -34,7 +34,7 @@ function WorkoutsPage() {
       )}
 
       {/* Segmented tabs */}
-      <div className="mt-5 relative grid grid-cols-3 bg-white/[0.04] border border-white/[0.06] rounded-full p-1">
+      <div data-tour="tour-workouts-tabs" className="mt-5 relative grid grid-cols-3 bg-white/[0.04] border border-white/[0.06] rounded-full p-1">
         {TABS.map((t) => {
           const active = tab === t;
           return (
@@ -173,7 +173,7 @@ function WeeklyScheduleView() {
 
   return (
     <div>
-      <div className="rounded-[24px] bg-gradient-to-br from-neon/15 to-transparent border border-white/[0.06] p-4 flex items-center gap-4">
+      <div data-tour="tour-workouts-plan" className="rounded-[24px] bg-gradient-to-br from-neon/15 to-transparent border border-white/[0.06] p-4 flex items-center gap-4">
         <div className="size-12 rounded-2xl bg-neon/20 grid place-items-center">
           <Sparkles className="size-5 text-neon" />
         </div>

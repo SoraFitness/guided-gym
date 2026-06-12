@@ -85,6 +85,7 @@ function NutritionPage() {
       {/* Scan CTA */}
       <button
         onClick={() => setAddFor(currentMeal())}
+        data-tour="tour-nutrition-log"
         className="group mt-4 w-full rounded-[24px] relative overflow-hidden text-left active:scale-[0.99] transition"
       >
         <div className="absolute inset-0 bg-[linear-gradient(120deg,oklch(0.92_0.21_130)_0%,oklch(0.85_0.2_150)_55%,oklch(0.78_0.16_180)_100%)]" />
