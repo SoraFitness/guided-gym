@@ -73,6 +73,108 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_activity: {
+        Row: {
+          activity_on: string
+          created_at: string
+          id: string
+          recovery_score: number
+          sleep_hours: number
+          steps: number
+          user_id: string
+        }
+        Insert: {
+          activity_on?: string
+          created_at?: string
+          id?: string
+          recovery_score?: number
+          sleep_hours?: number
+          steps?: number
+          user_id: string
+        }
+        Update: {
+          activity_on?: string
+          created_at?: string
+          id?: string
+          recovery_score?: number
+          sleep_hours?: number
+          steps?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      food_logs: {
+        Row: {
+          calories: number
+          carbs_g: number
+          created_at: string
+          fat_g: number
+          id: string
+          logged_on: string
+          meal: string
+          name: string
+          protein_g: number
+          user_id: string
+        }
+        Insert: {
+          calories?: number
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          id?: string
+          logged_on?: string
+          meal?: string
+          name: string
+          protein_g?: number
+          user_id: string
+        }
+        Update: {
+          calories?: number
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          id?: string
+          logged_on?: string
+          meal?: string
+          name?: string
+          protein_g?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          link_to: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link_to?: string | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link_to?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       progress_photos: {
         Row: {
           created_at: string
@@ -106,6 +208,207 @@ export type Database = {
           updated_at?: string
           user_id?: string
           weight_kg?: number | null
+        }
+        Relationships: []
+      }
+      user_goals: {
+        Row: {
+          created_at: string
+          daily_calorie_target: number
+          daily_protein_g_target: number
+          daily_step_target: number
+          goal_weight_kg: number | null
+          starting_weight_kg: number | null
+          timezone: string
+          updated_at: string
+          user_id: string
+          weekly_workout_target: number
+        }
+        Insert: {
+          created_at?: string
+          daily_calorie_target?: number
+          daily_protein_g_target?: number
+          daily_step_target?: number
+          goal_weight_kg?: number | null
+          starting_weight_kg?: number | null
+          timezone?: string
+          updated_at?: string
+          user_id: string
+          weekly_workout_target?: number
+        }
+        Update: {
+          created_at?: string
+          daily_calorie_target?: number
+          daily_protein_g_target?: number
+          daily_step_target?: number
+          goal_weight_kg?: number | null
+          starting_weight_kg?: number | null
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+          weekly_workout_target?: number
+        }
+        Relationships: []
+      }
+      weekly_reports: {
+        Row: {
+          achievements: Json
+          ai_summary: string | null
+          average_calories: number
+          average_protein_g: number
+          calorie_adherence: number
+          consistency_score: number
+          created_at: string
+          ending_weight_kg: number | null
+          finalized_at: string | null
+          id: string
+          is_finalized: boolean
+          next_week_plan: Json
+          overall_score: number
+          planned_workouts: number
+          protein_hit_days: number
+          starting_weight_kg: number | null
+          top_muscle_groups: string[]
+          total_reps: number
+          total_sets: number
+          total_volume_kg: number
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+          weight_change_kg: number | null
+          workouts_completed: number
+        }
+        Insert: {
+          achievements?: Json
+          ai_summary?: string | null
+          average_calories?: number
+          average_protein_g?: number
+          calorie_adherence?: number
+          consistency_score?: number
+          created_at?: string
+          ending_weight_kg?: number | null
+          finalized_at?: string | null
+          id?: string
+          is_finalized?: boolean
+          next_week_plan?: Json
+          overall_score?: number
+          planned_workouts?: number
+          protein_hit_days?: number
+          starting_weight_kg?: number | null
+          top_muscle_groups?: string[]
+          total_reps?: number
+          total_sets?: number
+          total_volume_kg?: number
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+          weight_change_kg?: number | null
+          workouts_completed?: number
+        }
+        Update: {
+          achievements?: Json
+          ai_summary?: string | null
+          average_calories?: number
+          average_protein_g?: number
+          calorie_adherence?: number
+          consistency_score?: number
+          created_at?: string
+          ending_weight_kg?: number | null
+          finalized_at?: string | null
+          id?: string
+          is_finalized?: boolean
+          next_week_plan?: Json
+          overall_score?: number
+          planned_workouts?: number
+          protein_hit_days?: number
+          starting_weight_kg?: number | null
+          top_muscle_groups?: string[]
+          total_reps?: number
+          total_sets?: number
+          total_volume_kg?: number
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
+          weight_change_kg?: number | null
+          workouts_completed?: number
+        }
+        Relationships: []
+      }
+      weight_logs: {
+        Row: {
+          created_at: string
+          id: string
+          logged_on: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logged_on?: string
+          user_id: string
+          weight_kg: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logged_on?: string
+          user_id?: string
+          weight_kg?: number
+        }
+        Relationships: []
+      }
+      workout_logs: {
+        Row: {
+          created_at: string
+          duration_min: number
+          id: string
+          is_pr: boolean
+          muscle_groups: string[]
+          name: string
+          notes: string | null
+          performed_on: string
+          pr_note: string | null
+          total_reps: number
+          total_sets: number
+          total_volume_kg: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_min?: number
+          id?: string
+          is_pr?: boolean
+          muscle_groups?: string[]
+          name: string
+          notes?: string | null
+          performed_on?: string
+          pr_note?: string | null
+          total_reps?: number
+          total_sets?: number
+          total_volume_kg?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_min?: number
+          id?: string
+          is_pr?: boolean
+          muscle_groups?: string[]
+          name?: string
+          notes?: string | null
+          performed_on?: string
+          pr_note?: string | null
+          total_reps?: number
+          total_sets?: number
+          total_volume_kg?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
