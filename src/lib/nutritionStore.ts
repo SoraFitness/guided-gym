@@ -7,25 +7,31 @@ import {
 
 const EVT = "fitness:nutrition-change";
 
+let entriesCache: LogEntry[] | null = null;
+let goalsCache: NutritionGoals | null = null;
+
 function emit() {
+  entriesCache = null;
+  goalsCache = null;
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVT));
 }
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
+  const invalidate = () => { entriesCache = null; goalsCache = null; cb(); };
   const onStorage = (e: StorageEvent) => {
-    if (!e.key || e.key === "fitness:foodlog" || e.key === "fitness:goals") cb();
+    if (!e.key || e.key === "fitness:foodlog" || e.key === "fitness:goals") invalidate();
   };
-  window.addEventListener(EVT, cb);
+  window.addEventListener(EVT, invalidate);
   window.addEventListener("storage", onStorage);
   return () => {
-    window.removeEventListener(EVT, cb);
+    window.removeEventListener(EVT, invalidate);
     window.removeEventListener("storage", onStorage);
   };
 }
 
-const getEntriesSnap = () => loadLog();
-const getGoalsSnap = () => loadGoals();
+const getEntriesSnap = () => (entriesCache ??= loadLog());
+const getGoalsSnap = () => (goalsCache ??= loadGoals());
 const empty: LogEntry[] = [];
 const emptyGoals: NutritionGoals = { kcal: 2100, protein: 140, carbs: 230, fat: 70 };
 
