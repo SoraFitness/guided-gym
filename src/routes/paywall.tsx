@@ -94,7 +94,7 @@ function PaywallScreen() {
         </p>
 
         {/* Social proof */}
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-5 flex items-center gap-3">
           <div className="flex -space-x-2">
             {[
               "from-emerald-400 to-emerald-700",
@@ -102,7 +102,7 @@ function PaywallScreen() {
               "from-rose-400 to-rose-700",
               "from-sky-400 to-sky-700",
             ].map((g, i) => (
-              <div key={i} className={cn("h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br", g)} />
+              <div key={i} className={cn("h-6 w-6 rounded-full border-2 border-background bg-gradient-to-br", g)} />
             ))}
           </div>
           <div className="flex items-center gap-1.5">
@@ -115,20 +115,7 @@ function PaywallScreen() {
           </div>
         </div>
 
-        {/* Features */}
-        <div className="mt-7 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur p-5 space-y-3.5">
-          {FEATURES.map((f) => (
-            <div key={f.text} className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-neon/15 grid place-items-center border border-neon/25">
-                <f.icon className="h-4.5 w-4.5 text-neon" />
-              </div>
-              <span className="text-sm font-medium">{f.text}</span>
-              <Check className="ml-auto h-4 w-4 text-neon" />
-            </div>
-          ))}
-        </div>
-
-        {/* Plan cards */}
+        {/* Plan cards — moved to top */}
         <div className="mt-7 space-y-3">
           <PlanCard
             plan="yearly"
@@ -141,6 +128,32 @@ function PaywallScreen() {
             selected={selected === "weekly"}
             onSelect={() => setSelected("weekly")}
           />
+        </div>
+
+        {/* Benefits */}
+        <div className="mt-8">
+          <h2 className="text-xs font-bold tracking-[0.2em] text-muted-foreground mb-3">
+            WHAT YOU GET
+          </h2>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur p-5 space-y-3.5">
+            {FEATURES.map((f) => (
+              <div key={f.text} className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-neon/15 grid place-items-center border border-neon/25">
+                  <f.icon className="h-4 w-4 text-neon" />
+                </div>
+                <span className="text-sm font-medium">{f.text}</span>
+                <Check className="ml-auto h-4 w-4 text-neon" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Free vs Premium comparison */}
+        <div className="mt-8">
+          <h2 className="text-xs font-bold tracking-[0.2em] text-muted-foreground mb-3">
+            FREE VS PREMIUM
+          </h2>
+          <ComparisonTable />
         </div>
       </div>
 
@@ -221,5 +234,59 @@ function PlanCard({
         </div>
       </div>
     </button>
+  );
+}
+
+const COMPARISON_ROWS: { label: string; free: string | false; premium: string | true }[] = [
+  { label: "Basic workouts", free: "Yes", premium: "Yes" },
+  { label: "Personalized workout plans", free: false, premium: "Yes" },
+  { label: "3D exercise demos", free: "Limited", premium: "Full access" },
+  { label: "Nutrition tracking", free: "Basic", premium: "Advanced" },
+  { label: "Progress tracking", free: "Basic", premium: "Advanced" },
+  { label: "Body scan insights", free: false, premium: "Yes" },
+  { label: "Premium tools", free: false, premium: "Yes" },
+  { label: "Guided structure & coaching", free: "Limited", premium: "Yes" },
+];
+
+function ComparisonTable() {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur overflow-hidden">
+      {/* Header row */}
+      <div className="grid grid-cols-[1.3fr_0.8fr_0.9fr] items-center px-4 py-3 border-b border-white/10 bg-white/[0.02]">
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground">FEATURE</span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground text-center">FREE</span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-neon text-center flex items-center justify-center gap-1">
+          <Sparkles className="h-3 w-3" /> PREMIUM
+        </span>
+      </div>
+
+      {COMPARISON_ROWS.map((row, i) => (
+        <div
+          key={row.label}
+          className={cn(
+            "grid grid-cols-[1.3fr_0.8fr_0.9fr] items-center px-4 py-3",
+            i !== COMPARISON_ROWS.length - 1 && "border-b border-white/5",
+          )}
+        >
+          <span className="text-[13px] font-medium pr-2">{row.label}</span>
+          <span className="text-center">
+            {row.free === false ? (
+              <X className="inline h-4 w-4 text-muted-foreground/50" />
+            ) : (
+              <span className="text-xs text-muted-foreground">{row.free}</span>
+            )}
+          </span>
+          <span className="text-center">
+            {row.premium === true || row.premium === "Yes" ? (
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neon/15 border border-neon/30">
+                <Check className="h-3 w-3 text-neon" strokeWidth={3} />
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-neon">{row.premium}</span>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
