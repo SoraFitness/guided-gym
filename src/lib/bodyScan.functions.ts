@@ -83,9 +83,10 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<BodyScanResult> => {
     const profile = data.profile as unknown as Profile;
+    const salt = saltFromImage((data.front || "") + (data.side || "") + (data.back || ""));
     const key = process.env.LOVABLE_API_KEY;
     if (!key) {
-      return mockScanFor(profile);
+      return mockScanFor(profile, salt);
     }
 
     try {
@@ -108,6 +109,16 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
         messages: [{ role: "user", content: content as never }],
       });
 
+      // Guard: if the model collapses to a flat ~70 across the board, fall back
+      // to the salted mock so different photos yield different scores.
+      const vals = Object.values(output.scores);
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
+      if (variance < 4) {
+        console.warn("AI scan returned flat scores; using salted mock");
+        return mockScanFor(profile, salt);
+      }
+
       const overall = Math.round(output.overallScore);
       return {
         id: crypto.randomUUID(),
@@ -126,6 +137,7 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
       };
     } catch (err) {
       console.error("analyzeBodyScan failed, falling back to mock:", err);
-      return mockScanFor(profile);
+      return mockScanFor(profile, salt);
     }
+
   });
