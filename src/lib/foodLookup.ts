@@ -36,20 +36,8 @@ export const foodLookupService = {
   },
 };
 
-const mockImageMeals: LookupResult[] = [
-  { name: "Chicken Rice Bowl", serving: "1 bowl (~480g)", kcal: 640, protein: 48, carbs: 72, fat: 18, confidence: 0.86 },
-  { name: "Avocado Toast", serving: "2 slices", kcal: 380, protein: 12, carbs: 38, fat: 22, confidence: 0.81 },
-  { name: "Garden Salad w/ Salmon", serving: "1 plate (~400g)", kcal: 520, protein: 36, carbs: 18, fat: 32, confidence: 0.78 },
-  { name: "Pasta Bolognese", serving: "1 plate (~350g)", kcal: 590, protein: 28, carbs: 78, fat: 16, confidence: 0.83 },
-  { name: "Veggie Burrito", serving: "1 burrito", kcal: 610, protein: 22, carbs: 86, fat: 18, confidence: 0.74 },
-];
-
-export const aiFoodScanService = {
-  async analyzeImage(_file: File | Blob): Promise<LookupResult> {
-    await new Promise((r) => setTimeout(r, 1800));
-    return mockImageMeals[Math.floor(Math.random() * mockImageMeals.length)];
-  },
-};
+// AI food image scanning lives in src/lib/foodScan.functions.ts and runs
+// against the Lovable AI Gateway. No mock results.
 
 export function resultToCustom(r: LookupResult, source: "manual" | "barcode" | "image") {
   return {
