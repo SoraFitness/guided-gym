@@ -2,10 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Check, Dumbbell, Apple, Activity, Scan, LineChart, Sparkles, Box, Zap, Star, ArrowRight, X,
+  Check, Dumbbell, Apple, Activity, Scan, LineChart, Sparkles, Box, Zap, Star, ArrowRight, X, Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
+import { useProfile } from "@/lib/profile";
 
 export const Route = createFileRoute("/paywall")({
   head: () => ({
@@ -30,8 +31,20 @@ const FEATURES = [
 
 function PaywallScreen() {
   const navigate = useNavigate();
+  const { profile, updateProfile } = useProfile();
   const [selected, setSelected] = useState<Plan>("yearly");
   const [purchasing, setPurchasing] = useState(false);
+  const [referral, setReferral] = useState(profile?.referralCode ?? "");
+  const [referralApplied, setReferralApplied] = useState(!!profile?.referralCode);
+  const [referralOpen, setReferralOpen] = useState(!!profile?.referralCode);
+
+  const applyReferral = () => {
+    const code = referral.trim().toUpperCase();
+    if (!code) return;
+    setReferral(code);
+    if (profile) updateProfile({ referralCode: code });
+    setReferralApplied(true);
+  };
 
   const handlePurchase = () => {
     setPurchasing(true);
