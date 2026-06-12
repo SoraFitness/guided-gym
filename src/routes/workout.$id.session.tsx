@@ -858,8 +858,6 @@ function Stat({ label, value, icon }: { label: string; value: string; icon?: Rea
   );
 }
 
-// Suppress unused-import lint for icons available via the chevron components below.
 void ChevronDown;
 void ChevronUp;
-void WorkoutSession;
 void setExerciseNotes;
