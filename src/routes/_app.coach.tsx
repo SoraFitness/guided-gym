@@ -140,8 +140,10 @@ function CoachChat() {
       api: "/api/coach",
       prepareSendMessagesRequest: async ({ messages, body }) => {
         const { data } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (data.session) headers.Authorization = `Bearer ${data.session.access_token}`;
         return {
-          headers: data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {},
+          headers,
           body: { messages, threadId, userContext: buildCoachContext(profile ?? null), ...body },
         };
       },
