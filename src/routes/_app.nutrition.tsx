@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera, Search, Plus, X, ScanLine, Sparkles, Trash2, Check, ChevronLeft, ChevronRight,
   Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
+  Star, ArrowLeft, BadgeCheck, History, Heart, Utensils,
 } from "lucide-react";
 import {
   foods, meals, entriesOn, macrosFor, entryFood,
@@ -14,6 +15,15 @@ import {
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { foodLookupService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { analyzeFoodImage, type FoodScanItem, type FoodScanResult } from "@/lib/foodScan.functions";
+import { searchFoodDatabase, type FoodSearchResult } from "@/lib/foodSearch.functions";
+import {
+  brandedFoods, popularBrands, searchBrandedPresets, findPresetById,
+  type BrandedFood, type BrandCategory,
+} from "@/lib/brandedFoods";
+import {
+  useRecentFoods, useFavoriteFoods, pushRecent, toggleFavorite, isFavorite, resultToStored,
+  type StoredFood,
+} from "@/lib/foodHistoryStore";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,8 +42,8 @@ function NutritionPage() {
   const today = useMemo(() => entriesOn(entries, day), [entries, day]);
   const totals = macrosFor(today);
 
-  const add = (entry: Omit<LogEntry, "id" | "loggedAt">) => {
-    storeAdd({ ...entry, loggedAt: day.toISOString() });
+  const add = (entry: Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string }) => {
+    storeAdd({ ...entry, loggedAt: entry.loggedAt ?? day.toISOString() });
   };
   const update = (id: string, patch: Partial<LogEntry>) => storeUpdate(id, patch);
   const remove = (id: string) => storeRemove(id);
