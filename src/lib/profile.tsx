@@ -161,6 +161,16 @@ function migrate(raw: Record<string, unknown>): Profile {
     gender: (raw.gender as Gender) ?? "other",
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
     injuries: (raw.injuries as string) ?? "",
+    equipmentItems: (raw.equipmentItems as string[]) ?? defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
     completedAt: (raw.completedAt as string) ?? new Date().toISOString(),
   };
+}
+
+function defaultEquipmentItems(setup: EquipmentSetup): string[] {
+  switch (setup) {
+    case "gym": return ["Full gym access"];
+    case "dumbbells": return ["Dumbbells"];
+    case "mixed": return ["Dumbbells", "Bench"];
+    default: return ["No equipment"];
+  }
 }
