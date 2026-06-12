@@ -20,18 +20,23 @@ import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppPhotosRouteImport } from './routes/_app.photos'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
 import { Route as AppCoachRouteImport } from './routes/_app.coach'
 import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
 import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
+import { Route as AppReportIndexRouteImport } from './routes/_app.report.index'
 import { Route as AppPhotosIndexRouteImport } from './routes/_app.photos.index'
 import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
 import { Route as WorkoutIdSessionRouteImport } from './routes/workout.$id.session'
+import { Route as AppReportHistoryRouteImport } from './routes/_app.report.history'
+import { Route as AppReportWeekStartRouteImport } from './routes/_app.report.$weekStart'
 import { Route as AppPhotosNewRouteImport } from './routes/_app.photos.new'
 import { Route as AppPhotosCompareRouteImport } from './routes/_app.photos.compare'
 import { Route as AppPhotosPhotoIdRouteImport } from './routes/_app.photos.$photoId'
 import { Route as AppScanBodyIndexRouteImport } from './routes/_app.scan.body.index'
 import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$id.demo.$exerciseId'
+import { Route as ApiPublicHooksFinalizeWeeklyReportsRouteImport } from './routes/api/public/hooks/finalize-weekly-reports'
 import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
 
@@ -89,6 +94,11 @@ const AppNutritionRoute = AppNutritionRouteImport.update({
   path: '/nutrition',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppHomeRoute = AppHomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -109,6 +119,11 @@ const AppScanIndexRoute = AppScanIndexRouteImport.update({
   path: '/scan/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReportIndexRoute = AppReportIndexRouteImport.update({
+  id: '/report/',
+  path: '/report/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPhotosIndexRoute = AppPhotosIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -123,6 +138,16 @@ const WorkoutIdSessionRoute = WorkoutIdSessionRouteImport.update({
   id: '/session',
   path: '/session',
   getParentRoute: () => WorkoutIdRoute,
+} as any)
+const AppReportHistoryRoute = AppReportHistoryRouteImport.update({
+  id: '/report/history',
+  path: '/report/history',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportWeekStartRoute = AppReportWeekStartRouteImport.update({
+  id: '/report/$weekStart',
+  path: '/report/$weekStart',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppPhotosNewRoute = AppPhotosNewRouteImport.update({
   id: '/new',
@@ -149,6 +174,12 @@ const WorkoutIdDemoExerciseIdRoute = WorkoutIdDemoExerciseIdRouteImport.update({
   path: '/demo/$exerciseId',
   getParentRoute: () => WorkoutIdRoute,
 } as any)
+const ApiPublicHooksFinalizeWeeklyReportsRoute =
+  ApiPublicHooksFinalizeWeeklyReportsRouteImport.update({
+    id: '/api/public/hooks/finalize-weekly-reports',
+    path: '/api/public/hooks/finalize-weekly-reports',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppScanBodyNewRoute = AppScanBodyNewRouteImport.update({
   id: '/scan/body/new',
   path: '/scan/body/new',
@@ -166,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/paywall': typeof PaywallRoute
   '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
+  '/notifications': typeof AppNotificationsRoute
   '/nutrition': typeof AppNutritionRoute
   '/photos': typeof AppPhotosRouteWithChildren
   '/profile': typeof AppProfileRoute
@@ -176,13 +208,17 @@ export interface FileRoutesByFullPath {
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
   '/photos/compare': typeof AppPhotosCompareRoute
   '/photos/new': typeof AppPhotosNewRoute
+  '/report/$weekStart': typeof AppReportWeekStartRoute
+  '/report/history': typeof AppReportHistoryRoute
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/photos/': typeof AppPhotosIndexRoute
+  '/report/': typeof AppReportIndexRoute
   '/scan/': typeof AppScanIndexRoute
   '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
+  '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/scan/body/': typeof AppScanBodyIndexRoute
 }
@@ -192,6 +228,7 @@ export interface FileRoutesByTo {
   '/paywall': typeof PaywallRoute
   '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
+  '/notifications': typeof AppNotificationsRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
@@ -201,13 +238,17 @@ export interface FileRoutesByTo {
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
   '/photos/compare': typeof AppPhotosCompareRoute
   '/photos/new': typeof AppPhotosNewRoute
+  '/report/$weekStart': typeof AppReportWeekStartRoute
+  '/report/history': typeof AppReportHistoryRoute
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/photos': typeof AppPhotosIndexRoute
+  '/report': typeof AppReportIndexRoute
   '/scan': typeof AppScanIndexRoute
   '/workout/history': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
+  '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/scan/body': typeof AppScanBodyIndexRoute
 }
@@ -219,6 +260,7 @@ export interface FileRoutesById {
   '/paywall': typeof PaywallRoute
   '/_app/coach': typeof AppCoachRoute
   '/_app/home': typeof AppHomeRoute
+  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/photos': typeof AppPhotosRouteWithChildren
   '/_app/profile': typeof AppProfileRoute
@@ -229,13 +271,17 @@ export interface FileRoutesById {
   '/_app/photos/$photoId': typeof AppPhotosPhotoIdRoute
   '/_app/photos/compare': typeof AppPhotosCompareRoute
   '/_app/photos/new': typeof AppPhotosNewRoute
+  '/_app/report/$weekStart': typeof AppReportWeekStartRoute
+  '/_app/report/history': typeof AppReportHistoryRoute
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/_app/photos/': typeof AppPhotosIndexRoute
+  '/_app/report/': typeof AppReportIndexRoute
   '/_app/scan/': typeof AppScanIndexRoute
   '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/_app/scan/body/$id': typeof AppScanBodyIdRoute
   '/_app/scan/body/new': typeof AppScanBodyNewRoute
+  '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/_app/scan/body/': typeof AppScanBodyIndexRoute
 }
@@ -247,6 +293,7 @@ export interface FileRouteTypes {
     | '/paywall'
     | '/coach'
     | '/home'
+    | '/notifications'
     | '/nutrition'
     | '/photos'
     | '/profile'
@@ -257,13 +304,17 @@ export interface FileRouteTypes {
     | '/photos/$photoId'
     | '/photos/compare'
     | '/photos/new'
+    | '/report/$weekStart'
+    | '/report/history'
     | '/workout/$id/session'
     | '/workout/history/$id'
     | '/photos/'
+    | '/report/'
     | '/scan/'
     | '/workout/history/'
     | '/scan/body/$id'
     | '/scan/body/new'
+    | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/scan/body/'
   fileRoutesByTo: FileRoutesByTo
@@ -273,6 +324,7 @@ export interface FileRouteTypes {
     | '/paywall'
     | '/coach'
     | '/home'
+    | '/notifications'
     | '/nutrition'
     | '/profile'
     | '/progress'
@@ -282,13 +334,17 @@ export interface FileRouteTypes {
     | '/photos/$photoId'
     | '/photos/compare'
     | '/photos/new'
+    | '/report/$weekStart'
+    | '/report/history'
     | '/workout/$id/session'
     | '/workout/history/$id'
     | '/photos'
+    | '/report'
     | '/scan'
     | '/workout/history'
     | '/scan/body/$id'
     | '/scan/body/new'
+    | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/scan/body'
   id:
@@ -299,6 +355,7 @@ export interface FileRouteTypes {
     | '/paywall'
     | '/_app/coach'
     | '/_app/home'
+    | '/_app/notifications'
     | '/_app/nutrition'
     | '/_app/photos'
     | '/_app/profile'
@@ -309,13 +366,17 @@ export interface FileRouteTypes {
     | '/_app/photos/$photoId'
     | '/_app/photos/compare'
     | '/_app/photos/new'
+    | '/_app/report/$weekStart'
+    | '/_app/report/history'
     | '/workout/$id/session'
     | '/workout/history/$id'
     | '/_app/photos/'
+    | '/_app/report/'
     | '/_app/scan/'
     | '/workout/history/'
     | '/_app/scan/body/$id'
     | '/_app/scan/body/new'
+    | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/_app/scan/body/'
   fileRoutesById: FileRoutesById
@@ -329,6 +390,7 @@ export interface RootRouteChildren {
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
   WorkoutHistoryIdRoute: typeof WorkoutHistoryIdRoute
   WorkoutHistoryIndexRoute: typeof WorkoutHistoryIndexRoute
+  ApiPublicHooksFinalizeWeeklyReportsRoute: typeof ApiPublicHooksFinalizeWeeklyReportsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -410,6 +472,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNutritionRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/home': {
       id: '/_app/home'
       path: '/home'
@@ -438,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppScanIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/report/': {
+      id: '/_app/report/'
+      path: '/report'
+      fullPath: '/report/'
+      preLoaderRoute: typeof AppReportIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/photos/': {
       id: '/_app/photos/'
       path: '/'
@@ -458,6 +534,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/workout/$id/session'
       preLoaderRoute: typeof WorkoutIdSessionRouteImport
       parentRoute: typeof WorkoutIdRoute
+    }
+    '/_app/report/history': {
+      id: '/_app/report/history'
+      path: '/report/history'
+      fullPath: '/report/history'
+      preLoaderRoute: typeof AppReportHistoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/report/$weekStart': {
+      id: '/_app/report/$weekStart'
+      path: '/report/$weekStart'
+      fullPath: '/report/$weekStart'
+      preLoaderRoute: typeof AppReportWeekStartRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/photos/new': {
       id: '/_app/photos/new'
@@ -493,6 +583,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/workout/$id/demo/$exerciseId'
       preLoaderRoute: typeof WorkoutIdDemoExerciseIdRouteImport
       parentRoute: typeof WorkoutIdRoute
+    }
+    '/api/public/hooks/finalize-weekly-reports': {
+      id: '/api/public/hooks/finalize-weekly-reports'
+      path: '/api/public/hooks/finalize-weekly-reports'
+      fullPath: '/api/public/hooks/finalize-weekly-reports'
+      preLoaderRoute: typeof ApiPublicHooksFinalizeWeeklyReportsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/scan/body/new': {
       id: '/_app/scan/body/new'
@@ -532,11 +629,15 @@ const AppPhotosRouteWithChildren = AppPhotosRoute._addFileChildren(
 interface AppRouteChildren {
   AppCoachRoute: typeof AppCoachRoute
   AppHomeRoute: typeof AppHomeRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppNutritionRoute: typeof AppNutritionRoute
   AppPhotosRoute: typeof AppPhotosRouteWithChildren
   AppProfileRoute: typeof AppProfileRoute
   AppProgressRoute: typeof AppProgressRoute
   AppWorkoutsRoute: typeof AppWorkoutsRoute
+  AppReportWeekStartRoute: typeof AppReportWeekStartRoute
+  AppReportHistoryRoute: typeof AppReportHistoryRoute
+  AppReportIndexRoute: typeof AppReportIndexRoute
   AppScanIndexRoute: typeof AppScanIndexRoute
   AppScanBodyIdRoute: typeof AppScanBodyIdRoute
   AppScanBodyNewRoute: typeof AppScanBodyNewRoute
@@ -546,11 +647,15 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppCoachRoute: AppCoachRoute,
   AppHomeRoute: AppHomeRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppNutritionRoute: AppNutritionRoute,
   AppPhotosRoute: AppPhotosRouteWithChildren,
   AppProfileRoute: AppProfileRoute,
   AppProgressRoute: AppProgressRoute,
   AppWorkoutsRoute: AppWorkoutsRoute,
+  AppReportWeekStartRoute: AppReportWeekStartRoute,
+  AppReportHistoryRoute: AppReportHistoryRoute,
+  AppReportIndexRoute: AppReportIndexRoute,
   AppScanIndexRoute: AppScanIndexRoute,
   AppScanBodyIdRoute: AppScanBodyIdRoute,
   AppScanBodyNewRoute: AppScanBodyNewRoute,
@@ -582,6 +687,8 @@ const rootRouteChildren: RootRouteChildren = {
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
   WorkoutHistoryIdRoute: WorkoutHistoryIdRoute,
   WorkoutHistoryIndexRoute: WorkoutHistoryIndexRoute,
+  ApiPublicHooksFinalizeWeeklyReportsRoute:
+    ApiPublicHooksFinalizeWeeklyReportsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

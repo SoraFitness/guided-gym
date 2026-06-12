@@ -1,11 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Bell, Flame, Trophy, Calendar, Apple, Dumbbell, Zap } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { workoutRecommendationService, getWorkout } from "@/lib/workouts";
 import { WorkoutCardHero, WorkoutCardRow } from "@/components/WorkoutCard";
 import { useNutrition } from "@/lib/nutritionStore";
 import { useProgress } from "@/lib/progressStore";
+import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
+import { QuickLogFab } from "@/components/weekly/QuickLogFab";
+import { listNotifications } from "@/lib/weeklyReport.functions";
 
 export const Route = createFileRoute("/_app/home")({
   head: () => ({ meta: [{ title: "Home — Pulse" }] }),
