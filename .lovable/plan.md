@@ -1,95 +1,80 @@
-## Goal
+# AI Coach
 
-Replace the current placeholder calorie math (flat ±250/±400 kcal applied to TDEE) with a real, formula-driven Goal & Calories engine. The user's calorie target, daily deficit, workout burn target, weekly loss estimate and goal date all derive from profile data + goal-weight delta + target date. A weekly adaptive layer (no AI) re-estimates true maintenance from observed weight change vs. logged intake.
+A new bottom-nav tab that opens a streaming chat with a personal AI fitness coach. The coach reads the user's real profile, goal, nutrition logs, workout history, and weight logs, and can take real in-app actions through tool calls. Chat history is stored in Supabase per user.
 
-## What gets built
+## 1. Backend (Lovable Cloud)
 
-### 1. New calorie engine module — `src/lib/calorieEngine.ts`
-Pure functions, fully unit-convertible, with all formulas in one place:
+Enable Lovable Cloud (Supabase) if not already on, plus email + Google auth (required so chats can be scoped to a user).
 
-- `lbsToKg`, `kgToLbs`, `inToCm`, `cmToFtIn`
-- `bmrMifflin({ gender, weightKg, heightCm, age })`
-- `tdee(bmr, activityLevel)` with the 5 multipliers from the spec (sedentary 1.2 → athlete 1.9). Activity comes from a new explicit profile field, not from `daysPerWeek`, to avoid double-counting workouts.
-- `weightDeltaKg(currentKg, goalKg)`
-- `estimatedTotalDeficitKcal(deltaKg)` = `deltaKg × 7700` (flagged as estimate)
-- `daysBetween(today, targetDate)`
-- `computePlan({ profile, goalWeightKg, targetDate, goalType, splitPreset })` returns:
-  ```
-  {
-    maintenanceKcal,
-    recommendedIntakeKcal,
-    dailyDeficitKcal,        // negative for surplus
-    foodDeficitKcal,         // intake reduction
-    exerciseBurnTargetKcal,  // daily burn target
-    weeklyChangeLb,          // negative = loss
-    estimatedGoalDate,       // may differ from user's target if clamped
-    isAggressive,            // boolean
-    safeAlternative?: { targetDate, weeklyChangeLb, dailyDeficitKcal },
-    notes: string[]          // human explanations
-  }
-  ```
-- Goal-type handling:
-  - `lose_weight`: deficit driven by delta + timeline.
-  - `build_muscle`: surplus = TDEE × (lean 7% / faster 12%). Selectable.
-  - `maintain`: intake = TDEE, no burn target.
-  - `recomp`: small deficit (~7% TDEE).
-- Split presets: `mostly_diet` (90/10), `balanced` (70/30), `mostly_exercise` (50/50).
-- Safety clamps:
-  - Min intake: 1500 male / 1200 female (warn + push back).
-  - Max weekly loss: 1% of body weight or 1 kg/week — whichever is lower.
-  - If user's date forces breach, compute `safeAlternative` with a longer date and surface the warning. No silent unsafe targets.
+New tables (all RLS on, scoped to `auth.uid()`, with GRANTs to `authenticated` + `service_role`):
 
-### 2. Profile extensions — `src/lib/profile.tsx`
-Add fields with migration defaults:
+- `coach_threads` — `id uuid pk`, `user_id uuid`, `title text`, `created_at`, `updated_at`. v1 uses a single rolling thread per user, but the table supports future multi-thread.
+- `coach_messages` — `id uuid pk`, `thread_id uuid fk`, `user_id uuid`, `role text` (`user` | `assistant`), `parts jsonb` (AI SDK `UIMessage.parts`), `created_at`.
 
-- `activityLevel: "sedentary" | "light" | "moderate" | "very" | "athlete"` (default derived from current `daysPerWeek`)
-- `goalTargetDate: string` (ISO; default = today + 12 weeks)
-- `bodyFatPct?: number`
-- `avgStepsPerDay?: number`
-- `deficitSplit: "mostly_diet" | "balanced" | "mostly_exercise"` (default `balanced`)
-- `bulkPace?: "lean" | "faster"` (used when goal = build_muscle)
+## 2. AI streaming endpoint
 
-`suggestNutrition()` is rewritten to call `computePlan` and return the resulting kcal + macro split (protein/kg unchanged; carbs as remainder). All consumers (Home, Nutrition, Profile editor) automatically pick up the new numbers.
+`src/routes/api/coach.ts` — TanStack server route, `POST` handler:
 
-### 3. Weight log + adaptive recalibration — `src/lib/weightLogStore.ts` (new)
-- localStorage-backed reactive store (same pattern as `foodHistoryStore`).
-- `logWeight({ kg, date })`, `getWeightHistory()`, `getLatestWeight()`.
-- `recalibrateMaintenance({ weightHistory, intakeHistory, currentPlan })`:
-  - Needs ≥ 7 days of both weights and logged intake.
-  - Observed weekly change × 7700 / 7 = observed daily delta vs. avg intake.
-  - `observedMaintenance = avgDailyIntake + observedDailyDelta`.
-  - Blend with formula TDEE (70% observed / 30% formula) once ≥ 14 days of data; smooth to avoid week-to-week whiplash.
-  - Returns `{ adjustedMaintenanceKcal, confidence, suggestion: string }`.
-- Pulls intake from existing `nutritionStore` daily totals.
+1. Verify Supabase bearer token, resolve `userId`.
+2. Load user context server-side: profile, current goal/plan via `calorieEngine`, today's nutrition totals, last 7 workouts, last 14 weight logs, equipment, injuries.
+3. Build a system prompt with: coach persona (friendly, direct, motivating, safe), safety rules (no extreme deficits, no diagnosis, redirect to doctor on red-flag symptoms), and a compact JSON block of the user context.
+4. `streamText` via Lovable AI Gateway using `google/gemini-3-flash-preview` (fast, strong default for chat); tools registered (see §3); `stopWhen: stepCountIs(50)`.
+5. Persist the user message before streaming and the final assistant `UIMessage` in `onFinish` to `coach_messages`.
+6. Return `toUIMessageStreamResponse({ originalMessages, onFinish })` with `withLovableAiGatewayRunIdHeader`.
 
-### 4. Onboarding additions — `src/routes/onboarding.tsx`
-- New step **"Daily activity"** with the 5-level activity selector (icon cards) and an "Avg daily steps (optional)" field.
-- New step **"Your timeline"**: goal target date picker + deficit-split preset (3 cards) + (when bulking) lean vs. faster bulk toggle.
-- Body-fat % becomes an optional input on the existing body step.
+`LOVABLE_API_KEY` stays server-side.
 
-### 5. Goal & Calories panel in Progress — `src/routes/_app.progress.tsx`
-Adds a new section above the current charts:
+## 3. Tool calling (real actions)
 
-- **Header card**: Current weight, goal weight, target date, progress bar.
-- **Plan summary grid** (4 tiles): Maintenance, Recommended intake, Daily deficit, Workout burn target.
-- **Weekly forecast**: estimated weekly change (lb/kg per profile units), projected goal date, "On track / Aggressive" badge.
-- **Deficit split selector** (3 chips → recomputes live).
-- **Log weight** quick-add button (writes to `weightLogStore`).
-- **Weekly recalibration card**: shows adjusted maintenance + suggestion if enough data, otherwise "Log weight 7+ days to enable smart adjustments."
-- **Edit goal** sheet: targetDate, goalWeight, activity level, body fat %, steps, bulk pace.
-- **How we calculated this** disclosure with the BMR/TDEE/deficit/split breakdown using the user's actual numbers.
+Tools defined with `tool({ inputSchema: z..., execute })`. Execute runs server-side and returns a structured result the UI renders as an action card with a button.
 
-Warnings (aggressive plan, sub-min intake, unrealistic timeline) render inline with the suggested safer alternative and a one-tap "Use safer plan" button that updates the profile.
+- `suggest_workout` — input: `{ focus?, equipment?, durationMin? }`; returns an exercise list. Button: **Add to today's workout** (writes into `workoutSessionStore`).
+- `suggest_meal` — input: `{ remainingKcal, remainingProteinG, preferences? }`; returns 2–3 meal options with macros. Button: **Log this meal** (opens nutrition logger prefilled).
+- `adjust_today_workout` — input: `{ mode: "easier" | "harder" | "dumbbells_only" | "no_knee" }`; returns a modified version of today's planned session.
+- `update_goal` — input: `{ goalWeightLb?, targetDate?, deficitSplit? }`; `needsApproval: true`; on approve, writes to profile.
+- `open_screen` — input: `{ screen: "nutrition" | "progress" | "workout" | "goal" }`; UI renders a deep-link button.
+- `log_weight` — input: `{ weightLb }`; appends to `weightLogStore`.
 
-### 6. UI cleanup
-- Profile page "Daily targets" editor keeps manual override but adds a "Reset to calculated" button that re-pulls from `computePlan`.
-- Remove the hardcoded `nutritionPlan` ± 250 / ± 400 path from `nutritionService.ts` — kcal now flows from `computePlan` end-to-end.
+Tool results render as inline cards inside the assistant message (collapsed params, primary action button).
 
-## What stays untouched
-3D exercise guidance, workout plans, nutrition logging UI, branded food search, body scan, paywall, app tour, profile settings, workout tracker. No DB / backend changes — everything stays client-side in localStorage.
+## 4. Frontend
 
-## Verification
-- Spot-check formulas against the spec for a male 30 / 180 cm / 90 kg → 80 kg in 12 weeks: BMR ≈ 1880, TDEE @ moderate ≈ 2914, deficit ≈ 916/day, balanced split → eat ~2273, burn ~275, ~1.8 lb/week (flagged aggressive at 1% rule).
-- Confirm safety clamps engage on a 10 kg in 4 weeks request and surface a safer alternative.
-- Confirm Home + Nutrition pages now read kcal from `computePlan` (no flat ±250).
-- Confirm weight log persists and recalibration card unlocks at 7+ entries.
+Install AI Elements: `conversation`, `message`, `prompt-input`, `tool`, `shimmer`.
+
+New files:
+
+- `src/routes/_app.coach.tsx` — new tab page. Uses `useChat` with `DefaultChatTransport({ api: "/api/coach" })`, chat `id` = active thread id loaded from Supabase. Loads prior messages via a `createServerFn` (`getCoachThread`) on mount.
+- `src/components/coach/CoachMessage.tsx` — renders `message.parts`: text via `MessageResponse` (markdown), tool parts via AI Elements `Tool` (collapsed by default) plus a custom action card per tool name.
+- `src/components/coach/QuickPrompts.tsx` — horizontal scroll chips above the composer: "Plan my workout today", "What should I eat?", "Check my progress", "Help me hit protein", "Make workout easier", "Motivate me", "Why am I stuck?". Tapping a chip calls `sendMessage`.
+- `src/components/coach/CoachComposer.tsx` — `PromptInput` + `PromptInputTextarea` + footer with submit (icon-sm). Keeps textarea focused.
+- Clear-chat button in header → `clearCoachThread` server fn deletes messages, keeps thread row.
+
+Bottom nav (`src/components/AppNav.tsx` or equivalent): add **Coach** entry with a custom generated coach avatar icon (not Sparkles). Existing tabs untouched.
+
+States:
+- Empty: avatar + "Ask your AI Coach anything — workouts, meals, calories, progress, or motivation." + quick prompts.
+- Loading: AI Elements `Shimmer` "Coach is thinking…" while `status === "submitted"`.
+- Error: toast + inline "Coach is unavailable right now. Please try again." with retry.
+
+Assistant messages render on the page surface (no bubble). User messages use `primary` / `primary-foreground` bubble to match the dark fitness theme.
+
+## 5. Safety
+
+System prompt enforces:
+- Never recommend <1500 kcal (men) / <1200 kcal (women) or >1% bodyweight/week loss; defer to existing `calorieEngine` safe alternative.
+- No medical diagnosis. On mentions of chest pain, fainting, severe injury, or ED-pattern language, respond with a brief supportive message and direct to a qualified professional / emergency services.
+- Cite the user's actual numbers when giving nutrition/training advice; don't fabricate.
+
+## 6. Out of scope (v1)
+
+- Multi-thread sidebar (schema supports it, UI is single rolling thread).
+- Voice input.
+- Sharing/exporting transcripts.
+
+## Technical notes
+
+- Stack: TanStack Start; chat endpoint is a server route, not an Edge Function.
+- Model: `google/gemini-3-flash-preview` via Lovable AI Gateway (best general chat default — fast, low cost, strong tool calling). Easy to swap later.
+- Conversation memory: full `UIMessage[]` for the active thread is replayed on each request (loaded from `coach_messages`).
+- Auth: requires sign-in. If user isn't signed in, the Coach tab shows a "Sign in to use the AI Coach" CTA instead of the chat (no redirect loop).
+- No existing feature is removed: 3D guidance, workout tracker, nutrition, body scan, progress, paywall, tour, profile all untouched.
