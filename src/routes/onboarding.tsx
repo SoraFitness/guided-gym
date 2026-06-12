@@ -83,7 +83,7 @@ const DEFAULT_DRAFT: Draft = {
 };
 
 
-const TOTAL = 10; // 0 welcome + 9 question steps
+const TOTAL = 12; // 0 welcome + 11 question steps
 
 function Onboarding() {
   const navigate = useNavigate();
