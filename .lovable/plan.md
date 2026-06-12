@@ -1,93 +1,92 @@
-# Body Scan — premium physique analysis
+# Plan: Working Workout Flow + 3D Exercise Demo
 
-## Architecture
+## 1. Fix all "Start workout" buttons
 
-**Storage**: localStorage. No backend exists; the user said "use localStorage if no Supabase." Skipping Cloud keeps the change focused and avoids forcing a database for v1. (Easy to migrate later — service layer is the only thing that needs swapping.)
+Currently `src/routes/workout.$id.tsx`'s "Let's workout" button is a plain `<button>` with no handler. Same problem on the hero play circle. Home + Weekly Schedule "Start" links already route to `/workout/$id`, but there's no session screen yet.
 
-**AI analysis**: provision `LOVABLE_API_KEY` (via `ai_gateway--create`) and use Lovable AI Gateway with `google/gemini-2.5-flash` (multimodal: text+image→text) for real vision analysis. If the key call fails, we fall back to a deterministic local heuristic so the flow never breaks.
+Changes:
+- `workout.$id.tsx`: make "Let's workout" + hero play circle navigate to `/workout/$id/session`. Add a "Watch 3D Demo" button to each exercise row that opens the demo modal/route for that exercise.
+- `_app.workouts.tsx` (Weekly Schedule "Start"): already navigates to detail — also add a direct "Start now" that jumps straight to the session screen for that day's workout. Falls back to a default `bodyweight-starter` workout when no schedule match.
 
-**Server boundary**: `createServerFn` (POST) — typed RPC is the right shape (one-shot JSON, not streaming). The handler receives front/side/back as base64 data URLs plus a minimal profile blob, calls the gateway with an `Output.object` Zod schema (constrained JSON), and returns a `BodyScanResult`.
+## 2. New Workout Session screen
 
-## Files
+New route: `src/routes/workout.$id.session.tsx`.
 
-**New types & service**
-- `src/lib/bodyScan.ts` — types (`BodyScanScores`, `BodyScanResult`, `BodyScanInput`), level mapping (0–35 Starting Point, 36–55 Building Base, 56–72 Athletic, 73–85 Strong, 86–100 Advanced), and the deterministic mock generator that derives stable scores from profile (goal, experience, weight/height BMI, days/week) — same input → same output.
-- `src/lib/bodyScan.functions.ts` — `analyzeBodyScan` server fn. Builds a multimodal chat message (text prompt + image_url blocks with data URLs), enforces Zod `Output.object`. Returns `{ source: "ai" | "mock", result }`. On any error (missing key, 429, 402, parsing): returns `{ source: "mock", result: mockFor(profile) }`.
-- `src/lib/bodyScanStore.ts` — same useSyncExternalStore pattern as `nutritionStore`. Functions: `saveScan`, `deleteScan`, `useScans`, `useLatestScan`. Key: `fitness:bodyScans`. Stores result + thumbnail (front image downscaled to ~480px JPEG via canvas before save to keep localStorage small).
+Layout (mobile-first, dark):
+- Top bar: back arrow (confirm exit), workout title, exercise `n / total`.
+- Progress bar across all exercises × sets.
+- Big card: current exercise name, target muscle, equipment, difficulty, sets × reps / time, rest.
+- Embedded `Exercise3DViewer` showing the matching animation.
+- Timer: counts up during a set; auto rest countdown between sets.
+- Buttons: Previous · Mark Set Complete · Next Exercise · Watch 3D Demo (fullscreen) · Finish Workout.
 
-**New components**
-- `src/components/bodyscan/BodyScoreBar.tsx` — labeled lime progress bar, large numeral on the right, animated width with framer-motion.
-- `src/components/bodyscan/BodyScoreCard.tsx` — image preview card with overlaid "Overall Score 85" + level badge (matches reference screenshots: dark card, lime numerals, fine lime bars under labels).
-- `src/components/bodyscan/BodyPhotoUploader.tsx` — three slots (Front required, Side & Back optional). Each slot opens a sheet with "Take photo" (uses `<input type="file" accept="image/*" capture="environment">`) and "Upload photo". Shows preview, swap, remove. Returns data URLs.
-- `src/components/bodyscan/BodyScanAnalyzer.tsx` — fullscreen overlay with scanning-line animation over the front photo and rotating status text.
+State held in new `src/lib/workoutSessionStore.ts` (localStorage):
+- `WorkoutSession { id, workoutId, startedAt, completedAt?, currentExerciseIndex, completedSets: Record<exerciseId, number>, status }`
+- `CompletedWorkout { id, workoutId, workoutTitle, completedAt, durationMin, calories, exercisesCompleted }`
+- Resumes active session if user navigates away and back.
 
-**New routes** (all under existing `/_app` layout)
-- `src/routes/_app.scan.tsx` — Scan hub with two big tiles: **Food Scan** (links to `/nutrition` add modal) and **Body Scan** (links to `/scan/body`). Becomes the destination of the new bottom-nav "Scan" tab.
-- `src/routes/_app.scan.body.tsx` — Body Scan intro: hero, "Start Body Scan" CTA, history list, disclaimer.
-- `src/routes/_app.scan.body.new.tsx` — Multi-step flow inside one route, state machine: `guide → upload → analyzing → results`. Single page with framer-motion `AnimatePresence` between steps so transitions feel premium.
-- `src/routes/_app.scan.body.$id.tsx` — view a saved scan + previous-scan comparison (score deltas).
+On Finish:
+- Persist `CompletedWorkout`, call existing `logWorkout(minutes, workoutId)` (`progressStore`) so Home stats/streak/weekly count update automatically.
+- Show completion screen with duration, exercises, calories, new streak, "Back to Home" + "Do another".
 
-**Edits**
-- `src/routes/_app.tsx` — bottom nav becomes Home / Workouts / **Scan** / Nutrition / Profile (5 tabs, Scan in the middle). Existing Progress moves into Profile (already linked from there) — or, to stay non-destructive, swap Progress for Scan in the nav and keep `/progress` reachable from Profile via a row link. I'll swap Progress→Scan in nav.
-- `src/routes/_app.profile.tsx` — add a small "View progress" row pointing to `/progress` so the route stays accessible.
+## 3. 3D Exercise Demo (React Three Fiber)
 
-**Optional but planned**
-- Profile + Nutrition integration: results screen exposes "Apply suggested nutrition targets" → calls `setNutritionGoals()` (existing store) after a confirm. "Generate plan from scan" navigates to `/workouts` with a hint param.
+Install (if missing): `three`, `@react-three/fiber`, `@react-three/drei`.
 
-## Server function shape
+New files in `src/components/exercise3d/`:
+- `AvatarModel.tsx` — procedural humanoid built from Three.js primitives (sphere head, capsule torso/limbs). Two proportion presets:
+  - `male`: wider shoulders, narrower hips, darker shorts + tank.
+  - `female`: narrower shoulders, wider hips, sports-bra + shorts.
+  - `neutral`: balanced athletic build.
+  Single skin material, gym-appropriate clothing. No nudity / sexualized geometry. Accepts a `pose` prop = per-joint rotations.
+- `ExerciseAnimationController.tsx` — maps `demoType` / exercise name → animation function `(t) => pose`. Keyframe interpolation for: squat, push-up, lunge, plank (subtle breathing), shoulder press, bicep curl, generic standing idle. Supports play/pause + speed.
+- `Exercise3DViewer.tsx` — `<Canvas>` with fixed 3/4 camera (toggle Front / Side), soft lighting, contact shadow, floor plane, no orbit (or clamped). Reads gender via `useProfile()` to pick avatar preset. Exposes play/pause + slow-mo controls.
 
-```ts
-// src/lib/bodyScan.functions.ts (sketch)
-export const analyzeBodyScan = createServerFn({ method: "POST" })
-  .inputValidator((d: { front: string; side?: string; back?: string; profile: ProfileSlim }) => d)
-  .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) return { source: "mock", result: mockFor(data.profile) };
-    try {
-      const gateway = createLovableAiGatewayProvider(key);
-      const { output } = await generateText({
-        model: gateway("google/gemini-2.5-flash"),
-        output: Output.object({ schema: ScanSchema }),
-        messages: [{ role: "user", content: [
-          { type: "text", text: PROMPT(data.profile) },
-          { type: "image_url", image_url: { url: data.front } },
-          ...(data.side ? [{ type: "image_url", image_url: { url: data.side } }] : []),
-          ...(data.back ? [{ type: "image_url", image_url: { url: data.back } }] : []),
-        ]}],
-      });
-      return { source: "ai", result: { ...output, id: crypto.randomUUID(), createdAt: new Date().toISOString() } };
-    } catch {
-      return { source: "mock", result: mockFor(data.profile) };
-    }
-  });
-```
+Name → animation mapping by substring: `squat`, `push up`/`push-up`/`pushup`, `lunge`, `plank`, `shoulder press`/`ohp`/`overhead press`, `curl` → bicep curl. Otherwise neutral idle.
 
-`createLovableAiGatewayProvider` lives in `src/lib/ai-gateway.server.ts` (new, server-only).
+SSR safety: Canvas mounted client-only (dynamic import or `typeof window` guard) so build doesn't break.
 
-**Prompt** is explicit: visual fitness assessment only, no medical claims, score every field 0–100, return arrays with 3–5 items, include a disclaimer string.
+## 4. Demo screen
 
-Will install `ai` and `@ai-sdk/openai-compatible` (and `zod` if not present) before writing the function file. Will run `ai_gateway--create` to ensure the key exists.
+Route: `src/routes/workout.$id.demo.$exerciseId.tsx` (also reachable as overlay from session/detail).
 
-## UX details from the reference screenshots
+Shows: back, exercise title, `Exercise3DViewer`, controls (Play/Pause, Slow-mo, Front/Side), Form tips, Common mistakes, Target muscles, Safety note. Tips/mistakes come from a new `EXERCISE_COACHING` map keyed by demoType, with beginner vs advanced cues chosen from `profile.experience`, plus goal-flavored extra tip.
 
-- Dark card with photo bleeding to the edges, large "OVERALL SCORE" label + huge numeral overlay.
-- Two-column score grid (Posture / Symmetry / Proportions / Definition / Conditioning / Upper / Lower / Core) — label + thin lime bar + numeral, matching the references.
-- Level chip beside the overall score (Starting Point / Building Base / Athletic / Strong / Advanced).
-- Strengths and Improvements as separate glass cards with bullets (lime check / amber arrow).
-- Training Focus and Nutrition Focus cards below.
-- Sticky bottom bar with "Save scan" + "Retake."
-- Disclaimer fixed at the bottom of intro + results: *"Body Scan provides visual fitness feedback only. It is not medical advice and may not be perfectly accurate."*
+## 5. Personalization hookup
 
-## Safety & privacy
+`Exercise3DViewer` and demo screen pull from `useProfile()`:
+- `gender` → avatar preset.
+- `experience` → default animation speed + which coaching cue set.
+- `goal` → extra tip line (conditioning vs hypertrophy).
 
-- Upload guidance copy + warning: "Upload fitness-appropriate photos only."
-- Privacy line: "Photos are only used to generate your scan and stay on this device unless you save them."
-- Delete button on every saved scan + bulk delete in history.
+## 6. Files touched / created
 
-## Acceptance
+Created:
+- `src/routes/workout.$id.session.tsx`
+- `src/routes/workout.$id.demo.$exerciseId.tsx`
+- `src/lib/workoutSessionStore.ts`
+- `src/lib/exerciseCoaching.ts`
+- `src/components/exercise3d/Exercise3DViewer.tsx`
+- `src/components/exercise3d/AvatarModel.tsx`
+- `src/components/exercise3d/ExerciseAnimationController.tsx`
 
-- Front photo upload → preview → tap Analyze → scanning animation → real or mock result renders.
-- Save → appears in `/scan/body` history; tapping opens the saved result with previous-score comparison.
-- Bottom nav shows Scan tab; tapping it lands on the hub (Food Scan / Body Scan).
-- Nutrition / Home / Workouts continue to work; `useNutrition` + `useProgress` unchanged.
-- No TypeScript or import errors; `vite build` passes.
+Edited (minimal, additive):
+- `src/routes/workout.$id.tsx` — wire buttons, add per-exercise Demo + Start links.
+- `src/routes/_app.workouts.tsx` — Weekly Schedule "Start" jumps to session.
+- `package.json` / lockfile — add three + r3f + drei.
+
+Nothing existing removed. Home, Nutrition, Profile, Scan, Onboarding, stores untouched except additive imports.
+
+## 7. Quality bar
+
+- Type-check clean, no new lint errors.
+- Canvas wrapped so SSR/prerender doesn't import `three` at module top-level of a route loader.
+- Buttons all wired; no dead handlers.
+- Procedural avatar fallback always renders even without external GLB assets.
+- Session screen mobile-first, content padded above bottom nav.
+
+## How to preview after build
+
+1. Open `/workouts` → tap any workout → "Let's workout" → lands on session screen.
+2. Inside session, tap "Watch 3D Demo" → 3D avatar animates the current exercise; gender from onboarding determines avatar.
+3. Tap Finish → completion screen → Home now shows updated minutes / streak / weekly count.
