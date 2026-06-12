@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 export function GoalPanel() {
   const { profile, updateProfile } = useProfile();
   const weights = useWeightLog();
-  const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
   const [weighOpen, setWeighOpen] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
