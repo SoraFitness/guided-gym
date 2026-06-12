@@ -132,7 +132,12 @@ export const updateProgressPhoto = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const patch: Record<string, unknown> = {};
+    const patch: {
+      photo_type?: PhotoType;
+      weight_kg?: number | null;
+      taken_on?: string;
+      notes?: string | null;
+    } = {};
     if (data.photo_type !== undefined) patch.photo_type = data.photo_type;
     if (data.weight_kg !== undefined) patch.weight_kg = data.weight_kg;
     if (data.taken_on !== undefined) patch.taken_on = data.taken_on;
@@ -142,6 +147,7 @@ export const updateProgressPhoto = createServerFn({ method: "POST" })
       .update(patch)
       .eq("id", data.id)
       .eq("user_id", userId);
+
     if (error) throw new Error(error.message);
     return { ok: true };
   });
