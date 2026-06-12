@@ -80,6 +80,14 @@ export interface Profile {
   heightCm: number;
   age: number;
   gender: Gender;
+  bodyFatPct?: number;
+  // Activity (used for TDEE; separate from training days to avoid double counting)
+  activityLevel: "sedentary" | "light" | "moderate" | "very" | "athlete";
+  avgStepsPerDay?: number;
+  // Goal timeline & calorie planning
+  goalTargetDate: string; // ISO
+  deficitSplit: "mostly_diet" | "balanced" | "mostly_exercise";
+  bulkPace?: "lean" | "faster";
   // Nutrition
   nutritionPlan: NutritionPlan;
   // Misc
