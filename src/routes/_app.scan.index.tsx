@@ -20,6 +20,7 @@ function ScanHub() {
       <div className="space-y-4">
         <Link
           to="/scan/body"
+          data-tour="tour-bodyscan"
           className="block rounded-3xl bg-gradient-to-br from-surface to-black border border-white/10 p-5 hover:border-neon/40 transition group"
         >
           <div className="flex items-start gap-4">

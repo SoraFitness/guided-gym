@@ -44,7 +44,7 @@ function HomePage() {
 
   return (
     <div className="px-5 pt-6 animate-slide-up">
-      <header className="flex items-center justify-between">
+      <header data-tour="tour-home-header" className="flex items-center justify-between">
         <div className="min-w-0">
           <p className="text-muted-foreground text-xs">Welcome back</p>
           <h1 className="text-2xl font-bold truncate">Hi, {name} 👋</h1>
@@ -57,7 +57,7 @@ function HomePage() {
       </header>
 
       {/* Today's Nutrition */}
-      <section className="mt-5 rounded-3xl bg-surface p-5 border border-white/[0.05]">
+      <section data-tour="tour-nutrition-card" className="mt-5 rounded-3xl bg-surface p-5 border border-white/[0.05]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Apple className="size-4 text-neon" />
@@ -100,7 +100,7 @@ function HomePage() {
       </section>
 
       {/* Today's Activity */}
-      <section className="mt-4 rounded-3xl bg-surface p-5 border border-white/[0.05]">
+      <section data-tour="tour-progress-card" className="mt-4 rounded-3xl bg-surface p-5 border border-white/[0.05]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Dumbbell className="size-4 text-neon" />
@@ -121,7 +121,7 @@ function HomePage() {
       </section>
 
       {todayWorkout && (
-        <section className="mt-6">
+        <section data-tour="tour-today-workout" className="mt-6">
           <SectionHeader title="Today's workout" sub={todayPlan?.label} />
           <WorkoutCardRow w={todayWorkout} />
         </section>
