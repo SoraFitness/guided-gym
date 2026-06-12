@@ -5,6 +5,7 @@ import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
 import { GoalPanel } from "@/components/GoalPanel";
 import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
+import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 
 
 export const Route = createFileRoute("/_app/progress")({
@@ -75,6 +76,10 @@ function ProgressPage() {
       </div>
 
       <div className="mt-6">
+        <WeeklyReportCard />
+      </div>
+
+      <div className="mt-4">
         <ProgressPicturesCard />
       </div>
 
