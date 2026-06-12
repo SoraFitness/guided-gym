@@ -216,10 +216,6 @@ export function AppTour({ open, steps, onClose }: Props) {
           height="100%"
           fill="rgba(2,4,8,0.78)"
           mask="url(#tour-mask)"
-          style={{
-            // @ts-expect-error - css filter on svg
-            backdropFilter: "blur(2px)",
-          }}
         />
       </svg>
 
