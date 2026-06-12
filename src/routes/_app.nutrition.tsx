@@ -358,13 +358,15 @@ function MealSection({
 
 type Tab = "search" | "barcode" | "photo" | "manual";
 
+type AddEntryArg = Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string };
+
 function AddFoodModal({
   meal, editEntry, onClose, onAdd,
 }: {
   meal: Meal;
   editEntry?: LogEntry;
   onClose: () => void;
-  onAdd: (entry: Omit<LogEntry, "id" | "loggedAt">) => void;
+  onAdd: (entry: AddEntryArg) => void;
 }) {
   // When editing, jump straight to manual prefilled from the entry
   const initialPrefill: LookupResult | null = editEntry
@@ -375,6 +377,7 @@ function AddFoodModal({
     : null;
   const [tab, setTab] = useState<Tab>(editEntry ? "manual" : "search");
   const [prefill, setPrefill] = useState<LookupResult | null>(initialPrefill);
+  const [confirming, setConfirming] = useState<StoredFood | null>(null);
 
   const handleResult = (r: LookupResult, source: "barcode" | "image") => {
     setPrefill({ ...r });
@@ -385,6 +388,20 @@ function AddFoodModal({
   const editSource = editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
     ? editEntry.custom.source
     : "manual";
+
+  // Confirmation screen takes over the whole sheet when a search result is selected.
+  if (confirming) {
+    return (
+      <Sheet onClose={onClose} title="Confirm food">
+        <FoodConfirmSheet
+          food={confirming}
+          defaultMeal={meal}
+          onBack={() => setConfirming(null)}
+          onSave={(entry) => { onAdd(entry); onClose(); }}
+        />
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
@@ -411,7 +428,7 @@ function AddFoodModal({
       )}
 
       <div className="mt-4 pb-6">
-        {tab === "search" && <SearchPanel meal={meal} onAdd={onAdd} />}
+        {tab === "search" && <SearchPanel meal={meal} onPick={setConfirming} />}
         {tab === "barcode" && <BarcodePanel onResult={(r) => handleResult(r, "barcode")} />}
         {tab === "photo" && (
           <PhotoPanel
