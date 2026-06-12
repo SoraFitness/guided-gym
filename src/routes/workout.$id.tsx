@@ -27,9 +27,17 @@ function WorkoutDetail() {
   const w = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
   const startSessionNav = () => {
-    // eslint-disable-next-line no-console
-    console.log("[workout] Let's workout clicked", w.id);
-    startSession(w.id);
+    startSession(
+      w.id,
+      w.title,
+      w.exercises.map((e) => ({
+        id: e.id,
+        name: e.name,
+        sets: e.sets,
+        reps: e.reps,
+        muscleGroup: e.muscleGroup,
+      })),
+    );
     navigate({ to: "/workout/$id/session", params: { id: w.id } });
   };
 
