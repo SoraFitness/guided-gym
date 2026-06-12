@@ -54,16 +54,6 @@ class ViewerErrorBoundary extends Component<{ fallback: ReactNode; children: Rea
   }
 }
 
-function supportsWebGL(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const canvas = document.createElement("canvas");
-    return !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
 function LoadingSkeleton({ label }: { label?: string }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-gradient-to-b from-[#0c0f14] to-[#05070a]">
@@ -87,16 +77,15 @@ export function Exercise3DViewer({
   const [speed, setSpeed] = useState(defaultSpeed);
   const [view, setView] = useState<"front" | "side">("side");
   const [mounted, setMounted] = useState(false);
-  const [webgl, setWebgl] = useState<boolean | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    setWebgl(supportsWebGL());
   }, []);
 
   const cameraPos: [number, number, number] = view === "front" ? [0, 1.1, 3.2] : [2.8, 1.1, 1.6];
 
   const fallback = <ExerciseFallback animation={animation} label={label} />;
+
 
   return (
     <div
