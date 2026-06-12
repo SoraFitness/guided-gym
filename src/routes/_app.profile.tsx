@@ -352,6 +352,3 @@ function RowContent({ icon: Icon, label, value }: { icon: LucideIcon; label: str
     </div>
   );
 }
-
-// Suppress unused variable warning for Goal type re-export usage check
-export type { Goal };
