@@ -190,8 +190,10 @@ function Onboarding() {
             {step === 5 && <SessionStep value={d.sessionMinutes} onChange={(g) => update("sessionMinutes", g)} />}
             {step === 6 && <FocusStep value={d.focusAreas} onChange={(g) => update("focusAreas", g)} />}
             {step === 7 && <BodyStep d={d} update={update} />}
-            {step === 8 && <NutritionStep value={d.nutritionPlan} onChange={(g) => update("nutritionPlan", g)} />}
-            {step === 9 && <ReviewStep d={d} />}
+            {step === 8 && <ActivityStep d={d} update={update} />}
+            {step === 9 && <TimelineStep d={d} update={update} />}
+            {step === 10 && <NutritionStep value={d.nutritionPlan} onChange={(g) => update("nutritionPlan", g)} />}
+            {step === 11 && <ReviewStep d={d} />}
           </motion.div>
         </AnimatePresence>
       </main>
