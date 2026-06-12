@@ -100,6 +100,7 @@ function Onboarding() {
       case 0: return d.name.trim().length >= 2;
       case 6: return d.focusAreas.length > 0;
       case 7: return d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0 && d.goalWeightKg > 0;
+      case 9: return !!d.goalTargetDate && new Date(d.goalTargetDate).getTime() > Date.now();
       default: return true;
     }
   }, [step, d]);
