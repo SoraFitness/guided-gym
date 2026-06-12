@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PaywallRouteImport } from './routes/paywall'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -25,6 +26,11 @@ import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$i
 import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
 
+const PaywallRoute = PaywallRouteImport.update({
+  id: '/paywall',
+  path: '/paywall',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -103,6 +109,7 @@ const AppScanBodyIdRoute = AppScanBodyIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
+  '/paywall': typeof PaywallRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
+  '/paywall': typeof PaywallRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/onboarding': typeof OnboardingRoute
+  '/paywall': typeof PaywallRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/profile': typeof AppProfileRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/onboarding'
+    | '/paywall'
     | '/home'
     | '/nutrition'
     | '/profile'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/onboarding'
+    | '/paywall'
     | '/home'
     | '/nutrition'
     | '/profile'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/onboarding'
+    | '/paywall'
     | '/_app/home'
     | '/_app/nutrition'
     | '/_app/profile'
@@ -206,11 +218,19 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
+  PaywallRoute: typeof PaywallRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/paywall': {
+      id: '/paywall'
+      path: '/paywall'
+      fullPath: '/paywall'
+      preLoaderRoute: typeof PaywallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -363,6 +383,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
+  PaywallRoute: PaywallRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
