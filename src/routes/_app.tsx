@@ -47,11 +47,14 @@ function AppShell() {
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
-      <div className="flex-1 pb-24">
+      <div className="flex-1" style={{ paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 6rem)" }}>
         <Outlet />
       </div>
       {!hideTabs && (
-        <nav className="fixed bottom-0 inset-x-0 px-4 pb-5 pt-2 bg-gradient-to-t from-background via-background/95 to-transparent">
+        <nav
+          className="fixed bottom-0 inset-x-0 px-4 pt-2 bg-gradient-to-t from-background via-background/95 to-transparent"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
           <div className="mx-auto max-w-md bg-surface/90 backdrop-blur rounded-full border border-border h-16 px-2 flex items-center justify-between gap-1">
             {tabs.map(({ to, label, Icon }) => {
               const active = pathname === to;
@@ -61,7 +64,7 @@ function AppShell() {
                   to={to}
                   aria-label={label}
                   className={cn(
-                    "flex-1 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition",
+                    "flex-1 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition tap",
                     active ? "bg-neon text-neon-foreground" : "text-muted-foreground"
                   )}
                 >
