@@ -1,71 +1,95 @@
-## Real AI food photo logging
+## Goal
 
-Replace the random mock with a real Lovable AI vision call and a confirmation screen the user must approve before the meal is saved.
+Replace the current placeholder calorie math (flat ±250/±400 kcal applied to TDEE) with a real, formula-driven Goal & Calories engine. The user's calorie target, daily deficit, workout burn target, weekly loss estimate and goal date all derive from profile data + goal-weight delta + target date. A weekly adaptive layer (no AI) re-estimates true maintenance from observed weight change vs. logged intake.
 
-### Backend — new server function
+## What gets built
 
-**`src/lib/foodScan.functions.ts`** (new) using the same Lovable AI Gateway pattern as `bodyScan.functions.ts`:
+### 1. New calorie engine module — `src/lib/calorieEngine.ts`
+Pure functions, fully unit-convertible, with all formulas in one place:
 
-- `createServerFn({ method: "POST" })`
-- Input (Zod): `{ image: string /* data URL */ }`, ≤8 MB after base64.
-- Model: `google/gemini-2.5-flash` (multimodal, fast, accurate for this task).
-- Structured output via `Output.object({ schema })` matching the spec:
-  ```ts
+- `lbsToKg`, `kgToLbs`, `inToCm`, `cmToFtIn`
+- `bmrMifflin({ gender, weightKg, heightCm, age })`
+- `tdee(bmr, activityLevel)` with the 5 multipliers from the spec (sedentary 1.2 → athlete 1.9). Activity comes from a new explicit profile field, not from `daysPerWeek`, to avoid double-counting workouts.
+- `weightDeltaKg(currentKg, goalKg)`
+- `estimatedTotalDeficitKcal(deltaKg)` = `deltaKg × 7700` (flagged as estimate)
+- `daysBetween(today, targetDate)`
+- `computePlan({ profile, goalWeightKg, targetDate, goalType, splitPreset })` returns:
+  ```
   {
-    meal_name: string,
-    confidence: number (0..1),
-    items: Array<{
-      name, estimated_amount, confidence,
-      calories, protein, carbs, fat
-    }>,
-    total: { calories, protein, carbs, fat },
-    needs_user_confirmation: boolean,
-    notes?: string
+    maintenanceKcal,
+    recommendedIntakeKcal,
+    dailyDeficitKcal,        // negative for surplus
+    foodDeficitKcal,         // intake reduction
+    exerciseBurnTargetKcal,  // daily burn target
+    weeklyChangeLb,          // negative = loss
+    estimatedGoalDate,       // may differ from user's target if clamped
+    isAggressive,            // boolean
+    safeAlternative?: { targetDate, weeklyChangeLb, dailyDeficitKcal },
+    notes: string[]          // human explanations
   }
   ```
-- Prompt instructs the model to: identify visible foods, estimate realistic portion sizes (g / cups / pieces), use standard nutrition database values (USDA-style) for macros, never invent precise numbers it can't justify, set `needs_user_confirmation: true` when any item confidence <0.7, round macros to integers, return total = sum of items.
-- Re-compute `total` server-side from items (so it always matches even if the model drifts).
-- On any model/parse failure → return `{ ok: false, reason: "unrecognized" }`. On success → `{ ok: true, result }`. No silent fallback to fake data.
-- Ensure `LOVABLE_API_KEY` exists; call `ai_gateway--create` during build if missing.
+- Goal-type handling:
+  - `lose_weight`: deficit driven by delta + timeline.
+  - `build_muscle`: surplus = TDEE × (lean 7% / faster 12%). Selectable.
+  - `maintain`: intake = TDEE, no burn target.
+  - `recomp`: small deficit (~7% TDEE).
+- Split presets: `mostly_diet` (90/10), `balanced` (70/30), `mostly_exercise` (50/50).
+- Safety clamps:
+  - Min intake: 1500 male / 1200 female (warn + push back).
+  - Max weekly loss: 1% of body weight or 1 kg/week — whichever is lower.
+  - If user's date forces breach, compute `safeAlternative` with a longer date and surface the warning. No silent unsafe targets.
 
-### Frontend wiring
+### 2. Profile extensions — `src/lib/profile.tsx`
+Add fields with migration defaults:
 
-**`src/lib/foodLookup.ts`**
-- Remove `mockImageMeals` and the random `aiFoodScanService.analyzeImage`. Keep barcode mock as-is (out of scope).
-- Export new `FoodScanResult` type mirroring the server schema.
+- `activityLevel: "sedentary" | "light" | "moderate" | "very" | "athlete"` (default derived from current `daysPerWeek`)
+- `goalTargetDate: string` (ISO; default = today + 12 weeks)
+- `bodyFatPct?: number`
+- `avgStepsPerDay?: number`
+- `deficitSplit: "mostly_diet" | "balanced" | "mostly_exercise"` (default `balanced`)
+- `bulkPace?: "lean" | "faster"` (used when goal = build_muscle)
 
-**`src/routes/_app.nutrition.tsx`** — replace `PhotoPanel`:
+`suggestNutrition()` is rewritten to call `computePlan` and return the resulting kcal + macro split (protein/kg unchanged; carbs as remainder). All consumers (Home, Nutrition, Profile editor) automatically pick up the new numbers.
 
-State machine:
-1. **Idle** — dashed upload tile + small tip card: "💡 For best results, take the photo from above with the full plate visible."
-2. **Preview** — show selected image, "Analyze meal" CTA, allow re-pick.
-3. **Loading** — overlay spinner + "Analyzing your meal…".
-4. **Confirm** — calls new `analyzeFoodImage` via `useServerFn`. On `{ok:true}` render `PhotoConfirm`. On `{ok:false}` render an error card:
-   > "Couldn't detect this meal clearly. Try another photo or add food manually."
-   with **Try again** and **Add manually** buttons (manual switches tab to `manual`).
+### 3. Weight log + adaptive recalibration — `src/lib/weightLogStore.ts` (new)
+- localStorage-backed reactive store (same pattern as `foodHistoryStore`).
+- `logWeight({ kg, date })`, `getWeightHistory()`, `getLatestWeight()`.
+- `recalibrateMaintenance({ weightHistory, intakeHistory, currentPlan })`:
+  - Needs ≥ 7 days of both weights and logged intake.
+  - Observed weekly change × 7700 / 7 = observed daily delta vs. avg intake.
+  - `observedMaintenance = avgDailyIntake + observedDailyDelta`.
+  - Blend with formula TDEE (70% observed / 30% formula) once ≥ 14 days of data; smooth to avoid week-to-week whiplash.
+  - Returns `{ adjustedMaintenanceKcal, confidence, suggestion: string }`.
+- Pulls intake from existing `nutritionStore` daily totals.
 
-`PhotoConfirm` (inline component):
-- Title: **Confirm your meal**.
-- Image thumbnail + detected `meal_name` + confidence pill (color: green ≥0.85, neon 0.7–0.84, amber <0.7).
-- If `needs_user_confirmation || confidence < 0.7`: warning banner "We're not fully sure. Please confirm the foods and portions."
-- Editable list of `items`: name, estimated_amount, kcal, P/C/F inputs (numeric). Add/remove row. Live-computed totals row at bottom.
-- Buttons: **Save Meal** (primary), **Re-analyze** (re-runs server fn on same image), **Edit manually** (collapses to plain form).
-- On Save: call existing `addEntry` once per item with `meal` from current meal selector, `servings: 1`, `custom: { name, serving: estimated_amount, kcal, protein, carbs, fat, source: "image" }`. Close panel and return to log view.
+### 4. Onboarding additions — `src/routes/onboarding.tsx`
+- New step **"Daily activity"** with the 5-level activity selector (icon cards) and an "Avg daily steps (optional)" field.
+- New step **"Your timeline"**: goal target date picker + deficit-split preset (3 cards) + (when bulking) lean vs. faster bulk toggle.
+- Body-fat % becomes an optional input on the existing body step.
 
-Mobile: same dark/neon style, single column, sticky CTA inside the sheet area.
+### 5. Goal & Calories panel in Progress — `src/routes/_app.progress.tsx`
+Adds a new section above the current charts:
 
-### Validation / safety
+- **Header card**: Current weight, goal weight, target date, progress bar.
+- **Plan summary grid** (4 tiles): Maintenance, Recommended intake, Daily deficit, Workout burn target.
+- **Weekly forecast**: estimated weekly change (lb/kg per profile units), projected goal date, "On track / Aggressive" badge.
+- **Deficit split selector** (3 chips → recomputes live).
+- **Log weight** quick-add button (writes to `weightLogStore`).
+- **Weekly recalibration card**: shows adjusted maintenance + suggestion if enough data, otherwise "Log weight 7+ days to enable smart adjustments."
+- **Edit goal** sheet: targetDate, goalWeight, activity level, body fat %, steps, bulk pace.
+- **How we calculated this** disclosure with the BMR/TDEE/deficit/split breakdown using the user's actual numbers.
 
-- Zod parse every field server-side; clamp negatives to 0; round to ints; cap items at 12.
-- Reject images >8 MB before upload.
-- Never auto-save without explicit Save Meal tap.
-- No hardcoded foods anywhere in the new flow.
+Warnings (aggressive plan, sub-min intake, unrealistic timeline) render inline with the suggested safer alternative and a one-tap "Use safer plan" button that updates the profile.
 
-### Verification
+### 6. UI cleanup
+- Profile page "Daily targets" editor keeps manual override but adds a "Reset to calculated" button that re-pulls from `computePlan`.
+- Remove the hardcoded `nutritionPlan` ± 250 / ± 400 path from `nutritionService.ts` — kcal now flows from `computePlan` end-to-end.
 
-Upload three different real meal photos:
-- Each yields different, plausible items with the same model — not the same mock list.
-- Low-confidence photo shows the amber banner.
-- Network/API failure shows the "Couldn't detect" card with manual fallback.
-- Saved meals appear in the nutrition log with correct totals.
-- No `LOVABLE_API_KEY` leaked to the client bundle.
+## What stays untouched
+3D exercise guidance, workout plans, nutrition logging UI, branded food search, body scan, paywall, app tour, profile settings, workout tracker. No DB / backend changes — everything stays client-side in localStorage.
+
+## Verification
+- Spot-check formulas against the spec for a male 30 / 180 cm / 90 kg → 80 kg in 12 weeks: BMR ≈ 1880, TDEE @ moderate ≈ 2914, deficit ≈ 916/day, balanced split → eat ~2273, burn ~275, ~1.8 lb/week (flagged aggressive at 1% rule).
+- Confirm safety clamps engage on a 10 kg in 4 weeks request and surface a safer alternative.
+- Confirm Home + Nutrition pages now read kcal from `computePlan` (no flat ±250).
+- Confirm weight log persists and recalibration card unlocks at 7+ entries.
