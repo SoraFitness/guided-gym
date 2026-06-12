@@ -3,6 +3,7 @@ import { Flame, Clock, Trophy, TrendingUp, Dumbbell, ChevronRight } from "lucide
 import { useMemo } from "react";
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
+import { GoalPanel } from "@/components/GoalPanel";
 
 export const Route = createFileRoute("/_app/progress")({
   head: () => ({ meta: [{ title: "Progress — Pulse" }] }),
@@ -65,6 +66,10 @@ function ProgressPage() {
         >
           History <ChevronRight className="size-3.5" />
         </Link>
+      </div>
+
+      <div className="mt-6">
+        <GoalPanel />
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3">
