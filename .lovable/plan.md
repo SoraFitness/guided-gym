@@ -1,43 +1,71 @@
-## Profile rows: make every action functional
+## Real AI food photo logging
 
-Scope is the Profile route plus a small additive change to the profile data model. Existing Progress and Body Scan routes already exist — taps just need to actually reach them.
+Replace the random mock with a real Lovable AI vision call and a confirmation screen the user must approve before the meal is saved.
 
-### Root cause of broken taps
+### Backend — new server function
 
-In `src/routes/_app.profile.tsx`, the `Row` component renders its own `<button>`. It's wrapped in `<Link>` or another `<button>`, which is invalid nested-interactive HTML — browsers (and mobile Safari especially) drop/garble the outer click. Goal / Equipment / Injuries / Reset rows also have no handlers at all.
+**`src/lib/foodScan.functions.ts`** (new) using the same Lovable AI Gateway pattern as `bodyScan.functions.ts`:
 
-Fix: turn `Row` into a presentational `<div>` and put exactly one interactive element (`<Link>`, `<button>`) around each row.
+- `createServerFn({ method: "POST" })`
+- Input (Zod): `{ image: string /* data URL */ }`, ≤8 MB after base64.
+- Model: `google/gemini-2.5-flash` (multimodal, fast, accurate for this task).
+- Structured output via `Output.object({ schema })` matching the spec:
+  ```ts
+  {
+    meal_name: string,
+    confidence: number (0..1),
+    items: Array<{
+      name, estimated_amount, confidence,
+      calories, protein, carbs, fat
+    }>,
+    total: { calories, protein, carbs, fat },
+    needs_user_confirmation: boolean,
+    notes?: string
+  }
+  ```
+- Prompt instructs the model to: identify visible foods, estimate realistic portion sizes (g / cups / pieces), use standard nutrition database values (USDA-style) for macros, never invent precise numbers it can't justify, set `needs_user_confirmation: true` when any item confidence <0.7, round macros to integers, return total = sum of items.
+- Re-compute `total` server-side from items (so it always matches even if the model drifts).
+- On any model/parse failure → return `{ ok: false, reason: "unrecognized" }`. On success → `{ ok: true, result }`. No silent fallback to fake data.
+- Ensure `LOVABLE_API_KEY` exists; call `ai_gateway--create` during build if missing.
 
-### Edits
+### Frontend wiring
 
-**`src/lib/profile.tsx`**
-- Add optional `equipmentItems?: string[]` to `Profile`.
-- Persist it through `setProfile` / `updateProfile` (already generic, no logic change).
-- `migrate()`: default `equipmentItems` from existing `equipment` enum (e.g. `dumbbells` → `["Dumbbells"]`, `gym` → `["Full gym access"]`, `none` → `["No equipment"]`, `mixed` → `["Dumbbells","Bench"]`).
-- Export `EQUIPMENT_OPTIONS = ["No equipment","Dumbbells","Barbell","Resistance bands","Machines","Kettlebells","Bench","Pull-up bar","Full gym access"]`.
-- Export `GOAL_OPTIONS` covering: Lose weight, Build muscle, Maintain weight, Get stronger, Improve endurance, Improve overall fitness — mapped onto existing `Goal` enum (add `"get_stronger"` and `"overall"` to the union; update `GOAL_LABELS` and `migrate()` accordingly so old saves still load).
+**`src/lib/foodLookup.ts`**
+- Remove `mockImageMeals` and the random `aiFoodScanService.analyzeImage`. Keep barcode mock as-is (out of scope).
+- Export new `FoodScanResult` type mirroring the server schema.
 
-**`src/routes/_app.profile.tsx`**
-- Refactor `Row` to a plain `<div>` (no `<button>` inside).
-- Wrap each row in its own clickable element:
-  - Progress → `<Link to="/progress">`
-  - Body Scan history → `<Link to="/scan/body">`
-  - App tour → `<button>` that calls `resetTour()` then `navigate({ to: "/home" })` (existing AppTour auto-opens when tour isn't completed).
-  - Goal → opens `GoalSheet` (bottom sheet with radio list of `GOAL_OPTIONS`). On save: `updateProfile({ goal })`, close sheet. Row preview reflects new value immediately via `GOAL_LABELS`.
-  - Equipment → opens `EquipmentSheet` (multi-select checkboxes from `EQUIPMENT_OPTIONS`). On save: `updateProfile({ equipmentItems, equipment })` where `equipment` is derived (none/dumbbells/gym/mixed) for downstream workout generation. Row preview shows joined list, e.g. "Dumbbells, Bench".
-  - Injuries / notes → opens `InjuriesSheet` (textarea, save button). On save: `updateProfile({ injuries })`. Row preview shows first line / "Add notes" when empty.
-  - Reset profile → opens `ResetConfirmDialog` with the required confirmation copy and Cancel / Reset Profile buttons. On confirm: clear `fitness:profile`, `resetTour()`, `navigate({ to: "/onboarding" })`.
-- Sheets/dialog use existing shadcn `Sheet` and `AlertDialog` components — dark surface, neon accents, matching current style.
+**`src/routes/_app.nutrition.tsx`** — replace `PhotoPanel`:
 
-**No changes** to Progress page UI, Body Scan history UI, AppTour overlay, workout generation logic, or `tourStore`. The existing `/progress` and `/scan/body` routes already render real content (or their own empty states).
+State machine:
+1. **Idle** — dashed upload tile + small tip card: "💡 For best results, take the photo from above with the full plate visible."
+2. **Preview** — show selected image, "Analyze meal" CTA, allow re-pick.
+3. **Loading** — overlay spinner + "Analyzing your meal…".
+4. **Confirm** — calls new `analyzeFoodImage` via `useServerFn`. On `{ok:true}` render `PhotoConfirm`. On `{ok:false}` render an error card:
+   > "Couldn't detect this meal clearly. Try another photo or add food manually."
+   with **Try again** and **Add manually** buttons (manual switches tab to `manual`).
+
+`PhotoConfirm` (inline component):
+- Title: **Confirm your meal**.
+- Image thumbnail + detected `meal_name` + confidence pill (color: green ≥0.85, neon 0.7–0.84, amber <0.7).
+- If `needs_user_confirmation || confidence < 0.7`: warning banner "We're not fully sure. Please confirm the foods and portions."
+- Editable list of `items`: name, estimated_amount, kcal, P/C/F inputs (numeric). Add/remove row. Live-computed totals row at bottom.
+- Buttons: **Save Meal** (primary), **Re-analyze** (re-runs server fn on same image), **Edit manually** (collapses to plain form).
+- On Save: call existing `addEntry` once per item with `meal` from current meal selector, `servings: 1`, `custom: { name, serving: estimated_amount, kcal, protein, carbs, fat, source: "image" }`. Close panel and return to log view.
+
+Mobile: same dark/neon style, single column, sticky CTA inside the sheet area.
+
+### Validation / safety
+
+- Zod parse every field server-side; clamp negatives to 0; round to ints; cap items at 12.
+- Reject images >8 MB before upload.
+- Never auto-save without explicit Save Meal tap.
+- No hardcoded foods anywhere in the new flow.
 
 ### Verification
 
-In preview at `/profile`:
-- Tap each row → correct screen / sheet / dialog opens.
-- Change Goal → row label updates immediately; reload page → still updated.
-- Change Equipment to a multi-select → row shows joined names; reload → persists.
-- Edit injuries → preview updates; reload → persists.
-- App tour row → lands on `/home` and the tour overlay opens.
-- Reset profile → confirmation shows; Cancel does nothing; Reset clears profile, resets tour, navigates to `/onboarding`.
-- No nested-button warnings in console.
+Upload three different real meal photos:
+- Each yields different, plausible items with the same model — not the same mock list.
+- Low-confidence photo shows the amber banner.
+- Network/API failure shows the "Couldn't detect" card with manual fallback.
+- Saved meals appear in the nutrition log with correct totals.
+- No `LOVABLE_API_KEY` leaked to the client bundle.
