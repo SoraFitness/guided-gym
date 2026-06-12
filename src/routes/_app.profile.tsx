@@ -65,7 +65,7 @@ function ProfilePage() {
     setTimeout(() => setSaved(false), 1800);
   };
   const suggest = () => {
-    setGoalsState(suggestGoals(profile.currentWeightKg));
+    setGoalsState(suggestNutrition(profile));
     setSaved(false);
   };
 
