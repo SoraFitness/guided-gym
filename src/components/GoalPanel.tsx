@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+
 import {
   Target, Flame, Salad, Apple, Bike, Scale, Sparkles, AlertTriangle, ChevronDown,
   Calendar, Pencil, Plus, ShieldCheck,
