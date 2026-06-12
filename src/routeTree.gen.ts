@@ -19,7 +19,9 @@ import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
 import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
+import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
 import { Route as WorkoutIdSessionRouteImport } from './routes/workout.$id.session'
 import { Route as AppScanBodyIndexRouteImport } from './routes/_app.scan.body.index'
 import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$id.demo.$exerciseId'
@@ -75,10 +77,20 @@ const AppHomeRoute = AppHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppRoute,
 } as any)
+const WorkoutHistoryIndexRoute = WorkoutHistoryIndexRouteImport.update({
+  id: '/workout/history/',
+  path: '/workout/history/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppScanIndexRoute = AppScanIndexRouteImport.update({
   id: '/scan/',
   path: '/scan/',
   getParentRoute: () => AppRoute,
+} as any)
+const WorkoutHistoryIdRoute = WorkoutHistoryIdRouteImport.update({
+  id: '/workout/history/$id',
+  path: '/workout/history/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const WorkoutIdSessionRoute = WorkoutIdSessionRouteImport.update({
   id: '/session',
@@ -117,7 +129,9 @@ export interface FileRoutesByFullPath {
   '/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
+  '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/scan/': typeof AppScanIndexRoute
+  '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
@@ -134,7 +148,9 @@ export interface FileRoutesByTo {
   '/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
+  '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/scan': typeof AppScanIndexRoute
+  '/workout/history': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
@@ -153,7 +169,9 @@ export interface FileRoutesById {
   '/_app/workouts': typeof AppWorkoutsRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
+  '/workout/history/$id': typeof WorkoutHistoryIdRoute
   '/_app/scan/': typeof AppScanIndexRoute
+  '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/_app/scan/body/$id': typeof AppScanBodyIdRoute
   '/_app/scan/body/new': typeof AppScanBodyNewRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
@@ -172,7 +190,9 @@ export interface FileRouteTypes {
     | '/workouts'
     | '/workout/$id'
     | '/workout/$id/session'
+    | '/workout/history/$id'
     | '/scan/'
+    | '/workout/history/'
     | '/scan/body/$id'
     | '/scan/body/new'
     | '/workout/$id/demo/$exerciseId'
@@ -189,7 +209,9 @@ export interface FileRouteTypes {
     | '/workouts'
     | '/workout/$id'
     | '/workout/$id/session'
+    | '/workout/history/$id'
     | '/scan'
+    | '/workout/history'
     | '/scan/body/$id'
     | '/scan/body/new'
     | '/workout/$id/demo/$exerciseId'
@@ -207,7 +229,9 @@ export interface FileRouteTypes {
     | '/_app/workouts'
     | '/workout/$id'
     | '/workout/$id/session'
+    | '/workout/history/$id'
     | '/_app/scan/'
+    | '/workout/history/'
     | '/_app/scan/body/$id'
     | '/_app/scan/body/new'
     | '/workout/$id/demo/$exerciseId'
@@ -220,6 +244,8 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PaywallRoute: typeof PaywallRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
+  WorkoutHistoryIdRoute: typeof WorkoutHistoryIdRoute
+  WorkoutHistoryIndexRoute: typeof WorkoutHistoryIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -294,12 +320,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/workout/history/': {
+      id: '/workout/history/'
+      path: '/workout/history'
+      fullPath: '/workout/history/'
+      preLoaderRoute: typeof WorkoutHistoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/scan/': {
       id: '/_app/scan/'
       path: '/scan'
       fullPath: '/scan/'
       preLoaderRoute: typeof AppScanIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/workout/history/$id': {
+      id: '/workout/history/$id'
+      path: '/workout/history/$id'
+      fullPath: '/workout/history/$id'
+      preLoaderRoute: typeof WorkoutHistoryIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/workout/$id/session': {
       id: '/workout/$id/session'
@@ -385,7 +425,19 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PaywallRoute: PaywallRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
+  WorkoutHistoryIdRoute: WorkoutHistoryIdRoute,
+  WorkoutHistoryIndexRoute: WorkoutHistoryIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
