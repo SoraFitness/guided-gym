@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check, BarChart3, ScanLine } from "lucide-react";
+import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check, BarChart3, ScanLine, Compass } from "lucide-react";
 import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS } from "@/lib/profile";
 import { loadGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
+import { resetTour } from "@/lib/tourStore";
 
 export const Route = createFileRoute("/_app/profile")({
   head: () => ({ meta: [{ title: "Profile — Pulse" }] }),
@@ -94,13 +95,23 @@ function ProfilePage() {
         </button>
       </section>
 
-      <section className="mt-6 rounded-3xl bg-surface divide-y divide-border overflow-hidden">
+      <section data-tour="tour-profile-settings" className="mt-6 rounded-3xl bg-surface divide-y divide-border overflow-hidden">
         <Link to="/progress" className="block">
           <Row icon={BarChart3} label="Progress" value="View workouts & streaks" />
         </Link>
         <Link to="/scan/body" className="block">
           <Row icon={ScanLine} label="Body Scan history" value="Track your physique over time" />
         </Link>
+        <button
+          type="button"
+          onClick={() => {
+            resetTour();
+            navigate({ to: "/home" });
+          }}
+          className="block w-full text-left"
+        >
+          <Row icon={Compass} label="App tour" value="Restart the guided walkthrough" />
+        </button>
         <Row icon={Target} label="Goal" value={GOAL_LABELS[profile.goal]} />
         <Row icon={Dumbbell} label="Equipment" value={EQUIPMENT_LABELS[profile.equipment]} />
         <Row icon={Apple} label="Injuries / notes" value={profile.injuries || "—"} />
