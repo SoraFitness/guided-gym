@@ -8,8 +8,9 @@ import {
   useProfile, GOAL_LABELS, GOAL_OPTIONS, EQUIPMENT_LABELS, EQUIPMENT_OPTIONS,
   EXPERIENCE_LABELS, deriveEquipmentSetup,
 } from "@/lib/profile";
-import { loadGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
+import { loadGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
+import { suggestNutrition } from "@/lib/nutritionService";
 import { resetTour } from "@/lib/tourStore";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
