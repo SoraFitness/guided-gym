@@ -1,4 +1,16 @@
 import type { Goal, ExperienceLevel, EquipmentSetup, FocusArea, Profile } from "./profile";
+import imgLowerBodyBurn from "@/assets/workouts/lower-body-burn.jpg";
+import imgPushStrength from "@/assets/workouts/push-strength.jpg";
+import imgPullStrength from "@/assets/workouts/pull-strength.jpg";
+import imgFullBodySweat from "@/assets/workouts/full-body-sweat.jpg";
+import imgDumbbellBuilder from "@/assets/workouts/dumbbell-builder.jpg";
+import imgCoreCrusher from "@/assets/workouts/core-crusher.jpg";
+import imgFatLossHiit from "@/assets/workouts/fat-loss-hiit.jpg";
+import imgMobilityRecovery from "@/assets/workouts/mobility-recovery.jpg";
+import imgGluteBuilder from "@/assets/workouts/glute-builder.jpg";
+import imgUpperBodyStrength from "@/assets/workouts/upper-body-strength.jpg";
+import imgBodyweightStarter from "@/assets/workouts/bodyweight-starter.jpg";
+import imgEnduranceRun from "@/assets/workouts/endurance-run.jpg";
 
 export type Category = "Strength" | "Cardio" | "HIIT" | "Mobility" | "Core";
 export type Difficulty = "Beginner" | "Intermediate" | "Advanced";
@@ -27,6 +39,7 @@ export interface Workout {
   targetMuscles: FocusArea[];
   exercises: Exercise[];
   thumbnail: { from: string; to: string; emoji: string };
+  image?: string;
   recommendedForGoals: Goal[];
   recommendedForLevels: ExperienceLevel[];
 }
