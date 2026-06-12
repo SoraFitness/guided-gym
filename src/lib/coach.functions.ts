@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { UIMessage } from "ai";
+
+export interface StoredCoachMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  parts: unknown;
+}
 
 // Get (or create) the user's single rolling coach thread + load its messages.
 export const getCoachThread = createServerFn({ method: "GET" })
@@ -34,13 +39,13 @@ export const getCoachThread = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     if (msgErr) throw new Error(msgErr.message);
 
-    const messages: UIMessage[] = (rows ?? []).map((r) => ({
+    const messages: StoredCoachMessage[] = (rows ?? []).map((r) => ({
       id: r.id as string,
       role: r.role as "user" | "assistant" | "system",
-      parts: (r.parts as unknown as UIMessage["parts"]) ?? [],
+      parts: r.parts ?? [],
     }));
 
-    return { threadId, messages };
+    return { threadId: threadId as string, messages };
   });
 
 // Delete every message in the user's thread (keeps the thread row).

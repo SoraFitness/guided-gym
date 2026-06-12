@@ -1,39 +1,13 @@
 // Client-side helper that builds a compact snapshot of the user's app data
 // (profile, today's nutrition, recent workouts, weight log) to send to the AI coach.
 import type { Profile } from "./profile";
-import { loadLog, loadGoals, macrosFor, entriesOn, type LogEntry } from "./foods";
-import { loadCompleted } from "./workoutSessionStore";
+import { loadLog, loadGoals, macrosFor, entriesOn } from "./foods";
+import { getCompletedWorkouts } from "./workoutSessionStore";
 import { computePlan } from "./calorieEngine";
-import { loadWeightLog } from "./weightLogStore";
 
 export interface CoachUserContext {
-  profile: {
-    name?: string;
-    goal?: string;
-    experience?: string;
-    equipment?: string;
-    daysPerWeek?: number;
-    sessionMinutes?: number;
-    focusAreas?: string[];
-    age?: number;
-    gender?: string;
-    heightCm?: number;
-    currentWeightKg?: number;
-    goalWeightKg?: number;
-    activityLevel?: string;
-    goalTargetDate?: string;
-    injuries?: string;
-    deficitSplit?: string;
-  } | null;
-  plan: {
-    maintenanceKcal?: number;
-    recommendedIntakeKcal?: number;
-    dailyDeficitKcal?: number;
-    foodDeficitKcal?: number;
-    exerciseBurnTargetKcal?: number;
-    weeklyChangeLb?: number;
-    isAggressive?: boolean;
-  } | null;
+  profile: Record<string, unknown> | null;
+  plan: Record<string, unknown> | null;
   nutritionToday: {
     date: string;
     target: { kcal: number; protein: number; carbs: number; fat: number };
@@ -46,25 +20,33 @@ export interface CoachUserContext {
     completedAt: string;
     exercises: { name: string; sets: number; topWeight?: number }[];
   }[];
-  recentWeightLog: { date: string; weightLb: number }[];
+  recentWeightLog: { date: string; kg: number }[];
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+interface WeightEntry { id: string; kg: number; date: string }
+
+function readWeightLog(): WeightEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("fitness:weightlog");
+    return raw ? (JSON.parse(raw) as WeightEntry[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function buildCoachContext(profile: Profile | null): CoachUserContext {
-  let plan: CoachUserContext["plan"] = null;
+  let plan: Record<string, unknown> | null = null;
   try {
     if (profile) {
-      const p = computePlan(profile as any);
+      const p = computePlan(profile as unknown as Parameters<typeof computePlan>[0]);
       plan = {
         maintenanceKcal: Math.round(p.maintenanceKcal),
         recommendedIntakeKcal: Math.round(p.recommendedIntakeKcal),
         dailyDeficitKcal: Math.round(p.dailyDeficitKcal),
         foodDeficitKcal: Math.round(p.foodDeficitKcal),
         exerciseBurnTargetKcal: Math.round(p.exerciseBurnTargetKcal),
-        weeklyChangeLb: Number(p.weeklyChangeLb?.toFixed?.(2) ?? 0),
+        weeklyChangeLb: Number((p.weeklyChangeLb ?? 0).toFixed(2)),
         isAggressive: p.isAggressive,
       };
     }
@@ -72,65 +54,65 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
 
   const goals = loadGoals();
   const log = loadLog();
-  const today = todayISO();
+  const today = new Date();
+  const todayISO = today.toISOString().slice(0, 10);
   const todayEntries = entriesOn(log, today);
-  const totals = todayEntries.reduce(
-    (acc: { kcal: number; protein: number; carbs: number; fat: number }, e: LogEntry) => {
-      const m = macrosFor(e);
-      acc.kcal += m.kcal; acc.protein += m.protein; acc.carbs += m.carbs; acc.fat += m.fat;
-      return acc;
-    },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
-  );
+  const totals = macrosFor(todayEntries);
 
-  const meals = todayEntries.map((e: LogEntry) => {
-    const m = macrosFor(e);
+  const meals = todayEntries.map((e) => {
+    const m = macrosFor([e]);
     return { meal: e.meal, kcal: Math.round(m.kcal), protein: Math.round(m.protein) };
   });
 
-  const completed = loadCompleted().slice(-5).reverse();
+  const completed = getCompletedWorkouts().slice(-5).reverse();
   const recentWorkouts = completed.map((c) => ({
     title: c.workoutTitle,
-    completedAt: c.completedAt,
-    exercises: c.exercises.map((ex) => ({
-      name: ex.exerciseName,
-      sets: ex.sets.filter((s) => s.completed).length,
-      topWeight: ex.sets.reduce<number | undefined>(
-        (max, s) => (s.completed && s.weight ? Math.max(max ?? 0, s.weight) : max),
-        undefined,
-      ),
-    })),
+    completedAt: c.completedAt ?? "",
+    exercises: c.exercises.map((ex) => {
+      let top: number | undefined;
+      for (const s of ex.sets) {
+        if (s.completed && s.weight) top = Math.max(top ?? 0, s.weight);
+      }
+      return {
+        name: ex.exerciseName,
+        sets: ex.sets.filter((s) => s.completed).length,
+        topWeight: top,
+      };
+    }),
   }));
 
-  const weightLog = loadWeightLog().slice(-14).map((w) => ({
-    date: w.date,
-    weightLb: w.weightLb,
-  }));
+  const weightLog = readWeightLog()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-14)
+    .map((w) => ({ date: w.date.slice(0, 10), kg: w.kg }));
 
+  const p = profile;
   return {
-    profile: profile
+    profile: p
       ? {
-          name: profile.name,
-          goal: profile.goal,
-          experience: profile.experience,
-          equipment: profile.equipment,
-          daysPerWeek: profile.daysPerWeek,
-          sessionMinutes: profile.sessionMinutes,
-          focusAreas: profile.focusAreas,
-          age: (profile as any).age,
-          gender: (profile as any).gender,
-          heightCm: profile.heightCm,
-          currentWeightKg: profile.currentWeightKg,
-          goalWeightKg: profile.goalWeightKg,
-          activityLevel: (profile as any).activityLevel,
-          goalTargetDate: (profile as any).goalTargetDate,
-          injuries: (profile as any).injuries ?? (profile as any).notes,
-          deficitSplit: (profile as any).deficitSplit,
+          name: p.name,
+          goal: p.goal,
+          experience: p.experience,
+          equipment: p.equipment,
+          daysPerWeek: p.daysPerWeek,
+          sessionMinutes: p.sessionMinutes,
+          focusAreas: p.focusAreas,
+          age: (p as Record<string, unknown>).age,
+          gender: (p as Record<string, unknown>).gender,
+          heightCm: p.heightCm,
+          currentWeightKg: p.currentWeightKg,
+          goalWeightKg: p.goalWeightKg,
+          activityLevel: (p as Record<string, unknown>).activityLevel,
+          goalTargetDate: (p as Record<string, unknown>).goalTargetDate,
+          injuries:
+            (p as Record<string, unknown>).injuries ??
+            (p as Record<string, unknown>).notes,
+          deficitSplit: (p as Record<string, unknown>).deficitSplit,
         }
       : null,
     plan,
     nutritionToday: {
-      date: today,
+      date: todayISO,
       target: { kcal: goals.kcal, protein: goals.protein, carbs: goals.carbs, fat: goals.fat },
       eaten: {
         kcal: Math.round(totals.kcal),
