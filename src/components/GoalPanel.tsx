@@ -10,7 +10,7 @@ import {
   type DeficitSplit, type ActivityLevel, type BulkPace,
 } from "@/lib/calorieEngine";
 import {
-  useWeightLog, logWeight, recalibrateMaintenance, getLatestWeight,
+  useWeightLog, logWeight, recalibrateMaintenance,
 } from "@/lib/weightLogStore";
 import { loadLog, entriesOn, macrosFor } from "@/lib/foods";
 import {
