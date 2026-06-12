@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export interface StoredCoachMessage {
   id: string;
   role: "user" | "assistant" | "system";
-  parts: unknown;
+  parts: object;
 }
 
 // Get (or create) the user's single rolling coach thread + load its messages.
@@ -42,7 +42,7 @@ export const getCoachThread = createServerFn({ method: "GET" })
     const messages: StoredCoachMessage[] = (rows ?? []).map((r) => ({
       id: r.id as string,
       role: r.role as "user" | "assistant" | "system",
-      parts: r.parts ?? [],
+      parts: (r.parts ?? []) as object,
     }));
 
     return { threadId: threadId as string, messages };

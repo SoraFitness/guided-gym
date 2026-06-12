@@ -86,7 +86,7 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
     .slice(-14)
     .map((w) => ({ date: w.date.slice(0, 10), kg: w.kg }));
 
-  const p = profile;
+  const p = profile as unknown as Record<string, unknown> | null;
   return {
     profile: p
       ? {
@@ -97,17 +97,15 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
           daysPerWeek: p.daysPerWeek,
           sessionMinutes: p.sessionMinutes,
           focusAreas: p.focusAreas,
-          age: (p as Record<string, unknown>).age,
-          gender: (p as Record<string, unknown>).gender,
+          age: p.age,
+          gender: p.gender,
           heightCm: p.heightCm,
           currentWeightKg: p.currentWeightKg,
           goalWeightKg: p.goalWeightKg,
-          activityLevel: (p as Record<string, unknown>).activityLevel,
-          goalTargetDate: (p as Record<string, unknown>).goalTargetDate,
-          injuries:
-            (p as Record<string, unknown>).injuries ??
-            (p as Record<string, unknown>).notes,
-          deficitSplit: (p as Record<string, unknown>).deficitSplit,
+          activityLevel: p.activityLevel,
+          goalTargetDate: p.goalTargetDate,
+          injuries: p.injuries ?? p.notes,
+          deficitSplit: p.deficitSplit,
         }
       : null,
     plan,
