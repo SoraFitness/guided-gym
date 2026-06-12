@@ -1284,3 +1284,214 @@ function Sheet({ children, onClose, title }: { children: React.ReactNode; onClos
     </div>
   );
 }
+
+// ============= Food confirmation sheet (full screen) =============
+
+function toLocalDatetimeValue(iso: string): string {
+  // Convert ISO -> "YYYY-MM-DDTHH:mm" in local time for <input type="datetime-local">
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalDatetimeValue(v: string): string {
+  // Parses as local time -> ISO. Empty falls back to now.
+  return v ? new Date(v).toISOString() : new Date().toISOString();
+}
+
+function FoodConfirmSheet({
+  food,
+  defaultMeal,
+  onBack,
+  onSave,
+}: {
+  food: StoredFood;
+  defaultMeal: Meal;
+  onBack: () => void;
+  onSave: (entry: AddEntryArg) => void;
+}) {
+  const [servings, setServings] = useState(1);
+  const [serving, setServing] = useState(food.serving);
+  const [meal, setMeal] = useState<Meal>(defaultMeal);
+  const [when, setWhen] = useState(() => toLocalDatetimeValue(new Date().toISOString()));
+
+  const totals = {
+    kcal:    Math.round(food.kcal    * servings),
+    protein: Math.round(food.protein * servings * 10) / 10,
+    carbs:   Math.round(food.carbs   * servings * 10) / 10,
+    fat:     Math.round(food.fat     * servings * 10) / 10,
+  };
+
+  const bumpServings = (delta: number) => setServings((s) => Math.max(0.25, Math.round((s + delta) * 4) / 4));
+
+  const submit = () => {
+    const loggedAt = fromLocalDatetimeValue(when);
+    // Legacy preset (from the original src/lib/foods.ts) → store as foodId reference
+    if (food.id.startsWith("legacy:")) {
+      const foodId = food.id.slice("legacy:".length);
+      onSave({ meal, servings, foodId, loggedAt });
+      pushRecent({ ...food, kcal: food.kcal, protein: food.protein, carbs: food.carbs, fat: food.fat });
+      return;
+    }
+    // Everything else (curated preset, Nutritionix, USDA, OpenFoodFacts) → store as inline custom
+    onSave({
+      meal,
+      servings,
+      loggedAt,
+      custom: {
+        name: food.name,
+        brand: food.brand,
+        serving: serving.trim() || food.serving,
+        kcal: food.kcal,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        source: "preset",
+      },
+    });
+    pushRecent(food);
+  };
+
+  return (
+    <div className="pb-6">
+      <button onClick={onBack} className="mt-2 -ml-1 flex items-center gap-1 text-xs text-muted-foreground active:text-foreground">
+        <ArrowLeft className="size-3.5" /> Back to search
+      </button>
+
+      {/* Food header card */}
+      <div className="mt-3 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
+        <div className="flex items-start gap-3">
+          <div className="size-14 rounded-2xl bg-white/[0.05] grid place-items-center text-2xl shrink-0">
+            {food.imageUrl
+              ? <img src={food.imageUrl} alt="" className="size-14 rounded-2xl object-cover" />
+              : <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            {food.brand && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate">{food.brand}</span>
+                {food.verified && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon/15 border border-neon/30 text-[9px] font-bold text-neon">
+                    <BadgeCheck className="size-2.5" /> VERIFIED
+                  </span>
+                )}
+              </div>
+            )}
+            <h3 className="font-bold text-base leading-tight mt-0.5">{food.name}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+              Source: {food.source === "preset" ? "curated database"
+                : food.source === "nutritionix" ? "Nutritionix"
+                : food.source === "usda" ? "USDA FoodData Central"
+                : food.source === "openfoodfacts" ? "Open Food Facts"
+                : "custom"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+          {[
+            { label: "kcal", value: totals.kcal },
+            { label: "P", value: totals.protein },
+            { label: "C", value: totals.carbs },
+            { label: "F", value: totals.fat },
+          ].map((m) => (
+            <div key={m.label} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2">
+              <div className="text-base font-bold tabular-nums">{m.value}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quantity stepper */}
+      <Field label={`Quantity (× ${food.serving})`}>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => bumpServings(-0.25)}
+            disabled={servings <= 0.25}
+            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center disabled:opacity-40"
+            aria-label="Decrease"
+          >
+            <Minus className="size-4" />
+          </button>
+          <input
+            inputMode="decimal"
+            value={servings}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (Number.isFinite(v) && v > 0) setServings(Math.round(v * 4) / 4);
+              else if (e.target.value === "") setServings(0.25);
+            }}
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-center text-base font-semibold tabular-nums outline-none focus:border-neon/40"
+          />
+          <button
+            onClick={() => bumpServings(0.25)}
+            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center"
+            aria-label="Increase"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {[0.5, 1, 1.5, 2, 3].map((n) => (
+            <button
+              key={n}
+              onClick={() => setServings(n)}
+              className={cn(
+                "flex-1 h-8 rounded-full text-[11px] font-semibold border",
+                servings === n
+                  ? "bg-neon text-neon-foreground border-transparent"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+              )}
+            >
+              ×{n}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Serving size">
+        <input
+          value={serving}
+          onChange={(e) => setServing(e.target.value)}
+          className={inp}
+          maxLength={40}
+        />
+      </Field>
+
+      <Field label="Meal">
+        <div className="grid grid-cols-4 gap-1.5">
+          {meals.map((m) => (
+            <button
+              key={m}
+              onClick={() => setMeal(m)}
+              className={cn(
+                "h-10 rounded-xl text-[11px] font-semibold border",
+                meal === m
+                  ? "bg-neon text-neon-foreground border-transparent"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Date & time">
+        <input
+          type="datetime-local"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+          className={inp}
+        />
+      </Field>
+
+      <button
+        onClick={submit}
+        className="mt-4 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon active:scale-[0.98]"
+      >
+        <Check className="size-4" /> Save to {meal}
+      </button>
+    </div>
+  );
+}
