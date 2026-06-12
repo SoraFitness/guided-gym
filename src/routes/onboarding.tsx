@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Check, Flame, Dumbbell, Sparkles, Heart, Activity, Home, Building2,
   TrendingDown, Mountain, Layers, Calendar, Zap, Footprints, Salad, Apple, Bike,
+  Instagram, Youtube, Users, Search, Smartphone, MoreHorizontal, Music2, Scan, Camera, LineChart,
 } from "lucide-react";
 import { AnimatedAthlete } from "@/components/AnimatedAthlete";
 import {
@@ -30,6 +31,8 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
+type ReferralSource = NonNullable<Profile["referralSource"]>;
+
 interface Draft {
   name: string;
   goal: Goal;
@@ -46,11 +49,14 @@ interface Draft {
   bodyFatPct?: number;
   activityLevel: ActivityLevel;
   avgStepsPerDay?: number;
-  goalTargetDate: string; // ISO
+  goalTargetDate: string;
   deficitSplit: DeficitSplit;
   bulkPace: BulkPace;
   nutritionPlan: NutritionPlan;
   units: "metric" | "imperial";
+  referralSource?: ReferralSource;
+  referralCode?: string;
+  equipmentItems: string[];
 }
 
 const defaultTargetDate = () => {
