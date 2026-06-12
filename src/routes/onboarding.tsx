@@ -140,7 +140,7 @@ function Onboarding() {
     );
   }
 
-  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Nutrition", "Plan"];
+  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Plan"];
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
