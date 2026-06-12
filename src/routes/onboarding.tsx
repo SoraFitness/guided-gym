@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Check, Flame, Dumbbell, Sparkles, Heart, Activity, Home, Building2,
-  TrendingDown, Mountain, Layers,
+  TrendingDown, Mountain, Layers, Calendar, Zap, Footprints, Salad, Apple, Bike,
 } from "lucide-react";
 import { AnimatedAthlete } from "@/components/AnimatedAthlete";
 import {
@@ -11,6 +11,10 @@ import {
   type Profile, type Goal, type Gender, type ExperienceLevel, type EquipmentSetup,
   type FocusArea, type NutritionPlan,
 } from "@/lib/profile";
+import {
+  ACTIVITY_LABELS, ACTIVITY_DESCRIPTIONS, SPLIT_LABELS,
+  type ActivityLevel, type DeficitSplit, type BulkPace,
+} from "@/lib/calorieEngine";
 import { suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
 import { workoutRecommendationService } from "@/lib/workouts";
@@ -39,9 +43,21 @@ interface Draft {
   heightCm: number;
   age: number;
   gender: Gender;
+  bodyFatPct?: number;
+  activityLevel: ActivityLevel;
+  avgStepsPerDay?: number;
+  goalTargetDate: string; // ISO
+  deficitSplit: DeficitSplit;
+  bulkPace: BulkPace;
   nutritionPlan: NutritionPlan;
   units: "metric" | "imperial";
 }
+
+const defaultTargetDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 84);
+  return d.toISOString();
+};
 
 const DEFAULT_DRAFT: Draft = {
   name: "",
@@ -56,6 +72,12 @@ const DEFAULT_DRAFT: Draft = {
   heightCm: 175,
   age: 26,
   gender: "other",
+  bodyFatPct: undefined,
+  activityLevel: "moderate",
+  avgStepsPerDay: undefined,
+  goalTargetDate: defaultTargetDate(),
+  deficitSplit: "balanced",
+  bulkPace: "lean",
   nutritionPlan: "muscle_gain",
   units: "metric",
 };
