@@ -14,11 +14,13 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
+import { Route as ApiCoachRouteImport } from './routes/api/coach'
 import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
 import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppCoachRouteImport } from './routes/_app.coach'
 import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
 import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
 import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
@@ -52,6 +54,11 @@ const WorkoutIdRoute = WorkoutIdRouteImport.update({
   path: '/workout/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCoachRoute = ApiCoachRouteImport.update({
+  id: '/api/coach',
+  path: '/api/coach',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
   id: '/workouts',
   path: '/workouts',
@@ -75,6 +82,11 @@ const AppNutritionRoute = AppNutritionRouteImport.update({
 const AppHomeRoute = AppHomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCoachRoute = AppCoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
   getParentRoute: () => AppRoute,
 } as any)
 const WorkoutHistoryIndexRoute = WorkoutHistoryIndexRouteImport.update({
@@ -122,11 +134,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
@@ -141,11 +155,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
@@ -162,11 +178,13 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/_app/coach': typeof AppCoachRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/progress': typeof AppProgressRoute
   '/_app/workouts': typeof AppWorkoutsRoute
+  '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/workout/$id/session': typeof WorkoutIdSessionRoute
   '/workout/history/$id': typeof WorkoutHistoryIdRoute
@@ -183,11 +201,13 @@ export interface FileRouteTypes {
     | '/'
     | '/onboarding'
     | '/paywall'
+    | '/coach'
     | '/home'
     | '/nutrition'
     | '/profile'
     | '/progress'
     | '/workouts'
+    | '/api/coach'
     | '/workout/$id'
     | '/workout/$id/session'
     | '/workout/history/$id'
@@ -202,11 +222,13 @@ export interface FileRouteTypes {
     | '/'
     | '/onboarding'
     | '/paywall'
+    | '/coach'
     | '/home'
     | '/nutrition'
     | '/profile'
     | '/progress'
     | '/workouts'
+    | '/api/coach'
     | '/workout/$id'
     | '/workout/$id/session'
     | '/workout/history/$id'
@@ -222,11 +244,13 @@ export interface FileRouteTypes {
     | '/_app'
     | '/onboarding'
     | '/paywall'
+    | '/_app/coach'
     | '/_app/home'
     | '/_app/nutrition'
     | '/_app/profile'
     | '/_app/progress'
     | '/_app/workouts'
+    | '/api/coach'
     | '/workout/$id'
     | '/workout/$id/session'
     | '/workout/history/$id'
@@ -243,6 +267,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
   PaywallRoute: typeof PaywallRoute
+  ApiCoachRoute: typeof ApiCoachRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
   WorkoutHistoryIdRoute: typeof WorkoutHistoryIdRoute
   WorkoutHistoryIndexRoute: typeof WorkoutHistoryIndexRoute
@@ -285,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkoutIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/coach': {
+      id: '/api/coach'
+      path: '/api/coach'
+      fullPath: '/api/coach'
+      preLoaderRoute: typeof ApiCoachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/workouts': {
       id: '/_app/workouts'
       path: '/workouts'
@@ -318,6 +350,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/coach': {
+      id: '/_app/coach'
+      path: '/coach'
+      fullPath: '/coach'
+      preLoaderRoute: typeof AppCoachRouteImport
       parentRoute: typeof AppRoute
     }
     '/workout/history/': {
@@ -380,6 +419,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCoachRoute: typeof AppCoachRoute
   AppHomeRoute: typeof AppHomeRoute
   AppNutritionRoute: typeof AppNutritionRoute
   AppProfileRoute: typeof AppProfileRoute
@@ -392,6 +432,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCoachRoute: AppCoachRoute,
   AppHomeRoute: AppHomeRoute,
   AppNutritionRoute: AppNutritionRoute,
   AppProfileRoute: AppProfileRoute,
@@ -424,6 +465,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
   PaywallRoute: PaywallRoute,
+  ApiCoachRoute: ApiCoachRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
   WorkoutHistoryIdRoute: WorkoutHistoryIdRoute,
   WorkoutHistoryIndexRoute: WorkoutHistoryIndexRoute,

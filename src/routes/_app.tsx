@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Home, Dumbbell, Apple, ScanLine, User } from "lucide-react";
+import { Home, Dumbbell, Apple, ScanLine, User, Sparkles } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_app")({
 const tabs = [
   { to: "/home", label: "Home", Icon: Home },
   { to: "/workouts", label: "Workouts", Icon: Dumbbell },
-  { to: "/scan", label: "Scan", Icon: ScanLine },
+  { to: "/coach", label: "Coach", Icon: Sparkles },
   { to: "/nutrition", label: "Nutrition", Icon: Apple },
   { to: "/profile", label: "Profile", Icon: User },
 ] as const;
