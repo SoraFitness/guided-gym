@@ -453,12 +453,93 @@ function AddFoodModal({
   );
 }
 
-function SearchPanel({ meal, onAdd }: { meal: Meal; onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void }) {
-  const [q, setQ] = useState("");
-  const suggested = mealSuggestions(meal);
-  const list = q ? foods.filter((f) => f.name.toLowerCase().includes(q.toLowerCase())) : foods;
+// ============= Branded food search =============
 
-  const pick = (f: Food) => onAdd({ foodId: f.id, meal, servings: 1 });
+type SearchTab = "all" | "restaurant" | "grocery" | "protein" | "recent" | "favorites";
+
+function brandedToStored(b: BrandedFood): StoredFood {
+  return {
+    id: b.id, source: "preset", brand: b.brand, name: b.name, serving: b.serving,
+    kcal: b.kcal, protein: b.protein, carbs: b.carbs, fat: b.fat, verified: true, category: b.category,
+  };
+}
+
+function legacyFoodToStored(f: Food): StoredFood {
+  return {
+    id: `legacy:${f.id}`, source: "preset", brand: f.brand, name: f.name, serving: f.serving,
+    kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, verified: false, category: "generic",
+  };
+}
+
+function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) => void }) {
+  void meal;
+  const [q, setQ] = useState("");
+  const [tab, setTab] = useState<SearchTab>("all");
+  const [serverResults, setServerResults] = useState<FoodSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [serverErr, setServerErr] = useState(false);
+  const search = useServerFn(searchFoodDatabase);
+  const recents = useRecentFoods();
+  const favorites = useFavoriteFoods();
+
+  // Debounced server search
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) { setServerResults([]); setServerErr(false); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setLoading(true); setServerErr(false);
+      try {
+        const r = await search({ data: { query: trimmed } });
+        if (cancelled) return;
+        if (r.ok) setServerResults(r.results);
+        else { setServerResults([]); setServerErr(true); }
+      } catch (e) {
+        console.error("[searchFoodDatabase]", e);
+        if (!cancelled) { setServerResults([]); setServerErr(true); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q, search]);
+
+  // Local preset matches (instant)
+  const presetMatches = useMemo(() => searchBrandedPresets(q), [q]);
+
+  // Combined results: presets first (verified, curated), then API results
+  const combined: StoredFood[] = useMemo(() => {
+    const seen = new Set<string>();
+    const acc: StoredFood[] = [];
+    const push = (s: StoredFood) => {
+      const key = `${(s.brand ?? "").toLowerCase()}|${s.name.toLowerCase().slice(0, 40)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      acc.push(s);
+    };
+    presetMatches.forEach((b) => push(brandedToStored(b)));
+    serverResults.forEach((r) => push(resultToStored(r)));
+    if (!q.trim()) {
+      // when no query, surface a default sampler of curated presets
+      brandedFoods.slice(0, 20).forEach((b) => push(brandedToStored(b)));
+      // include legacy generic foods so existing users see familiar items
+      foods.forEach((f) => push(legacyFoodToStored(f)));
+    } else {
+      // also surface generic legacy matches in case API/presets miss them
+      foods
+        .filter((f) => f.name.toLowerCase().includes(q.toLowerCase()))
+        .forEach((f) => push(legacyFoodToStored(f)));
+    }
+    return acc;
+  }, [presetMatches, serverResults, q]);
+
+  // Filtered by tab
+  const visible: StoredFood[] = useMemo(() => {
+    if (tab === "recent") return recents;
+    if (tab === "favorites") return favorites;
+    if (tab === "all") return combined;
+    return combined.filter((s) => s.category === tab);
+  }, [tab, combined, recents, favorites]);
 
   return (
     <>
@@ -467,64 +548,147 @@ function SearchPanel({ meal, onAdd }: { meal: Meal; onAdd: (e: Omit<LogEntry, "i
         <input
           autoFocus
           className="flex-1 bg-transparent outline-none text-sm"
-          placeholder="Search foods"
+          placeholder="Search foods, brands, restaurants…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          maxLength={50}
+          maxLength={60}
         />
+        {loading && <Loader2 className="size-4 text-muted-foreground animate-spin" />}
+        {q && !loading && (
+          <button onClick={() => setQ("")} aria-label="Clear" className="size-6 grid place-items-center rounded-full hover:bg-white/[0.06]">
+            <X className="size-3.5 text-muted-foreground" />
+          </button>
+        )}
       </label>
 
-      {!q && (
+      {/* Category tabs */}
+      <div className="mt-3 -mx-1 px-1 flex gap-1.5 overflow-x-auto scrollbar-none">
+        {([
+          { id: "all",         label: "All",         Icon: Utensils },
+          { id: "restaurant",  label: "Restaurants", Icon: Utensils },
+          { id: "grocery",     label: "Grocery",     Icon: Utensils },
+          { id: "protein",     label: "Protein",     Icon: Utensils },
+          { id: "recent",      label: "Recent",      Icon: History  },
+          { id: "favorites",   label: "Favorites",   Icon: Heart    },
+        ] as { id: SearchTab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={cn(
+              "shrink-0 h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1 transition border",
+              tab === id
+                ? "bg-neon text-neon-foreground border-transparent"
+                : "bg-white/[0.04] text-muted-foreground border-white/[0.05]"
+            )}
+          >
+            <Icon className="size-3" /> {label}
+            {id === "recent" && recents.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{recents.length}</span>}
+            {id === "favorites" && favorites.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{favorites.length}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Popular brands carousel (only when no query and on "all" / category tabs) */}
+      {!q && tab !== "recent" && tab !== "favorites" && (
         <>
-          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Quick add for {meal.toLowerCase()}
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {suggested.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => pick(f)}
-                className="h-9 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
-              >
-                <span>{f.emoji}</span><span>{f.name}</span>
-              </button>
-            ))}
+          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Popular brands</h3>
+          <div className="-mx-1 px-1 flex gap-2 overflow-x-auto scrollbar-none pb-1">
+            {popularBrands
+              .filter((b) => tab === "all" || b.category === tab)
+              .map((b) => (
+                <button
+                  key={b.name}
+                  onClick={() => setQ(b.name)}
+                  className="shrink-0 h-10 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
+                >
+                  <span className="text-base leading-none">{b.emoji}</span>
+                  <span className="font-medium">{b.name}</span>
+                </button>
+              ))}
           </div>
         </>
       )}
 
-      <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-        {q ? "Results" : "All foods"}
+      {/* Server error notice (graceful — local presets still work) */}
+      {serverErr && q.trim().length >= 2 && (
+        <div className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+          <span>Branded database is unavailable right now — showing curated matches only.</span>
+        </div>
+      )}
+
+      <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+        <span>
+          {tab === "recent" ? "Recently logged"
+            : tab === "favorites" ? "Saved favorites"
+            : q ? "Results"
+            : "Suggested"}
+        </span>
+        {visible.length > 0 && (
+          <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">{visible.length} items</span>
+        )}
       </h3>
+
       <ul className="space-y-2">
-        {list.map((f) => (
-          <li key={f.id}>
-            <button
-              onClick={() => pick(f)}
-              className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.05] text-left active:scale-[0.99]"
-            >
-              <span className="text-xl">{f.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{f.name}</div>
-                <div className="text-[11px] text-muted-foreground">{f.serving} · P{f.protein} C{f.carbs} F{f.fat}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-neon tabular-nums text-sm">{f.kcal}</div>
-                <div className="text-[10px] text-muted-foreground">kcal</div>
-              </div>
-            </button>
+        {visible.map((s) => (
+          <li key={s.id}>
+            <FoodResultRow food={s} onPick={() => onPick(s)} />
           </li>
         ))}
-        {list.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">No matches.</p>}
+        {visible.length === 0 && (
+          <p className="text-center text-muted-foreground py-8 text-sm">
+            {tab === "recent" ? "No recent foods yet — start logging!"
+              : tab === "favorites" ? "Tap the star on a food to save it here."
+              : loading ? "Searching…"
+              : q ? "No matches. Try a different search or add manually."
+              : "No items."}
+          </p>
+        )}
       </ul>
     </>
   );
 }
 
-function mealSuggestions(meal: Meal): Food[] {
-  const tag = meal.toLowerCase();
-  const direct = foods.filter((f) => f.tags.includes(tag));
-  return [...direct, ...foods.filter((f) => !direct.includes(f))].slice(0, 6);
+function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void }) {
+  const [fav, setFav] = useState(() => isFavorite(food.id));
+  const macroLine = `P${Math.round(food.protein)} · C${Math.round(food.carbs)} · F${Math.round(food.fat)}`;
+  return (
+    <div className="relative w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.05]">
+      <button
+        onClick={onPick}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left active:scale-[0.99]"
+      >
+        <div className="size-10 rounded-xl bg-white/[0.05] grid place-items-center text-lg shrink-0">
+          {food.imageUrl ? (
+            <img src={food.imageUrl} alt="" className="size-10 rounded-xl object-cover" loading="lazy" />
+          ) : (
+            <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {food.brand && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">{food.brand}</span>
+            )}
+            {food.verified && <BadgeCheck className="size-3 text-neon shrink-0" />}
+          </div>
+          <div className="font-medium text-sm truncate">{food.name}</div>
+          <div className="text-[11px] text-muted-foreground truncate">{food.serving} · {macroLine}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-bold text-neon tabular-nums text-sm">{Math.round(food.kcal)}</div>
+          <div className="text-[10px] text-muted-foreground">kcal</div>
+        </div>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); setFav(toggleFavorite(food)); }}
+        aria-label={fav ? "Unfavorite" : "Favorite"}
+        className="size-8 grid place-items-center rounded-full hover:bg-white/[0.06] shrink-0"
+      >
+        <Star className={cn("size-4", fav ? "fill-neon text-neon" : "text-muted-foreground")} />
+      </button>
+    </div>
+  );
 }
 
 function BarcodePanel({ onResult }: { onResult: (r: LookupResult) => void }) {
