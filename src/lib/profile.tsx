@@ -85,8 +85,8 @@ export interface Profile {
   // Misc
   units?: "metric" | "imperial";
   injuries?: string;
+  equipmentItems?: string[];
   completedAt: string;
-
 }
 
 const KEY = "fitness:profile";
