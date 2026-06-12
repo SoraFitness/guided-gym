@@ -47,6 +47,10 @@ function HomePage() {
 
   const subtitle = profile ? GOAL_SUBTITLES[profile.goal] : "Welcome to your training plan";
 
+  const listNotif = useServerFn(listNotifications);
+  const { data: notifs } = useQuery({ queryKey: ["notifications"], queryFn: () => listNotif(), staleTime: 60_000 });
+  const unread = (notifs ?? []).filter((n) => !n.read_at).length;
+
   return (
     <div className="px-5 pt-6 animate-slide-up">
       <header data-tour="tour-home-header" className="flex items-center justify-between">
@@ -55,11 +59,14 @@ function HomePage() {
           <h1 className="text-2xl font-bold truncate">Hi, {name} 👋</h1>
           <p className="text-[11px] text-neon mt-0.5 truncate">{subtitle}</p>
         </div>
-        <button className="size-11 rounded-full bg-surface grid place-items-center relative shrink-0" aria-label="Notifications">
+        <Link to="/notifications" className="size-11 rounded-full bg-surface grid place-items-center relative shrink-0" aria-label="Notifications">
           <Bell className="size-5" />
-          <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-neon" />
-        </button>
+          {unread > 0 && <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-neon" />}
+        </Link>
       </header>
+
+      <div className="mt-5"><WeeklyReportCard /></div>
+
 
       {/* Today's Nutrition */}
       <section data-tour="tour-nutrition-card" className="mt-5 rounded-3xl bg-surface p-5 border border-white/[0.05]">
