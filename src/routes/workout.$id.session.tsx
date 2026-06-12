@@ -66,6 +66,15 @@ function SessionPage() {
   const w = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
   const { profile } = useProfile();
+
+  // Seed the session SYNCHRONOUSLY so the very first render has correct state.
+  // useState initializer runs once on mount, before paint.
+  useState(() => {
+    if (typeof window === "undefined") return null;
+    // eslint-disable-next-line no-console
+    console.log("[workout-session] booting", w.id);
+    return startSession(w.id);
+  });
   const session = useActiveSession();
 
   const [phase, setPhase] = useState<Phase>("exercise");
@@ -73,18 +82,13 @@ function SessionPage() {
   const [restLeft, setRestLeft] = useState(45);
   const restTimer = useRef<number | null>(null);
 
-  // Boot the session
-  useEffect(() => {
-    if (!session || session.workoutId !== w.id || session.status !== "active") {
-      startSession(w.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [w.id]);
-
-  const idx = session?.workoutId === w.id ? session.currentExerciseIndex : 0;
+  const activeForThis =
+    session && session.workoutId === w.id && session.status === "active" ? session : null;
+  const idx = activeForThis ? activeForThis.currentExerciseIndex : 0;
   const ex = w.exercises[Math.min(idx, w.exercises.length - 1)];
-  const completedSetsForEx = session?.completedSets?.[ex.id] ?? 0;
+  const completedSetsForEx = activeForThis?.completedSets?.[ex.id] ?? 0;
   const currentSet = Math.min(ex.sets, completedSetsForEx + 1);
+
 
   const totalSets = useMemo(() => w.exercises.reduce((s, e) => s + e.sets, 0), [w]);
   const doneSets = useMemo(

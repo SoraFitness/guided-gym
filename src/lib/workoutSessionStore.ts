@@ -83,6 +83,13 @@ export function startSession(workoutId: string): WorkoutSession {
   return next;
 }
 
+/** Force-restart a session even if one was active for the same workout. */
+export function restartSession(workoutId: string): WorkoutSession {
+  writeSession(null);
+  return startSession(workoutId);
+}
+
+
 export function updateSession(patch: Partial<WorkoutSession>) {
   const cur = readSession();
   if (!cur) return;
