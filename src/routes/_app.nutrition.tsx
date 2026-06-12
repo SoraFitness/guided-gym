@@ -403,7 +403,14 @@ function AddFoodModal({
       <div className="mt-4 pb-6">
         {tab === "search" && <SearchPanel meal={meal} onAdd={onAdd} />}
         {tab === "barcode" && <BarcodePanel onResult={(r) => handleResult(r, "barcode")} />}
-        {tab === "photo" && <PhotoPanel onResult={(r) => handleResult(r, "image")} />}
+        {tab === "photo" && (
+          <PhotoPanel
+            meal={meal}
+            onAdd={onAdd}
+            onEditManually={(r) => handleResult(r, "image")}
+            onDone={onClose}
+          />
+        )}
         {tab === "manual" && (
           <ManualPanel
             meal={meal}
