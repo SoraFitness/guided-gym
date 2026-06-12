@@ -499,6 +499,22 @@ function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: 
             ))}
           </div>
         </div>
+
+        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+            Body fat % (optional)
+          </label>
+          <input
+            inputMode="decimal"
+            placeholder="e.g. 18"
+            value={d.bodyFatPct ?? ""}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              update("bodyFatPct", Number.isFinite(v) && v > 0 && v < 70 ? v : undefined);
+            }}
+            className="mt-2 h-11 w-full rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tabular-nums outline-none focus:border-neon/40"
+          />
+        </div>
       </div>
     </div>
   );
