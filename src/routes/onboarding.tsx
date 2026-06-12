@@ -86,10 +86,13 @@ const DEFAULT_DRAFT: Draft = {
   bulkPace: "lean",
   nutritionPlan: "muscle_gain",
   units: "metric",
+  referralSource: undefined,
+  referralCode: "",
+  equipmentItems: ["Dumbbells"],
 };
 
 
-const TOTAL = 12; // 0 welcome + 11 question steps
+const TOTAL = 15; // welcome + 14 question steps
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -124,29 +127,22 @@ function Onboarding() {
   };
 
   const finish = () => {
-    setGenerating(true);
-    const profile: Profile = { ...d, name: d.name.trim() || "Athlete", completedAt: new Date().toISOString() };
-    // Persist personalized nutrition goals
+    const profile: Profile = {
+      ...d,
+      name: d.name.trim() || "Athlete",
+      referralCode: d.referralCode?.trim() || undefined,
+      completedAt: new Date().toISOString(),
+    };
     saveGoals(suggestNutrition(profile));
-    setTimeout(() => {
-      setProfile(profile);
-      navigate({ to: "/paywall" });
-    }, 1800);
+    setProfile(profile);
+    setGenerating(true); // CustomizingPlan handles navigation when its progress completes
   };
 
   if (generating) {
-    return (
-      <div className="min-h-dvh bg-background grid place-items-center px-6 text-center">
-        <div className="animate-slide-up">
-          <AnimatedAthlete size={240} className="mx-auto" />
-          <h2 className="mt-8 text-2xl font-bold">Building your plan</h2>
-          <p className="mt-2 text-muted-foreground">Tailoring workouts and nutrition…</p>
-        </div>
-      </div>
-    );
+    return <CustomizingPlan onDone={() => navigate({ to: "/paywall" })} />;
   }
 
-  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Plan"];
+  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Source", "Referral", "Body Scan", "Plan"];
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -199,7 +195,10 @@ function Onboarding() {
             {step === 8 && <ActivityStep d={d} update={update} />}
             {step === 9 && <TimelineStep d={d} update={update} />}
             {step === 10 && <NutritionStep value={d.nutritionPlan} onChange={(g) => update("nutritionPlan", g)} />}
-            {step === 11 && <ReviewStep d={d} />}
+            {step === 11 && <ReferralSourceStep value={d.referralSource} onChange={(v) => update("referralSource", v)} />}
+            {step === 12 && <ReferralCodeStep value={d.referralCode ?? ""} onChange={(v) => update("referralCode", v)} />}
+            {step === 13 && <BodyScanTeaserStep />}
+            {step === 14 && <ReviewStep d={d} />}
           </motion.div>
         </AnimatePresence>
       </main>
