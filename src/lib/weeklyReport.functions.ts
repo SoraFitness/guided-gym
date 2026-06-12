@@ -87,8 +87,9 @@ const DEFAULT_GOALS: UserGoals = {
 };
 
 // Core computation - works with any supabase client (user-scoped or admin).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function computeReport(
-  supabase: ReturnType<typeof requireSupabaseAuth> extends infer _ ? any : never, // eslint-disable-line @typescript-eslint/no-explicit-any
+  supabase: any,
   userId: string,
   weekStart: string,
   weekEnd: string,
