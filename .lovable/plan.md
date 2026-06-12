@@ -1,80 +1,81 @@
-# AI Coach
+# Progress Pictures
 
-A new bottom-nav tab that opens a streaming chat with a personal AI fitness coach. The coach reads the user's real profile, goal, nutrition logs, workout history, and weight logs, and can take real in-app actions through tool calls. Chat history is stored in Supabase per user.
+A private photo tracker for body transformation, with gallery, before/after comparison, timeline grouping, and AI-powered comparison feedback (free for all users).
 
-## 1. Backend (Lovable Cloud)
+## Data & storage
 
-Enable Lovable Cloud (Supabase) if not already on, plus email + Google auth (required so chats can be scoped to a user).
+New private storage bucket `progress-photos` with RLS scoped to `auth.uid()/...` path prefix (read/write/delete only own folder).
 
-New tables (all RLS on, scoped to `auth.uid()`, with GRANTs to `authenticated` + `service_role`):
+New table `public.progress_photos`:
+- `id`, `user_id`, `image_path` (storage path), `photo_type` ('front'|'side'|'back'|'custom'), `weight_kg` numeric null, `taken_on` date, `notes` text null, `created_at`, `updated_at`
+- RLS: users manage their own rows. GRANTs to authenticated + service_role.
 
-- `coach_threads` — `id uuid pk`, `user_id uuid`, `title text`, `created_at`, `updated_at`. v1 uses a single rolling thread per user, but the table supports future multi-thread.
-- `coach_messages` — `id uuid pk`, `thread_id uuid fk`, `user_id uuid`, `role text` (`user` | `assistant`), `parts jsonb` (AI SDK `UIMessage.parts`), `created_at`.
+Photo type is stored as a CHECK-constrained text column.
 
-## 2. AI streaming endpoint
+## Entry points
 
-`src/routes/api/coach.ts` — TanStack server route, `POST` handler:
+- **Bottom nav**: new "Photos" tab (Camera icon) → `/_authenticated/photos`
+- **Progress tab**: card "Progress Pictures" with latest thumbnail, count, "View" / "Add" buttons
+- **Profile tab**: row linking to `/photos`
+- **Body Scan screen**: button "View progress photos" → `/photos`
 
-1. Verify Supabase bearer token, resolve `userId`.
-2. Load user context server-side: profile, current goal/plan via `calorieEngine`, today's nutrition totals, last 7 workouts, last 14 weight logs, equipment, injuries.
-3. Build a system prompt with: coach persona (friendly, direct, motivating, safe), safety rules (no extreme deficits, no diagnosis, redirect to doctor on red-flag symptoms), and a compact JSON block of the user context.
-4. `streamText` via Lovable AI Gateway using `google/gemini-3-flash-preview` (fast, strong default for chat); tools registered (see §3); `stopWhen: stepCountIs(50)`.
-5. Persist the user message before streaming and the final assistant `UIMessage` in `onFinish` to `coach_messages`.
-6. Return `toUIMessageStreamResponse({ originalMessages, onFinish })` with `withLovableAiGatewayRunIdHeader`.
+## Routes (TanStack)
 
-`LOVABLE_API_KEY` stays server-side.
+- `_authenticated/photos.tsx` — layout (Outlet)
+- `_authenticated/photos.index.tsx` — gallery + tabs (Gallery / Timeline / Compare)
+- `_authenticated/photos.new.tsx` — upload flow (camera/gallery, date, weight, notes, type)
+- `_authenticated/photos.$photoId.tsx` — detail (fullscreen, edit, delete)
+- `_authenticated/photos.compare.tsx` — pick two photos, side-by-side + swipe slider + AI feedback
 
-## 3. Tool calling (real actions)
+All under `_authenticated/` so the existing auth gate applies.
 
-Tools defined with `tool({ inputSchema: z..., execute })`. Execute runs server-side and returns a structured result the UI renders as an action card with a button.
+## Server functions (`src/lib/progressPhotos.functions.ts`)
 
-- `suggest_workout` — input: `{ focus?, equipment?, durationMin? }`; returns an exercise list. Button: **Add to today's workout** (writes into `workoutSessionStore`).
-- `suggest_meal` — input: `{ remainingKcal, remainingProteinG, preferences? }`; returns 2–3 meal options with macros. Button: **Log this meal** (opens nutrition logger prefilled).
-- `adjust_today_workout` — input: `{ mode: "easier" | "harder" | "dumbbells_only" | "no_knee" }`; returns a modified version of today's planned session.
-- `update_goal` — input: `{ goalWeightLb?, targetDate?, deficitSplit? }`; `needsApproval: true`; on approve, writes to profile.
-- `open_screen` — input: `{ screen: "nutrition" | "progress" | "workout" | "goal" }`; UI renders a deep-link button.
-- `log_weight` — input: `{ weightLb }`; appends to `weightLogStore`.
+All use `requireSupabaseAuth`:
+- `listProgressPhotos()` → rows + signed URLs
+- `getProgressPhoto({ id })`
+- `createProgressPhoto({ image_path, photo_type, weight_kg, taken_on, notes })` — client uploads directly to storage at `${userId}/${uuid}.jpg`, then calls this to insert row
+- `updateProgressPhoto({ id, ...fields })`
+- `deleteProgressPhoto({ id })` — also removes storage object
+- `getSignedUploadUrl({ ext })` — returns signed upload URL + path
+- `compareProgressPhotosAI({ beforeId, afterId })` — fetches both photos as signed URLs, calls Lovable AI (`google/gemini-2.5-flash`) with multimodal image_url blocks; returns encouraging structured feedback. System prompt enforces: no medical claims, no shaming, always encouraging, mention lighting/angle tips.
 
-Tool results render as inline cards inside the assistant message (collapsed params, primary action button).
+## UI components (`src/components/photos/`)
 
-## 4. Frontend
+- `PhotoCard.tsx` — thumbnail + date + weight + type chip + notes preview
+- `PhotoUploadSheet.tsx` — file/camera input, type selector, date picker, weight, notes
+- `PhotoGallery.tsx` — responsive grid
+- `PhotoTimeline.tsx` — grouped by Week/Month/Year (toggle)
+- `PhotoCompare.tsx` — side-by-side and swipe slider (CSS clip via draggable divider); shows date/weight diff
+- `EmptyPhotosState.tsx` — copy + CTA
+- `PrivacyNote.tsx` — "Your progress photos are private and only visible to you."
 
-Install AI Elements: `conversation`, `message`, `prompt-input`, `tool`, `shimmer`.
+## Upload flow
 
-New files:
+1. User picks/captures photo (HTML `<input type="file" accept="image/*" capture="environment">`).
+2. Client compresses to max 1600px JPEG (browser canvas) to keep storage small.
+3. Client calls `getSignedUploadUrl`, uploads to bucket directly, then `createProgressPhoto` with metadata.
+4. Navigate back to gallery.
 
-- `src/routes/_app.coach.tsx` — new tab page. Uses `useChat` with `DefaultChatTransport({ api: "/api/coach" })`, chat `id` = active thread id loaded from Supabase. Loads prior messages via a `createServerFn` (`getCoachThread`) on mount.
-- `src/components/coach/CoachMessage.tsx` — renders `message.parts`: text via `MessageResponse` (markdown), tool parts via AI Elements `Tool` (collapsed by default) plus a custom action card per tool name.
-- `src/components/coach/QuickPrompts.tsx` — horizontal scroll chips above the composer: "Plan my workout today", "What should I eat?", "Check my progress", "Help me hit protein", "Make workout easier", "Motivate me", "Why am I stuck?". Tapping a chip calls `sendMessage`.
-- `src/components/coach/CoachComposer.tsx` — `PromptInput` + `PromptInputTextarea` + footer with submit (icon-sm). Keeps textarea focused.
-- Clear-chat button in header → `clearCoachThread` server fn deletes messages, keeps thread row.
+## Compare flow
 
-Bottom nav (`src/components/AppNav.tsx` or equivalent): add **Coach** entry with a custom generated coach avatar icon (not Sparkles). Existing tabs untouched.
+1. User taps "Compare" → picks two photos (filtered by matching type recommended).
+2. Side-by-side view with swipe slider toggle.
+3. Shows date diff (days), weight diff (kg/lbs based on profile unit).
+4. "Get AI feedback" button calls `compareProgressPhotosAI` → renders bullet feedback. Errors surface inline; 429/402 messages shown.
 
-States:
-- Empty: avatar + "Ask your AI Coach anything — workouts, meals, calories, progress, or motivation." + quick prompts.
-- Loading: AI Elements `Shimmer` "Coach is thinking…" while `status === "submitted"`.
-- Error: toast + inline "Coach is unavailable right now. Please try again." with retry.
+## Empty / error states
 
-Assistant messages render on the page surface (no bubble). User messages use `primary` / `primary-foreground` bubble to match the dark fitness theme.
+- Empty: "Track your transformation" + "Add Progress Photo" CTA.
+- Errors: toast via `sonner`; AI failures inline.
 
-## 5. Safety
+## Out of scope (v1)
 
-System prompt enforces:
-- Never recommend <1500 kcal (men) / <1200 kcal (women) or >1% bodyweight/week loss; defer to existing `calorieEngine` safe alternative.
-- No medical diagnosis. On mentions of chest pain, fainting, severe injury, or ED-pattern language, respond with a brief supportive message and direct to a qualified professional / emergency services.
-- Cite the user's actual numbers when giving nutrition/training advice; don't fabricate.
+- Sharing/export
+- Multi-photo carousel comparison
+- Body scan integration (per user)
+- Paywall / photo limits (per user)
 
-## 6. Out of scope (v1)
+## Design
 
-- Multi-thread sidebar (schema supports it, UI is single rolling thread).
-- Voice input.
-- Sharing/exporting transcripts.
-
-## Technical notes
-
-- Stack: TanStack Start; chat endpoint is a server route, not an Edge Function.
-- Model: `google/gemini-3-flash-preview` via Lovable AI Gateway (best general chat default — fast, low cost, strong tool calling). Easy to swap later.
-- Conversation memory: full `UIMessage[]` for the active thread is replayed on each request (loaded from `coach_messages`).
-- Auth: requires sign-in. If user isn't signed in, the Coach tab shows a "Sign in to use the AI Coach" CTA instead of the chat (no redirect loop).
-- No existing feature is removed: 3D guidance, workout tracker, nutrition, body scan, progress, paywall, tour, profile all untouched.
+Reuse existing dark theme + neon-green accents, rounded cards (`rounded-2xl`), shadcn primitives, lucide icons. Mobile-first.

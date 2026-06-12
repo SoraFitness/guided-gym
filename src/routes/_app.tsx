@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Home, Dumbbell, Apple, ScanLine, User, Sparkles } from "lucide-react";
+import { Home, Dumbbell, Apple, User, Sparkles, Camera } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
@@ -16,8 +16,10 @@ const tabs = [
   { to: "/workouts", label: "Workouts", Icon: Dumbbell },
   { to: "/coach", label: "Coach", Icon: Sparkles },
   { to: "/nutrition", label: "Nutrition", Icon: Apple },
+  { to: "/photos", label: "Photos", Icon: Camera },
   { to: "/profile", label: "Profile", Icon: User },
 ] as const;
+
 
 
 function AppShell() {

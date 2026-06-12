@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
 import { GoalPanel } from "@/components/GoalPanel";
+import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
+
 
 export const Route = createFileRoute("/_app/progress")({
   head: () => ({ meta: [{ title: "Progress — Pulse" }] }),
@@ -71,6 +73,11 @@ function ProgressPage() {
       <div className="mt-6">
         <GoalPanel />
       </div>
+
+      <div className="mt-6">
+        <ProgressPicturesCard />
+      </div>
+
 
       <div className="mt-6 grid grid-cols-2 gap-3">
         <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
