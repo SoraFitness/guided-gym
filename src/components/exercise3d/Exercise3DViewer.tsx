@@ -95,11 +95,10 @@ export function Exercise3DViewer({
       )}
     >
       <div className="aspect-[4/5] w-full relative">
-        {!mounted || webgl === null ? (
+        {!mounted ? (
           <LoadingSkeleton />
-        ) : webgl === false ? (
-          fallback
         ) : (
+
           <ViewerErrorBoundary fallback={fallback}>
             <Suspense fallback={<LoadingSkeleton />}>
               <Canvas
