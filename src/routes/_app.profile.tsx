@@ -1,29 +1,57 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check, BarChart3, ScanLine, Compass } from "lucide-react";
-import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS } from "@/lib/profile";
+import {
+  LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check,
+  BarChart3, ScanLine, Compass, type LucideIcon,
+} from "lucide-react";
+import {
+  useProfile, GOAL_LABELS, GOAL_OPTIONS, EQUIPMENT_LABELS, EQUIPMENT_OPTIONS,
+  EXPERIENCE_LABELS, deriveEquipmentSetup,
+} from "@/lib/profile";
 import { loadGoals, suggestGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
 import { resetTour } from "@/lib/tourStore";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/profile")({
   head: () => ({ meta: [{ title: "Profile — Pulse" }] }),
   component: ProfilePage,
 });
 
+type SheetKind = null | "goal" | "equipment" | "injuries";
 
 function ProfilePage() {
-  const { profile, setProfile } = useProfile();
+  const { profile, setProfile, updateProfile } = useProfile();
   const navigate = useNavigate();
   const [goals, setGoalsState] = useState<NutritionGoals>(loadGoals());
   const [saved, setSaved] = useState(false);
+  const [openSheet, setOpenSheet] = useState<SheetKind>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
   if (!profile) return null;
 
-  const reset = () => {
-    if (confirm("Reset your profile and start over?")) {
-      setProfile(null);
-      navigate({ to: "/onboarding" });
-    }
+  const equipmentItems = profile.equipmentItems?.length
+    ? profile.equipmentItems
+    : [EQUIPMENT_LABELS[profile.equipment]];
+
+  const doReset = () => {
+    setProfile(null);
+    resetTour();
+    setConfirmReset(false);
+    navigate({ to: "/onboarding" });
+  };
+
+  const restartTour = () => {
+    resetTour();
+    navigate({ to: "/home" });
   };
 
   const update = (k: keyof NutritionGoals, v: string) => {
@@ -96,35 +124,191 @@ function ProfilePage() {
       </section>
 
       <section data-tour="tour-profile-settings" className="mt-6 rounded-3xl bg-surface divide-y divide-border overflow-hidden">
-        <Link to="/progress" className="block">
-          <Row icon={BarChart3} label="Progress" value="View workouts & streaks" />
+        <Link to="/progress" className="block active:bg-white/[0.03]">
+          <RowContent icon={BarChart3} label="Progress" value="View workouts & streaks" />
         </Link>
-        <Link to="/scan/body" className="block">
-          <Row icon={ScanLine} label="Body Scan history" value="Track your physique over time" />
+        <Link to="/scan/body" className="block active:bg-white/[0.03]">
+          <RowContent icon={ScanLine} label="Body Scan history" value="Track your physique over time" />
         </Link>
-        <button
-          type="button"
-          onClick={() => {
-            resetTour();
-            navigate({ to: "/home" });
-          }}
-          className="block w-full text-left"
-        >
-          <Row icon={Compass} label="App tour" value="Restart the guided walkthrough" />
+        <button type="button" onClick={restartTour} className="block w-full text-left active:bg-white/[0.03]">
+          <RowContent icon={Compass} label="App tour" value="Restart the guided walkthrough" />
         </button>
-        <Row icon={Target} label="Goal" value={GOAL_LABELS[profile.goal]} />
-        <Row icon={Dumbbell} label="Equipment" value={EQUIPMENT_LABELS[profile.equipment]} />
-        <Row icon={Apple} label="Injuries / notes" value={profile.injuries || "—"} />
+        <button type="button" onClick={() => setOpenSheet("goal")} className="block w-full text-left active:bg-white/[0.03]">
+          <RowContent icon={Target} label="Goal" value={GOAL_LABELS[profile.goal]} />
+        </button>
+        <button type="button" onClick={() => setOpenSheet("equipment")} className="block w-full text-left active:bg-white/[0.03]">
+          <RowContent icon={Dumbbell} label="Equipment" value={equipmentItems.join(", ")} />
+        </button>
+        <button type="button" onClick={() => setOpenSheet("injuries")} className="block w-full text-left active:bg-white/[0.03]">
+          <RowContent icon={Apple} label="Injuries / notes" value={profile.injuries?.trim() ? profile.injuries.split("\n")[0] : "Add notes"} />
+        </button>
       </section>
 
       <button
-        onClick={reset}
+        onClick={() => setConfirmReset(true)}
         className="mt-6 w-full h-14 rounded-full bg-surface border border-border flex items-center justify-center gap-2 text-destructive font-medium"
       >
         <LogOut className="size-5" />
         Reset profile
       </button>
+
+      {/* Goal sheet */}
+      <Sheet open={openSheet === "goal"} onOpenChange={(o) => !o && setOpenSheet(null)}>
+        <SheetContent side="bottom" className="bg-background border-border rounded-t-3xl">
+          <SheetHeader>
+            <SheetTitle>Choose your goal</SheetTitle>
+            <SheetDescription>Used to personalize your workouts and nutrition.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-2">
+            {GOAL_OPTIONS.map((g) => (
+              <button
+                key={g}
+                onClick={() => {
+                  updateProfile({ goal: g });
+                  setOpenSheet(null);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between px-4 h-14 rounded-2xl border text-left",
+                  profile.goal === g
+                    ? "border-neon bg-neon/10 text-foreground"
+                    : "border-border bg-surface text-foreground/90",
+                )}
+              >
+                <span className="font-medium">{GOAL_LABELS[g]}</span>
+                {profile.goal === g && <Check className="size-5 text-neon" />}
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Equipment sheet */}
+      <EquipmentSheet
+        open={openSheet === "equipment"}
+        initial={equipmentItems}
+        onClose={() => setOpenSheet(null)}
+        onSave={(items) => {
+          updateProfile({ equipmentItems: items, equipment: deriveEquipmentSetup(items) });
+          setOpenSheet(null);
+        }}
+      />
+
+      {/* Injuries sheet */}
+      <InjuriesSheet
+        open={openSheet === "injuries"}
+        initial={profile.injuries ?? ""}
+        onClose={() => setOpenSheet(null)}
+        onSave={(text) => {
+          updateProfile({ injuries: text });
+          setOpenSheet(null);
+        }}
+      />
+
+      {/* Reset confirm */}
+      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <AlertDialogContent className="bg-background border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reset your profile? This will clear your goal, equipment, injuries, onboarding answers, and app preferences.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={doReset}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Reset Profile
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function EquipmentSheet({
+  open, initial, onClose, onSave,
+}: { open: boolean; initial: string[]; onClose: () => void; onSave: (items: string[]) => void }) {
+  const [selected, setSelected] = useState<string[]>(initial);
+
+
+  const toggle = (item: string) => {
+    setSelected((cur) => {
+      if (item === "No equipment") return ["No equipment"];
+      const without = cur.filter((i) => i !== "No equipment");
+      return without.includes(item) ? without.filter((i) => i !== item) : [...without, item];
+    });
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="bg-background border-border rounded-t-3xl max-h-[85dvh] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Your equipment</SheetTitle>
+          <SheetDescription>Pick everything you have. We'll use it to build your workouts.</SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {EQUIPMENT_OPTIONS.map((item) => {
+            const on = selected.includes(item);
+            return (
+              <button
+                key={item}
+                onClick={() => toggle(item)}
+                className={cn(
+                  "h-14 px-3 rounded-2xl border text-sm font-medium flex items-center justify-between text-left",
+                  on ? "border-neon bg-neon/10" : "border-border bg-surface",
+                )}
+              >
+                <span className="truncate">{item}</span>
+                {on && <Check className="size-4 text-neon shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+        <SheetFooter className="mt-5">
+          <button
+            onClick={() => onSave(selected.length ? selected : ["No equipment"])}
+            className="w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold"
+          >
+            Save
+          </button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function InjuriesSheet({
+  open, initial, onClose, onSave,
+}: { open: boolean; initial: string; onClose: () => void; onSave: (text: string) => void }) {
+  const [text, setText] = useState(initial);
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="bg-background border-border rounded-t-3xl">
+        <SheetHeader>
+          <SheetTitle>Injuries & notes</SheetTitle>
+          <SheetDescription>
+            Add anything we should know — injuries, limitations, exercises to avoid.
+          </SheetDescription>
+        </SheetHeader>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={"e.g. Bad knees\nAvoid shoulder press\nNo jumping exercises"}
+          className="mt-4 min-h-32 bg-surface border-border"
+        />
+        <SheetFooter className="mt-4">
+          <button
+            onClick={() => onSave(text.trim())}
+            className="w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold"
+          >
+            Save notes
+          </button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -154,17 +338,17 @@ function Mini({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Row({ icon: Icon, label, value }: { icon: typeof Target; label: string; value: string }) {
+function RowContent({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <button className="w-full flex items-center gap-4 p-4 text-left">
-      <span className="size-10 rounded-xl bg-surface-2 grid place-items-center">
+    <div className="w-full flex items-center gap-4 p-4">
+      <span className="size-10 rounded-xl bg-surface-2 grid place-items-center shrink-0">
         <Icon className="size-5 text-neon" />
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className="font-medium truncate">{value}</div>
       </div>
-      <ChevronRight className="size-5 text-muted-foreground" />
-    </button>
+      <ChevronRight className="size-5 text-muted-foreground shrink-0" />
+    </div>
   );
 }

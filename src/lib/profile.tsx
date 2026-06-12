@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-export type Goal = "lose_weight" | "build_muscle" | "recomp" | "endurance" | "maintain";
+export type Goal = "lose_weight" | "build_muscle" | "recomp" | "endurance" | "maintain" | "get_stronger" | "overall";
 export type Gender = "male" | "female" | "other";
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 export type EquipmentSetup = "none" | "dumbbells" | "gym" | "mixed";
@@ -12,14 +12,43 @@ export const GOAL_LABELS: Record<Goal, string> = {
   build_muscle: "Build muscle",
   recomp: "Body recomposition",
   endurance: "Improve endurance",
-  maintain: "Maintain fitness",
+  maintain: "Maintain weight",
+  get_stronger: "Get stronger",
+  overall: "Improve overall fitness",
 };
+export const GOAL_OPTIONS: Goal[] = [
+  "lose_weight",
+  "build_muscle",
+  "maintain",
+  "get_stronger",
+  "endurance",
+  "overall",
+];
 export const EQUIPMENT_LABELS: Record<EquipmentSetup, string> = {
   none: "Home · no equipment",
   dumbbells: "Dumbbells only",
   gym: "Full gym",
   mixed: "Mixed setup",
 };
+export const EQUIPMENT_OPTIONS = [
+  "No equipment",
+  "Dumbbells",
+  "Barbell",
+  "Resistance bands",
+  "Machines",
+  "Kettlebells",
+  "Bench",
+  "Pull-up bar",
+  "Full gym access",
+] as const;
+export type EquipmentItem = (typeof EQUIPMENT_OPTIONS)[number];
+
+export function deriveEquipmentSetup(items: string[]): EquipmentSetup {
+  if (!items.length || (items.length === 1 && items[0] === "No equipment")) return "none";
+  if (items.includes("Full gym access")) return "gym";
+  if (items.length === 1 && items[0] === "Dumbbells") return "dumbbells";
+  return "mixed";
+}
 export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
@@ -56,8 +85,8 @@ export interface Profile {
   // Misc
   units?: "metric" | "imperial";
   injuries?: string;
+  equipmentItems?: string[];
   completedAt: string;
-
 }
 
 const KEY = "fitness:profile";
@@ -132,6 +161,16 @@ function migrate(raw: Record<string, unknown>): Profile {
     gender: (raw.gender as Gender) ?? "other",
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
     injuries: (raw.injuries as string) ?? "",
+    equipmentItems: (raw.equipmentItems as string[]) ?? defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
     completedAt: (raw.completedAt as string) ?? new Date().toISOString(),
   };
+}
+
+function defaultEquipmentItems(setup: EquipmentSetup): string[] {
+  switch (setup) {
+    case "gym": return ["Full gym access"];
+    case "dumbbells": return ["Dumbbells"];
+    case "mixed": return ["Dumbbells", "Bench"];
+    default: return ["No equipment"];
+  }
 }
