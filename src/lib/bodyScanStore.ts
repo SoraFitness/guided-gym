@@ -8,7 +8,8 @@ function emit() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVT));
 }
 
-function read(): BodyScanResult[] {
+let cache: BodyScanResult[] | null = null;
+function readFresh(): BodyScanResult[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(KEY);
@@ -19,13 +20,18 @@ function read(): BodyScanResult[] {
     return [];
   }
 }
+function read(): BodyScanResult[] {
+  if (cache === null) cache = readFresh();
+  return cache;
+}
 function write(list: BodyScanResult[]) {
   localStorage.setItem(KEY, JSON.stringify(list));
+  cache = list;
   emit();
 }
 
 export function saveScan(scan: BodyScanResult) {
-  const list = read();
+  const list = [...read()];
   list.unshift(scan);
   write(list.slice(0, 30));
 }
@@ -44,13 +50,14 @@ export function previousScan(id: string): BodyScanResult | null {
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
+  const invalidate = () => { cache = null; cb(); };
   const onStorage = (e: StorageEvent) => {
-    if (!e.key || e.key === KEY) cb();
+    if (!e.key || e.key === KEY) invalidate();
   };
-  window.addEventListener(EVT, cb);
+  window.addEventListener(EVT, invalidate);
   window.addEventListener("storage", onStorage);
   return () => {
-    window.removeEventListener(EVT, cb);
+    window.removeEventListener(EVT, invalidate);
     window.removeEventListener("storage", onStorage);
   };
 }
