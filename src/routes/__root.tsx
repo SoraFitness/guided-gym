@@ -90,6 +90,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "Personalized workout plans, animated guidance, and progress tracking." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1f6890c-afc4-4bdf-85ed-22651cfbf32a/id-preview-f2a5fcd4--03a015a9-bf62-48ea-aaf7-e21b4e0cd901.lovable.app-1781215401158.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1f6890c-afc4-4bdf-85ed-22651cfbf32a/id-preview-f2a5fcd4--03a015a9-bf62-48ea-aaf7-e21b4e0cd901.lovable.app-1781215401158.png" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Pulse" },
+      { name: "application-name", content: "Pulse" },
+      { name: "format-detection", content: "telephone=no" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
