@@ -10,28 +10,35 @@ export interface WorkoutLogEntry {
 const KEY = "fitness:workoutLog";
 const EVT = "fitness:progress-change";
 
-function load(): WorkoutLogEntry[] {
+let cache: WorkoutLogEntry[] | null = null;
+function loadFresh(): WorkoutLogEntry[] {
   if (typeof window === "undefined") return [];
   try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; }
 }
+function load(): WorkoutLogEntry[] {
+  if (cache === null) cache = loadFresh();
+  return cache;
+}
 function save(list: WorkoutLogEntry[]) {
   localStorage.setItem(KEY, JSON.stringify(list));
+  cache = list;
   window.dispatchEvent(new Event(EVT));
 }
 
 export function logWorkout(minutes: number, workoutId?: string) {
-  const list = load();
+  const list = [...load()];
   list.push({ id: crypto.randomUUID(), date: new Date().toISOString(), minutes, workoutId });
   save(list);
 }
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const onStorage = (e: StorageEvent) => { if (!e.key || e.key === KEY) cb(); };
-  window.addEventListener(EVT, cb);
+  const invalidate = () => { cache = null; cb(); };
+  const onStorage = (e: StorageEvent) => { if (!e.key || e.key === KEY) invalidate(); };
+  window.addEventListener(EVT, invalidate);
   window.addEventListener("storage", onStorage);
   return () => {
-    window.removeEventListener(EVT, cb);
+    window.removeEventListener(EVT, invalidate);
     window.removeEventListener("storage", onStorage);
   };
 }
