@@ -2,10 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Check, Dumbbell, Apple, Activity, Scan, LineChart, Sparkles, Box, Zap, Star, ArrowRight, X,
+  Check, Dumbbell, Apple, Activity, Scan, LineChart, Sparkles, Box, Zap, Star, ArrowRight, X, Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
+import { useProfile } from "@/lib/profile";
 
 export const Route = createFileRoute("/paywall")({
   head: () => ({
@@ -30,8 +31,20 @@ const FEATURES = [
 
 function PaywallScreen() {
   const navigate = useNavigate();
+  const { profile, updateProfile } = useProfile();
   const [selected, setSelected] = useState<Plan>("yearly");
   const [purchasing, setPurchasing] = useState(false);
+  const [referral, setReferral] = useState(profile?.referralCode ?? "");
+  const [referralApplied, setReferralApplied] = useState(!!profile?.referralCode);
+  const [referralOpen, setReferralOpen] = useState(!!profile?.referralCode);
+
+  const applyReferral = () => {
+    const code = referral.trim().toUpperCase();
+    if (!code) return;
+    setReferral(code);
+    if (profile) updateProfile({ referralCode: code });
+    setReferralApplied(true);
+  };
 
   const handlePurchase = () => {
     setPurchasing(true);
@@ -155,10 +168,56 @@ function PaywallScreen() {
           </h2>
           <ComparisonTable />
         </div>
+
+        {/* Referral code */}
+        <div className="mt-6">
+          {!referralOpen ? (
+            <button
+              onClick={() => setReferralOpen(true)}
+              className="w-full h-12 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition"
+            >
+              <Tag className="h-4 w-4" />
+              Have a referral code?
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+                <Tag className="h-3.5 w-3.5" /> Referral code
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={referral}
+                  onChange={(e) => { setReferral(e.target.value.toUpperCase()); setReferralApplied(false); }}
+                  placeholder="ENTER CODE"
+                  maxLength={24}
+                  className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tracking-widest uppercase outline-none focus:border-neon/40"
+                />
+                <button
+                  onClick={applyReferral}
+                  disabled={!referral.trim()}
+                  className={cn(
+                    "h-11 px-4 rounded-xl text-sm font-semibold transition",
+                    referral.trim() ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-muted-foreground"
+                  )}
+                >
+                  Apply
+                </button>
+              </div>
+              {referralApplied && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-neon">
+                  <Check className="h-4 w-4" strokeWidth={3} /> Code saved
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-8 pb-6">
+      <div
+        className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-8"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
         <div className="mx-auto max-w-md px-5">
           <button
             onClick={handlePurchase}

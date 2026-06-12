@@ -1,98 +1,109 @@
-## Weekly Fitness Reports
 
-A Spotify-Wrapped-style weekly recap covering workouts, nutrition, body progress, consistency, AI insights, next-week plan, and badges. All users get the full experience (no premium gating). Reports finalize automatically Sunday evening; the current week is viewable live anytime.
+## Part 1 — Make it feel like a native iOS PWA (installable only, no service worker)
 
-### 1. Database (one migration)
+**New files in `public/`** (icons via `imagegen`, dark background with neon accent mark):
+- `manifest.webmanifest` — `name: "Pulse"`, `short_name: "Pulse"`, `display: "standalone"`, `start_url: "/"`, `scope: "/"`, `background_color: "#0A0A0A"`, `theme_color: "#0A0A0A"`, `orientation: "portrait"`, icons 192/512 + maskable 512.
+- `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon-180.png`, `favicon.ico`.
+- `apple-splash-{1290x2796, 1179x2556, 1170x2532, 1284x2778, 1125x2436, 828x1792, 750x1334}.png` — generated dark splash with centered logo.
 
-New tables, all with RLS scoped to `auth.uid()` and full GRANTs:
+**`src/routes/__root.tsx`** — add head tags:
+- `<link rel="manifest" href="/manifest.webmanifest">`
+- `<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">`
+- `<meta name="apple-mobile-web-app-capable" content="yes">`
+- `<meta name="mobile-web-app-capable" content="yes">`
+- `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`
+- `<meta name="apple-mobile-web-app-title" content="Pulse">`
+- `<meta name="format-detection" content="telephone=no">`
+- Confirm viewport already has `viewport-fit=cover` (it does).
+- One `<link rel="apple-touch-startup-image">` per splash size with `media="(device-width: …px) and (device-height: …px) and (-webkit-device-pixel-ratio: …) and (orientation: portrait)"`.
 
-- `workout_logs` — `user_id`, `performed_on` (date), `name`, `duration_min`, `total_sets`, `total_reps`, `total_volume_kg`, `muscle_groups` (text[]), `is_pr` (bool), `pr_note` (text), `notes`.
-- `food_logs` — `user_id`, `logged_on` (date), `meal` ('breakfast'|'lunch'|'dinner'|'snack'), `name`, `calories`, `protein_g`, `carbs_g`, `fat_g`.
-- `weight_logs` — `user_id`, `logged_on` (date), `weight_kg`. Unique `(user_id, logged_on)`.
-- `daily_activity` — `user_id`, `activity_on` (date), `steps`, `sleep_hours`, `recovery_score` (0–100). Unique `(user_id, activity_on)`.
-- `user_goals` — `user_id` (unique), `weekly_workout_target` (default 4), `daily_calorie_target`, `daily_protein_g_target`, `daily_step_target` (default 8000), `goal_weight_kg`, `starting_weight_kg`.
-- `weekly_reports` — snapshot per `(user_id, week_start)` (unique). Columns: `week_start` date, `week_end` date, `overall_score`, `consistency_score`, `workouts_completed`, `planned_workouts`, `total_sets`, `total_reps`, `total_volume_kg`, `average_calories`, `average_protein_g`, `protein_hit_days`, `calorie_adherence`, `starting_weight_kg`, `ending_weight_kg`, `weight_change_kg`, `top_muscle_groups` (text[]), `ai_summary` (text), `achievements` (jsonb), `next_week_plan` (jsonb), `is_finalized` (bool), `finalized_at`.
-- `notifications` — `user_id`, `kind` ('weekly_report'|'achievement'|'reminder'), `title`, `body`, `link_to` (text), `read_at`, `created_at`. RLS: own rows only.
+**`src/styles.css`** — safe-area + native feel:
+- `html, body { height: 100%; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }`
+- `body { background: hsl(var(--background)); }` to kill white rubber-band gap.
+- `* { -webkit-touch-callout: none; }` on app shell.
+- Utility classes: `.pt-safe`, `.pb-safe`, `.pl-safe`, `.pr-safe` mapping to `env(safe-area-inset-*)`.
+- `.tap` → `min-height: 44px; min-width: 44px; touch-action: manipulation;`
+- `.scroll-smooth-ios { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }`
 
-Week boundary: Monday 00:00 → Sunday 23:59 in user's local timezone (stored in `user_goals.timezone`, default `'UTC'`).
+**`src/routes/_app.tsx`** — apply safe areas:
+- Outer wrapper gets `pt-safe`.
+- Bottom-nav `<nav>` gets `pb-safe` and `pb-[max(20px,env(safe-area-inset-bottom))]`.
+- Content area padding-bottom uses `calc(safe-area + 96px)`.
+- Add a thin app-style page transition: wrap `<Outlet />` in framer-motion with `AnimatePresence mode="wait"` keyed on pathname (slide+fade, 180ms).
 
-### 2. Server functions (`src/lib/weeklyReport.functions.ts`)
+**No service worker, no `vite-plugin-pwa`** (per "installable only").
 
-All use `requireSupabaseAuth`.
+---
 
-- `computeCurrentWeekReport()` — live aggregation for the in-progress week, returns full DTO without persisting.
-- `getWeeklyReport({ weekStart })` — returns persisted snapshot, or live-computes if it's the current week.
-- `listWeeklyReports()` — list of past reports (week range, score, workouts, weight change, protein hit rate).
-- `finalizeWeeklyReport({ weekStart })` — computes + persists snapshot + generates AI summary + writes notification + grants achievements. Idempotent.
-- `generateAiInsights({ stats })` — calls Lovable AI (`google/gemini-3-flash-preview`) with structured `Output.object` schema returning `{ summary, wentWell, heldBack, focus, actionPlan, nextWeekPlan }`. Strict system prompt: encouraging, no medical claims, no shaming.
-- Notifications: `listNotifications`, `markNotificationRead`, `markAllNotificationsRead`.
-- Quick-log helpers (used by simple "Log workout / Log meal / Log weight" sheets so data actually flows in): `quickLogWorkout`, `quickLogMeal`, `quickLogWeight`, `quickLogActivity`, `upsertUserGoals`.
+## Part 2 — Onboarding: layer the missing steps on top
 
-### 3. Consistency score
+Keep the existing `/onboarding` flow but extend `Draft` and add four steps. New optional fields persisted to profile state (no migration needed unless we want analytics in DB — see Referral section).
 
-Computed in TypeScript from real rows (no hardcoded values), per spec formula:
-```
-workoutCompletionRate * 0.30 + nutritionLoggingRate * 0.20 +
-proteinHitRate * 0.20 + calorieAdherenceRate * 0.15 +
-activityCompletionRate * 0.10 + recoveryScore * 0.05
-```
-Each component is 0–1, clamped. Overall score = consistency score (rounded).
+**Extended Draft fields:**
+- `referralSource: "tiktok" | "instagram" | "youtube" | "friend" | "appstore" | "google" | "other" | null`
+- `referralCode: string | null`
 
-### 4. Achievements
+**New step screens (inserted in the existing step array, same card style as today's screens — selected cards highlighted, big tap targets, Continue gated):**
 
-Evaluated at finalize-time against the week's stats:
-- First week completed, 3 / 5 workouts in a week, protein goal 5 days, 7-day food logging streak, new PR (any `is_pr=true` row), weight-goal milestone (10/25/50/100% to goal), progress photo uploaded this week.
-Stored on the report as `achievements: [{ id, label, icon }]`.
+1. **Referral source** — placed right after the Goal step. Single-select cards (TikTok, Instagram, YouTube, Friend, App Store, Google, Other). Saved to profile.
+2. **Referral code** — placed after weights. Text input + Skip + Apply. Track-only: stores string on profile; no validation, no discount.
+3. **Body scan teaser** — placed right before final review/save. Marketing screen with bullets (Upload or scan, AI feedback, Track changes, Progress photos, Personalized recommendations) and a single "Continue" CTA. **Does NOT launch the scan** (per your "marketing screen only" choice). Note: your original spec mentioned "Start Body Scan" — confirm in build mode if you'd prefer that linked instead.
+4. **Customizing your plan loader** — full-screen step that runs after Save, before navigating to `/paywall` or `/home`. Sequence of 6 lines that tick on in order (200–500ms each) with a single animated progress bar from 0→100% over ~3s:
+   - Analyzing your goal
+   - Building your workout plan
+   - Setting your calorie target
+   - Matching exercises to your equipment
+   - Personalizing your nutrition
+   - Preparing your dashboard
 
-### 5. Cron (Sunday 22:00 UTC)
+Other spec items mapped to existing steps (already collected, just reordered / relabeled where needed): gender, experience, days/week, goal, equipment (multi-select — current flow is single-select; switch the Equipment step to multi-select array stored as `equipmentSetups: EquipmentSetup[]` with primary = first), name, age, units, current weight, goal weight.
 
-Public route `src/routes/api/public/hooks/finalize-weekly-reports.ts` (apikey-header auth). Iterates users who have any logged activity in the past week and calls finalize for each. Scheduled via `pg_cron` + `pg_net` using the apikey pattern.
+**Save behavior:** Continue to save the whole `Draft` to profile on the existing final step; the new fields ride along. Referral code + source are stored on the profile object.
 
-### 6. Routes & UI
+**Progress bar:** existing top progress indicator continues to work since steps are part of the same array.
 
-- `src/routes/_app.report.index.tsx` — current week report. Sections: Summary card (date range, overall score ring, AI summary, achievement/improve), Workouts, Nutrition, Body Progress, Consistency Score (radial + breakdown bars), AI Insights, Next Week Plan, Achievements grid. Empty state: "Log workouts and meals this week to generate your first weekly report."
-- `src/routes/_app.report.history.tsx` — list of past finalized reports.
-- `src/routes/_app.report.$weekStart.tsx` — historical report detail.
-- `src/routes/_app.notifications.tsx` — notification center.
+---
 
-### 7. Entry points
+## Part 3 — Paywall: add referral input (track-only)
 
-- Home (`_app.home.tsx`): "Your Weekly Report" card — shows score + "View this week's report" if data exists, otherwise "Weekly report builds as you log workouts and meals."
-- Progress (`_app.progress.tsx`): Weekly Report row + History link.
-- Profile (`_app.profile.tsx`): Weekly Report row + Notification settings.
-- Coach (`_app.coach.tsx`): "View weekly report" suggestion chip.
-- New "Weekly Report" item in bottom-nav overflow / inside Progress (avoid crowding the existing 5-tab nav).
-- Notification bell icon in `_app.tsx` top bar with unread badge → `/notifications`.
+`src/routes/paywall.tsx`:
+- New collapsible "Have a referral code?" section above the CTA.
+- Input + Apply button → on apply, persist to profile (`referralCode`), show inline `✓ Code saved` state. No price change, no validation.
+- Safe-area padding (`pb-safe`).
 
-### 8. Quick-log UI (minimal, so the report has real data)
+---
 
-Simple sheets reachable from Home "+" FAB:
-- Log workout (name, duration, sets, reps, volume, muscle groups chips, "Mark PR")
-- Log meal (name, meal type, calories, protein, carbs, fat)
-- Log weight (single number)
-- Log steps/sleep (daily)
-- Set goals (calorie/protein/step/workout targets, timezone, goal weight)
+## Part 4 — Use onboarding data
 
-These are intentionally lightweight — just enough for the report to be real, not a full nutrition/workout tracker overhaul.
+Mostly already wired (`workoutRecommendationService`, `suggestNutrition`, `saveGoals` are already called on the final onboarding step). Verification + small fixes only:
+- Confirm goal, experience, daysPerWeek, equipment, currentWeight, goalWeight, age, gender flow into the existing recommendation calls. Adjust calls if the equipment field becomes an array (use first item as primary for the existing single-equipment engine).
+- Personalize Home greeting using `profile.name` (already supported by `useProfile`).
+- No new plan engine; we're not re-architecting business logic (out of scope per "UI change → keep work in frontend").
 
-### 9. AI prompt
+---
 
-System: "You are a supportive fitness coach. Use the user's real weekly stats. Be encouraging and realistic. No medical claims. No shaming. Give one concrete action plan." User payload: JSON of week stats + goals + recent progress photos count + weight trend. Returns structured JSON via AI SDK `Output.object`.
+## Part 5 — Quality checklist (what we'll verify before closing)
 
-### 10. Design
+- App opens in standalone mode after Add to Home Screen (manifest + apple meta).
+- No white rubber-band gap (body bg + `overscroll-behavior: none`).
+- Bottom nav clears the home indicator (`pb-safe`).
+- Onboarding steps all advance, save, and route to `/paywall` then `/home`.
+- Referral code visible in onboarding and on paywall.
+- Body scan teaser renders and continues.
+- Customizing-plan loader runs and routes correctly.
 
-Reuse existing dark theme + neon-green accents, `rounded-2xl` cards, shadcn primitives, lucide icons, mobile-first. Score ring uses an SVG circular progress. Charts: simple inline bars (no chart library needed for v1).
+---
 
-### Out of scope (v1)
+## Technical notes
 
-- Push/email notifications (in-app only)
-- Premium gating
-- Body-scan integration (already separate)
-- Editing past reports
+- **Icons & splashes**: generated with `imagegen` (dark `#0A0A0A` bg, neon `#C6FF00`-style mark) and placed in `public/`. ~10 PNGs total.
+- **No DB migration**: referral source/code stored on the in-memory/persisted `Profile` (the existing `ProfileProvider`). If you later want analytics in Supabase, we can add a `referrals` table in a follow-up — flagged but not in this plan.
+- **No new packages.**
+- **Files touched (estimate)**: `public/*` (new), `src/routes/__root.tsx`, `src/styles.css`, `src/routes/_app.tsx`, `src/routes/onboarding.tsx`, `src/routes/paywall.tsx`, `src/lib/profile.tsx` (extend Profile/Draft types).
 
-### Technical notes
+## Out of scope (call out)
 
-- Week boundaries computed server-side from `user_goals.timezone`.
-- Finalize is idempotent via unique `(user_id, week_start)`.
-- Current-week view always live-computes; never reads stale snapshot for the active week.
-- AI errors degrade gracefully: report renders with a fallback summary if AI call fails.
+- Service worker / offline caching.
+- Referral discount logic or backend validation.
+- Native body-scan launch from the teaser step (marketing-only).
+- New plan generation engine — we reuse the existing services.

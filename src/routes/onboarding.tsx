@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Check, Flame, Dumbbell, Sparkles, Heart, Activity, Home, Building2,
   TrendingDown, Mountain, Layers, Calendar, Zap, Footprints, Salad, Apple, Bike,
+  Instagram, Youtube, Users, Search, Smartphone, MoreHorizontal, Music2, Scan, Camera, LineChart,
 } from "lucide-react";
 import { AnimatedAthlete } from "@/components/AnimatedAthlete";
 import {
@@ -30,6 +31,8 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
+type ReferralSource = NonNullable<Profile["referralSource"]>;
+
 interface Draft {
   name: string;
   goal: Goal;
@@ -46,11 +49,14 @@ interface Draft {
   bodyFatPct?: number;
   activityLevel: ActivityLevel;
   avgStepsPerDay?: number;
-  goalTargetDate: string; // ISO
+  goalTargetDate: string;
   deficitSplit: DeficitSplit;
   bulkPace: BulkPace;
   nutritionPlan: NutritionPlan;
   units: "metric" | "imperial";
+  referralSource?: ReferralSource;
+  referralCode?: string;
+  equipmentItems: string[];
 }
 
 const defaultTargetDate = () => {
@@ -80,10 +86,13 @@ const DEFAULT_DRAFT: Draft = {
   bulkPace: "lean",
   nutritionPlan: "muscle_gain",
   units: "metric",
+  referralSource: undefined,
+  referralCode: "",
+  equipmentItems: ["Dumbbells"],
 };
 
 
-const TOTAL = 12; // 0 welcome + 11 question steps
+const TOTAL = 15; // welcome + 14 question steps
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -118,29 +127,22 @@ function Onboarding() {
   };
 
   const finish = () => {
-    setGenerating(true);
-    const profile: Profile = { ...d, name: d.name.trim() || "Athlete", completedAt: new Date().toISOString() };
-    // Persist personalized nutrition goals
+    const profile: Profile = {
+      ...d,
+      name: d.name.trim() || "Athlete",
+      referralCode: d.referralCode?.trim() || undefined,
+      completedAt: new Date().toISOString(),
+    };
     saveGoals(suggestNutrition(profile));
-    setTimeout(() => {
-      setProfile(profile);
-      navigate({ to: "/paywall" });
-    }, 1800);
+    setProfile(profile);
+    setGenerating(true); // CustomizingPlan handles navigation when its progress completes
   };
 
   if (generating) {
-    return (
-      <div className="min-h-dvh bg-background grid place-items-center px-6 text-center">
-        <div className="animate-slide-up">
-          <AnimatedAthlete size={240} className="mx-auto" />
-          <h2 className="mt-8 text-2xl font-bold">Building your plan</h2>
-          <p className="mt-2 text-muted-foreground">Tailoring workouts and nutrition…</p>
-        </div>
-      </div>
-    );
+    return <CustomizingPlan onDone={() => navigate({ to: "/paywall" })} />;
   }
 
-  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Plan"];
+  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Source", "Referral", "Body Scan", "Plan"];
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -193,7 +195,10 @@ function Onboarding() {
             {step === 8 && <ActivityStep d={d} update={update} />}
             {step === 9 && <TimelineStep d={d} update={update} />}
             {step === 10 && <NutritionStep value={d.nutritionPlan} onChange={(g) => update("nutritionPlan", g)} />}
-            {step === 11 && <ReviewStep d={d} />}
+            {step === 11 && <ReferralSourceStep value={d.referralSource} onChange={(v) => update("referralSource", v)} />}
+            {step === 12 && <ReferralCodeStep value={d.referralCode ?? ""} onChange={(v) => update("referralCode", v)} />}
+            {step === 13 && <BodyScanTeaserStep />}
+            {step === 14 && <ReviewStep d={d} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -804,3 +809,199 @@ function Macro({ label, value, highlight }: { label: string; value: number; high
     </div>
   );
 }
+
+/* -------- New steps -------- */
+
+const REFERRAL_SOURCES: { id: ReferralSource; label: string; icon: typeof Flame }[] = [
+  { id: "tiktok", label: "TikTok", icon: Music2 },
+  { id: "instagram", label: "Instagram", icon: Instagram },
+  { id: "youtube", label: "YouTube", icon: Youtube },
+  { id: "friend", label: "From a friend", icon: Users },
+  { id: "appstore", label: "App Store", icon: Smartphone },
+  { id: "google", label: "Google search", icon: Search },
+  { id: "other", label: "Somewhere else", icon: MoreHorizontal },
+];
+
+function ReferralSourceStep({ value, onChange }: { value: ReferralSource | undefined; onChange: (v: ReferralSource) => void }) {
+  return (
+    <div>
+      <StepHeader title="How did you hear about us?" sub="This helps us improve — totally optional." />
+      <div className="space-y-2.5">
+        {REFERRAL_SOURCES.map(({ id, label, icon }) => (
+          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} icon={icon} label={label} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReferralCodeStep({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [applied, setApplied] = useState(false);
+  return (
+    <div>
+      <StepHeader title="Have a referral code?" sub="Add it now or skip — you can apply one later on the paywall." />
+      <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">Referral code</label>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            value={value}
+            onChange={(e) => { onChange(e.target.value.toUpperCase()); setApplied(false); }}
+            placeholder="e.g. PULSE2026"
+            maxLength={24}
+            className="flex-1 h-12 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tracking-widest uppercase outline-none focus:border-neon/40"
+          />
+          <button
+            onClick={() => value.trim() && setApplied(true)}
+            disabled={!value.trim()}
+            className={cn(
+              "h-12 px-4 rounded-xl text-sm font-semibold transition",
+              value.trim() ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-muted-foreground"
+            )}
+          >
+            Apply
+          </button>
+        </div>
+        {applied && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-neon">
+            <Check className="size-4" strokeWidth={3} /> Code saved — we'll apply it at checkout
+          </div>
+        )}
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">No code? Tap Continue to skip.</p>
+    </div>
+  );
+}
+
+function BodyScanTeaserStep() {
+  const bullets = [
+    { icon: Scan, text: "Upload or scan your body in seconds" },
+    { icon: Sparkles, text: "AI-powered physique feedback" },
+    { icon: Camera, text: "Track changes with progress photos" },
+    { icon: LineChart, text: "See your transformation over time" },
+    { icon: Zap, text: "Personalized recommendations for your plan" },
+  ];
+  return (
+    <div>
+      <StepHeader title="Get your physique analysis" sub="Unlock smarter coaching by adding a body scan after you start." />
+      <div className="rounded-3xl border border-neon/30 bg-gradient-to-br from-neon/10 via-transparent to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="size-12 rounded-2xl bg-neon text-neon-foreground grid place-items-center">
+            <Scan className="size-6" />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">Pulse Body Scan</div>
+            <div className="text-lg font-extrabold">AI physique tracking</div>
+          </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          {bullets.map((b, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="size-9 rounded-xl bg-white/[0.05] grid place-items-center shrink-0">
+                <b.icon className="size-4 text-neon" />
+              </div>
+              <span className="text-sm">{b.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground text-center">
+        You can start your first scan anytime from the Profile or Progress tab.
+      </p>
+    </div>
+  );
+}
+
+/* -------- Customizing plan loader -------- */
+
+const PLAN_STEPS = [
+  "Analyzing your goal",
+  "Building your workout plan",
+  "Setting your calorie target",
+  "Matching exercises to your equipment",
+  "Personalizing your nutrition",
+  "Preparing your dashboard",
+];
+
+function CustomizingPlan({ onDone }: { onDone: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    const total = 3200; // ms
+    const tick = 40;
+    let elapsed = 0;
+    const id = setInterval(() => {
+      elapsed += tick;
+      const p = Math.min(1, elapsed / total);
+      setProgress(p);
+      setCurrentStep(Math.min(PLAN_STEPS.length, Math.floor(p * PLAN_STEPS.length) + 1));
+      if (p >= 1) {
+        clearInterval(id);
+        setTimeout(onDone, 350);
+      }
+    }, tick);
+    return () => clearInterval(id);
+  }, [onDone]);
+
+  return (
+    <div className="min-h-dvh bg-background flex flex-col px-6 pt-safe pb-safe">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neon/10 border border-neon/30">
+            <Sparkles className="size-3.5 text-neon" />
+            <span className="text-[10px] font-bold tracking-[0.2em] text-neon uppercase">Customizing your plan</span>
+          </div>
+          <h2 className="mt-5 text-3xl font-extrabold leading-tight">
+            Building something<br /><span className="text-neon">just for you</span>
+          </h2>
+          <div className="mt-6 h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
+            <motion.div
+              className="h-full bg-neon"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress * 100}%` }}
+              transition={{ ease: "linear" }}
+            />
+          </div>
+          <div className="mt-2 text-[11px] tabular-nums text-muted-foreground">
+            {Math.round(progress * 100)}%
+          </div>
+        </div>
+
+        <ul className="mt-10 space-y-3">
+          {PLAN_STEPS.map((label, i) => {
+            const done = i < currentStep - 1;
+            const active = i === currentStep - 1;
+            return (
+              <motion.li
+                key={label}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: done || active ? 1 : 0.35, x: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex items-center gap-3"
+              >
+                <div className={cn(
+                  "size-7 rounded-full grid place-items-center shrink-0 border transition",
+                  done ? "bg-neon border-neon text-neon-foreground"
+                    : active ? "border-neon text-neon"
+                    : "border-white/15 text-muted-foreground"
+                )}>
+                  {done
+                    ? <Check className="size-4" strokeWidth={3} />
+                    : active
+                      ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                          <Sparkles className="size-3.5" />
+                        </motion.div>
+                      : <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>}
+                </div>
+                <span className={cn("text-sm font-medium", done && "text-foreground", active && "text-neon", !done && !active && "text-muted-foreground")}>
+                  {label}
+                </span>
+              </motion.li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+

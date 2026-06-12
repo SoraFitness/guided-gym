@@ -94,6 +94,8 @@ export interface Profile {
   units?: "metric" | "imperial";
   injuries?: string;
   equipmentItems?: string[];
+  referralSource?: "tiktok" | "instagram" | "youtube" | "friend" | "appstore" | "google" | "other";
+  referralCode?: string;
   completedAt: string;
 }
 
@@ -181,6 +183,8 @@ function migrate(raw: Record<string, unknown>): Profile {
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
     injuries: (raw.injuries as string) ?? "",
     equipmentItems: (raw.equipmentItems as string[]) ?? defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
+    referralSource: raw.referralSource as Profile["referralSource"],
+    referralCode: raw.referralCode as string | undefined,
     completedAt: (raw.completedAt as string) ?? new Date().toISOString(),
   };
 }
