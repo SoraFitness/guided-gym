@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera, Search, Plus, X, ScanLine, Sparkles, Trash2, Check, ChevronLeft, ChevronRight,
   Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
+  Star, ArrowLeft, BadgeCheck, History, Heart, Utensils,
 } from "lucide-react";
 import {
   foods, meals, entriesOn, macrosFor, entryFood,
@@ -14,6 +15,15 @@ import {
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { foodLookupService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { analyzeFoodImage, type FoodScanItem, type FoodScanResult } from "@/lib/foodScan.functions";
+import { searchFoodDatabase, type FoodSearchResult } from "@/lib/foodSearch.functions";
+import {
+  brandedFoods, popularBrands, searchBrandedPresets, findPresetById,
+  type BrandedFood, type BrandCategory,
+} from "@/lib/brandedFoods";
+import {
+  useRecentFoods, useFavoriteFoods, pushRecent, toggleFavorite, isFavorite, resultToStored,
+  type StoredFood,
+} from "@/lib/foodHistoryStore";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,8 +42,8 @@ function NutritionPage() {
   const today = useMemo(() => entriesOn(entries, day), [entries, day]);
   const totals = macrosFor(today);
 
-  const add = (entry: Omit<LogEntry, "id" | "loggedAt">) => {
-    storeAdd({ ...entry, loggedAt: day.toISOString() });
+  const add = (entry: Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string }) => {
+    storeAdd({ ...entry, loggedAt: entry.loggedAt ?? day.toISOString() });
   };
   const update = (id: string, patch: Partial<LogEntry>) => storeUpdate(id, patch);
   const remove = (id: string) => storeRemove(id);
@@ -348,13 +358,15 @@ function MealSection({
 
 type Tab = "search" | "barcode" | "photo" | "manual";
 
+type AddEntryArg = Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string };
+
 function AddFoodModal({
   meal, editEntry, onClose, onAdd,
 }: {
   meal: Meal;
   editEntry?: LogEntry;
   onClose: () => void;
-  onAdd: (entry: Omit<LogEntry, "id" | "loggedAt">) => void;
+  onAdd: (entry: AddEntryArg) => void;
 }) {
   // When editing, jump straight to manual prefilled from the entry
   const initialPrefill: LookupResult | null = editEntry
@@ -365,6 +377,7 @@ function AddFoodModal({
     : null;
   const [tab, setTab] = useState<Tab>(editEntry ? "manual" : "search");
   const [prefill, setPrefill] = useState<LookupResult | null>(initialPrefill);
+  const [confirming, setConfirming] = useState<StoredFood | null>(null);
 
   const handleResult = (r: LookupResult, source: "barcode" | "image") => {
     setPrefill({ ...r });
@@ -375,6 +388,20 @@ function AddFoodModal({
   const editSource = editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
     ? editEntry.custom.source
     : "manual";
+
+  // Confirmation screen takes over the whole sheet when a search result is selected.
+  if (confirming) {
+    return (
+      <Sheet onClose={onClose} title="Confirm food">
+        <FoodConfirmSheet
+          food={confirming}
+          defaultMeal={meal}
+          onBack={() => setConfirming(null)}
+          onSave={(entry) => { onAdd(entry); onClose(); }}
+        />
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
@@ -401,7 +428,7 @@ function AddFoodModal({
       )}
 
       <div className="mt-4 pb-6">
-        {tab === "search" && <SearchPanel meal={meal} onAdd={onAdd} />}
+        {tab === "search" && <SearchPanel meal={meal} onPick={setConfirming} />}
         {tab === "barcode" && <BarcodePanel onResult={(r) => handleResult(r, "barcode")} />}
         {tab === "photo" && (
           <PhotoPanel
@@ -426,12 +453,93 @@ function AddFoodModal({
   );
 }
 
-function SearchPanel({ meal, onAdd }: { meal: Meal; onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void }) {
-  const [q, setQ] = useState("");
-  const suggested = mealSuggestions(meal);
-  const list = q ? foods.filter((f) => f.name.toLowerCase().includes(q.toLowerCase())) : foods;
+// ============= Branded food search =============
 
-  const pick = (f: Food) => onAdd({ foodId: f.id, meal, servings: 1 });
+type SearchTab = "all" | "restaurant" | "grocery" | "protein" | "recent" | "favorites";
+
+function brandedToStored(b: BrandedFood): StoredFood {
+  return {
+    id: b.id, source: "preset", brand: b.brand, name: b.name, serving: b.serving,
+    kcal: b.kcal, protein: b.protein, carbs: b.carbs, fat: b.fat, verified: true, category: b.category,
+  };
+}
+
+function legacyFoodToStored(f: Food): StoredFood {
+  return {
+    id: `legacy:${f.id}`, source: "preset", brand: f.brand, name: f.name, serving: f.serving,
+    kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, verified: false, category: "generic",
+  };
+}
+
+function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) => void }) {
+  void meal;
+  const [q, setQ] = useState("");
+  const [tab, setTab] = useState<SearchTab>("all");
+  const [serverResults, setServerResults] = useState<FoodSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [serverErr, setServerErr] = useState(false);
+  const search = useServerFn(searchFoodDatabase);
+  const recents = useRecentFoods();
+  const favorites = useFavoriteFoods();
+
+  // Debounced server search
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) { setServerResults([]); setServerErr(false); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setLoading(true); setServerErr(false);
+      try {
+        const r = await search({ data: { query: trimmed } });
+        if (cancelled) return;
+        if (r.ok) setServerResults(r.results);
+        else { setServerResults([]); setServerErr(true); }
+      } catch (e) {
+        console.error("[searchFoodDatabase]", e);
+        if (!cancelled) { setServerResults([]); setServerErr(true); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q, search]);
+
+  // Local preset matches (instant)
+  const presetMatches = useMemo(() => searchBrandedPresets(q), [q]);
+
+  // Combined results: presets first (verified, curated), then API results
+  const combined: StoredFood[] = useMemo(() => {
+    const seen = new Set<string>();
+    const acc: StoredFood[] = [];
+    const push = (s: StoredFood) => {
+      const key = `${(s.brand ?? "").toLowerCase()}|${s.name.toLowerCase().slice(0, 40)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      acc.push(s);
+    };
+    presetMatches.forEach((b) => push(brandedToStored(b)));
+    serverResults.forEach((r) => push(resultToStored(r)));
+    if (!q.trim()) {
+      // when no query, surface a default sampler of curated presets
+      brandedFoods.slice(0, 20).forEach((b) => push(brandedToStored(b)));
+      // include legacy generic foods so existing users see familiar items
+      foods.forEach((f) => push(legacyFoodToStored(f)));
+    } else {
+      // also surface generic legacy matches in case API/presets miss them
+      foods
+        .filter((f) => f.name.toLowerCase().includes(q.toLowerCase()))
+        .forEach((f) => push(legacyFoodToStored(f)));
+    }
+    return acc;
+  }, [presetMatches, serverResults, q]);
+
+  // Filtered by tab
+  const visible: StoredFood[] = useMemo(() => {
+    if (tab === "recent") return recents;
+    if (tab === "favorites") return favorites;
+    if (tab === "all") return combined;
+    return combined.filter((s) => s.category === tab);
+  }, [tab, combined, recents, favorites]);
 
   return (
     <>
@@ -440,64 +548,147 @@ function SearchPanel({ meal, onAdd }: { meal: Meal; onAdd: (e: Omit<LogEntry, "i
         <input
           autoFocus
           className="flex-1 bg-transparent outline-none text-sm"
-          placeholder="Search foods"
+          placeholder="Search foods, brands, restaurants…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          maxLength={50}
+          maxLength={60}
         />
+        {loading && <Loader2 className="size-4 text-muted-foreground animate-spin" />}
+        {q && !loading && (
+          <button onClick={() => setQ("")} aria-label="Clear" className="size-6 grid place-items-center rounded-full hover:bg-white/[0.06]">
+            <X className="size-3.5 text-muted-foreground" />
+          </button>
+        )}
       </label>
 
-      {!q && (
+      {/* Category tabs */}
+      <div className="mt-3 -mx-1 px-1 flex gap-1.5 overflow-x-auto scrollbar-none">
+        {([
+          { id: "all",         label: "All",         Icon: Utensils },
+          { id: "restaurant",  label: "Restaurants", Icon: Utensils },
+          { id: "grocery",     label: "Grocery",     Icon: Utensils },
+          { id: "protein",     label: "Protein",     Icon: Utensils },
+          { id: "recent",      label: "Recent",      Icon: History  },
+          { id: "favorites",   label: "Favorites",   Icon: Heart    },
+        ] as { id: SearchTab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={cn(
+              "shrink-0 h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1 transition border",
+              tab === id
+                ? "bg-neon text-neon-foreground border-transparent"
+                : "bg-white/[0.04] text-muted-foreground border-white/[0.05]"
+            )}
+          >
+            <Icon className="size-3" /> {label}
+            {id === "recent" && recents.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{recents.length}</span>}
+            {id === "favorites" && favorites.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{favorites.length}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Popular brands carousel (only when no query and on "all" / category tabs) */}
+      {!q && tab !== "recent" && tab !== "favorites" && (
         <>
-          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Quick add for {meal.toLowerCase()}
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {suggested.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => pick(f)}
-                className="h-9 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
-              >
-                <span>{f.emoji}</span><span>{f.name}</span>
-              </button>
-            ))}
+          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Popular brands</h3>
+          <div className="-mx-1 px-1 flex gap-2 overflow-x-auto scrollbar-none pb-1">
+            {popularBrands
+              .filter((b) => tab === "all" || b.category === tab)
+              .map((b) => (
+                <button
+                  key={b.name}
+                  onClick={() => setQ(b.name)}
+                  className="shrink-0 h-10 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
+                >
+                  <span className="text-base leading-none">{b.emoji}</span>
+                  <span className="font-medium">{b.name}</span>
+                </button>
+              ))}
           </div>
         </>
       )}
 
-      <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-        {q ? "Results" : "All foods"}
+      {/* Server error notice (graceful — local presets still work) */}
+      {serverErr && q.trim().length >= 2 && (
+        <div className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+          <span>Branded database is unavailable right now — showing curated matches only.</span>
+        </div>
+      )}
+
+      <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+        <span>
+          {tab === "recent" ? "Recently logged"
+            : tab === "favorites" ? "Saved favorites"
+            : q ? "Results"
+            : "Suggested"}
+        </span>
+        {visible.length > 0 && (
+          <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">{visible.length} items</span>
+        )}
       </h3>
+
       <ul className="space-y-2">
-        {list.map((f) => (
-          <li key={f.id}>
-            <button
-              onClick={() => pick(f)}
-              className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.05] text-left active:scale-[0.99]"
-            >
-              <span className="text-xl">{f.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{f.name}</div>
-                <div className="text-[11px] text-muted-foreground">{f.serving} · P{f.protein} C{f.carbs} F{f.fat}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-neon tabular-nums text-sm">{f.kcal}</div>
-                <div className="text-[10px] text-muted-foreground">kcal</div>
-              </div>
-            </button>
+        {visible.map((s) => (
+          <li key={s.id}>
+            <FoodResultRow food={s} onPick={() => onPick(s)} />
           </li>
         ))}
-        {list.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">No matches.</p>}
+        {visible.length === 0 && (
+          <p className="text-center text-muted-foreground py-8 text-sm">
+            {tab === "recent" ? "No recent foods yet — start logging!"
+              : tab === "favorites" ? "Tap the star on a food to save it here."
+              : loading ? "Searching…"
+              : q ? "No matches. Try a different search or add manually."
+              : "No items."}
+          </p>
+        )}
       </ul>
     </>
   );
 }
 
-function mealSuggestions(meal: Meal): Food[] {
-  const tag = meal.toLowerCase();
-  const direct = foods.filter((f) => f.tags.includes(tag));
-  return [...direct, ...foods.filter((f) => !direct.includes(f))].slice(0, 6);
+function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void }) {
+  const [fav, setFav] = useState(() => isFavorite(food.id));
+  const macroLine = `P${Math.round(food.protein)} · C${Math.round(food.carbs)} · F${Math.round(food.fat)}`;
+  return (
+    <div className="relative w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.05]">
+      <button
+        onClick={onPick}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left active:scale-[0.99]"
+      >
+        <div className="size-10 rounded-xl bg-white/[0.05] grid place-items-center text-lg shrink-0">
+          {food.imageUrl ? (
+            <img src={food.imageUrl} alt="" className="size-10 rounded-xl object-cover" loading="lazy" />
+          ) : (
+            <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {food.brand && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">{food.brand}</span>
+            )}
+            {food.verified && <BadgeCheck className="size-3 text-neon shrink-0" />}
+          </div>
+          <div className="font-medium text-sm truncate">{food.name}</div>
+          <div className="text-[11px] text-muted-foreground truncate">{food.serving} · {macroLine}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-bold text-neon tabular-nums text-sm">{Math.round(food.kcal)}</div>
+          <div className="text-[10px] text-muted-foreground">kcal</div>
+        </div>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); setFav(toggleFavorite(food)); }}
+        aria-label={fav ? "Unfavorite" : "Favorite"}
+        className="size-8 grid place-items-center rounded-full hover:bg-white/[0.06] shrink-0"
+      >
+        <Star className={cn("size-4", fav ? "fill-neon text-neon" : "text-muted-foreground")} />
+      </button>
+    </div>
+  );
 }
 
 function BarcodePanel({ onResult }: { onResult: (r: LookupResult) => void }) {
@@ -1090,6 +1281,217 @@ function Sheet({ children, onClose, title }: { children: React.ReactNode; onClos
         @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideup { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
+    </div>
+  );
+}
+
+// ============= Food confirmation sheet (full screen) =============
+
+function toLocalDatetimeValue(iso: string): string {
+  // Convert ISO -> "YYYY-MM-DDTHH:mm" in local time for <input type="datetime-local">
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalDatetimeValue(v: string): string {
+  // Parses as local time -> ISO. Empty falls back to now.
+  return v ? new Date(v).toISOString() : new Date().toISOString();
+}
+
+function FoodConfirmSheet({
+  food,
+  defaultMeal,
+  onBack,
+  onSave,
+}: {
+  food: StoredFood;
+  defaultMeal: Meal;
+  onBack: () => void;
+  onSave: (entry: AddEntryArg) => void;
+}) {
+  const [servings, setServings] = useState(1);
+  const [serving, setServing] = useState(food.serving);
+  const [meal, setMeal] = useState<Meal>(defaultMeal);
+  const [when, setWhen] = useState(() => toLocalDatetimeValue(new Date().toISOString()));
+
+  const totals = {
+    kcal:    Math.round(food.kcal    * servings),
+    protein: Math.round(food.protein * servings * 10) / 10,
+    carbs:   Math.round(food.carbs   * servings * 10) / 10,
+    fat:     Math.round(food.fat     * servings * 10) / 10,
+  };
+
+  const bumpServings = (delta: number) => setServings((s) => Math.max(0.25, Math.round((s + delta) * 4) / 4));
+
+  const submit = () => {
+    const loggedAt = fromLocalDatetimeValue(when);
+    // Legacy preset (from the original src/lib/foods.ts) → store as foodId reference
+    if (food.id.startsWith("legacy:")) {
+      const foodId = food.id.slice("legacy:".length);
+      onSave({ meal, servings, foodId, loggedAt });
+      pushRecent({ ...food, kcal: food.kcal, protein: food.protein, carbs: food.carbs, fat: food.fat });
+      return;
+    }
+    // Everything else (curated preset, Nutritionix, USDA, OpenFoodFacts) → store as inline custom
+    onSave({
+      meal,
+      servings,
+      loggedAt,
+      custom: {
+        name: food.name,
+        brand: food.brand,
+        serving: serving.trim() || food.serving,
+        kcal: food.kcal,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        source: "preset",
+      },
+    });
+    pushRecent(food);
+  };
+
+  return (
+    <div className="pb-6">
+      <button onClick={onBack} className="mt-2 -ml-1 flex items-center gap-1 text-xs text-muted-foreground active:text-foreground">
+        <ArrowLeft className="size-3.5" /> Back to search
+      </button>
+
+      {/* Food header card */}
+      <div className="mt-3 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
+        <div className="flex items-start gap-3">
+          <div className="size-14 rounded-2xl bg-white/[0.05] grid place-items-center text-2xl shrink-0">
+            {food.imageUrl
+              ? <img src={food.imageUrl} alt="" className="size-14 rounded-2xl object-cover" />
+              : <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            {food.brand && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate">{food.brand}</span>
+                {food.verified && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon/15 border border-neon/30 text-[9px] font-bold text-neon">
+                    <BadgeCheck className="size-2.5" /> VERIFIED
+                  </span>
+                )}
+              </div>
+            )}
+            <h3 className="font-bold text-base leading-tight mt-0.5">{food.name}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+              Source: {food.source === "preset" ? "curated database"
+                : food.source === "nutritionix" ? "Nutritionix"
+                : food.source === "usda" ? "USDA FoodData Central"
+                : food.source === "openfoodfacts" ? "Open Food Facts"
+                : "custom"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+          {[
+            { label: "kcal", value: totals.kcal },
+            { label: "P", value: totals.protein },
+            { label: "C", value: totals.carbs },
+            { label: "F", value: totals.fat },
+          ].map((m) => (
+            <div key={m.label} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2">
+              <div className="text-base font-bold tabular-nums">{m.value}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quantity stepper */}
+      <Field label={`Quantity (× ${food.serving})`}>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => bumpServings(-0.25)}
+            disabled={servings <= 0.25}
+            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center disabled:opacity-40"
+            aria-label="Decrease"
+          >
+            <Minus className="size-4" />
+          </button>
+          <input
+            inputMode="decimal"
+            value={servings}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (Number.isFinite(v) && v > 0) setServings(Math.round(v * 4) / 4);
+              else if (e.target.value === "") setServings(0.25);
+            }}
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-center text-base font-semibold tabular-nums outline-none focus:border-neon/40"
+          />
+          <button
+            onClick={() => bumpServings(0.25)}
+            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center"
+            aria-label="Increase"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {[0.5, 1, 1.5, 2, 3].map((n) => (
+            <button
+              key={n}
+              onClick={() => setServings(n)}
+              className={cn(
+                "flex-1 h-8 rounded-full text-[11px] font-semibold border",
+                servings === n
+                  ? "bg-neon text-neon-foreground border-transparent"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+              )}
+            >
+              ×{n}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Serving size">
+        <input
+          value={serving}
+          onChange={(e) => setServing(e.target.value)}
+          className={inp}
+          maxLength={40}
+        />
+      </Field>
+
+      <Field label="Meal">
+        <div className="grid grid-cols-4 gap-1.5">
+          {meals.map((m) => (
+            <button
+              key={m}
+              onClick={() => setMeal(m)}
+              className={cn(
+                "h-10 rounded-xl text-[11px] font-semibold border",
+                meal === m
+                  ? "bg-neon text-neon-foreground border-transparent"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Date & time">
+        <input
+          type="datetime-local"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+          className={inp}
+        />
+      </Field>
+
+      <button
+        onClick={submit}
+        className="mt-4 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon active:scale-[0.98]"
+      >
+        <Check className="size-4" /> Save to {meal}
+      </button>
     </div>
   );
 }
