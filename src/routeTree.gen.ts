@@ -20,6 +20,7 @@ import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppCoachRouteImport } from './routes/_app.coach'
 import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
 import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
 import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
@@ -83,6 +84,11 @@ const AppHomeRoute = AppHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCoachRoute = AppCoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
+  getParentRoute: () => AppRoute,
+} as any)
 const WorkoutHistoryIndexRoute = WorkoutHistoryIndexRouteImport.update({
   id: '/workout/history/',
   path: '/workout/history/',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/coach': typeof AppCoachRoute
   '/home': typeof AppHomeRoute
   '/nutrition': typeof AppNutritionRoute
   '/profile': typeof AppProfileRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/_app/coach': typeof AppCoachRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/profile': typeof AppProfileRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/'
     | '/onboarding'
     | '/paywall'
+    | '/coach'
     | '/home'
     | '/nutrition'
     | '/profile'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/'
     | '/onboarding'
     | '/paywall'
+    | '/coach'
     | '/home'
     | '/nutrition'
     | '/profile'
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/onboarding'
     | '/paywall'
+    | '/_app/coach'
     | '/_app/home'
     | '/_app/nutrition'
     | '/_app/profile'
@@ -340,6 +352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/coach': {
+      id: '/_app/coach'
+      path: '/coach'
+      fullPath: '/coach'
+      preLoaderRoute: typeof AppCoachRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/workout/history/': {
       id: '/workout/history/'
       path: '/workout/history'
@@ -400,6 +419,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCoachRoute: typeof AppCoachRoute
   AppHomeRoute: typeof AppHomeRoute
   AppNutritionRoute: typeof AppNutritionRoute
   AppProfileRoute: typeof AppProfileRoute
@@ -412,6 +432,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCoachRoute: AppCoachRoute,
   AppHomeRoute: AppHomeRoute,
   AppNutritionRoute: AppNutritionRoute,
   AppProfileRoute: AppProfileRoute,
@@ -452,3 +473,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
