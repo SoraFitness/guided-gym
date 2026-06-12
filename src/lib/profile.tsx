@@ -154,12 +154,17 @@ function migrate(raw: Record<string, unknown>): Profile {
     energy: "maintain",
   };
   const equipMap = (loc: unknown): EquipmentSetup => (loc === "gym" ? "gym" : "none");
+  const days = (raw.daysPerWeek as 2 | 3 | 4 | 5 | 6) ?? 4;
+  const defaultActivity: Profile["activityLevel"] =
+    days <= 2 ? "light" : days <= 4 ? "moderate" : "very";
+  const defaultTarget = new Date();
+  defaultTarget.setDate(defaultTarget.getDate() + 84); // 12 weeks
   return {
     name: (raw.name as string) ?? "Athlete",
     goal: (raw.goal as string) in goalMap ? goalMap[raw.goal as string] : ((raw.goal as Goal) ?? "build_muscle"),
     experience: (raw.experience as ExperienceLevel) ?? "intermediate",
     equipment: (raw.equipment as EquipmentSetup) ?? equipMap(raw.location),
-    daysPerWeek: (raw.daysPerWeek as 2 | 3 | 4 | 5 | 6) ?? 4,
+    daysPerWeek: days,
     sessionMinutes: (raw.sessionMinutes as 20 | 30 | 45 | 60) ?? 30,
     focusAreas: (raw.focusAreas as FocusArea[]) ?? ["chest", "back", "legs"],
     currentWeightKg: (raw.currentWeightKg as number) ?? (raw.weightKg as number) ?? 70,
@@ -167,6 +172,12 @@ function migrate(raw: Record<string, unknown>): Profile {
     heightCm: (raw.heightCm as number) ?? 170,
     age: (raw.age as number) ?? 25,
     gender: (raw.gender as Gender) ?? "other",
+    bodyFatPct: (raw.bodyFatPct as number | undefined),
+    activityLevel: (raw.activityLevel as Profile["activityLevel"]) ?? defaultActivity,
+    avgStepsPerDay: (raw.avgStepsPerDay as number | undefined),
+    goalTargetDate: (raw.goalTargetDate as string) ?? defaultTarget.toISOString(),
+    deficitSplit: (raw.deficitSplit as Profile["deficitSplit"]) ?? "balanced",
+    bulkPace: (raw.bulkPace as Profile["bulkPace"]) ?? "lean",
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
     injuries: (raw.injuries as string) ?? "",
     equipmentItems: (raw.equipmentItems as string[]) ?? defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
