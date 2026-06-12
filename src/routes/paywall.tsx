@@ -236,3 +236,57 @@ function PlanCard({
     </button>
   );
 }
+
+const COMPARISON_ROWS: { label: string; free: string | false; premium: string | true }[] = [
+  { label: "Basic workouts", free: "Yes", premium: "Yes" },
+  { label: "Personalized workout plans", free: false, premium: "Yes" },
+  { label: "3D exercise demos", free: "Limited", premium: "Full access" },
+  { label: "Nutrition tracking", free: "Basic", premium: "Advanced" },
+  { label: "Progress tracking", free: "Basic", premium: "Advanced" },
+  { label: "Body scan insights", free: false, premium: "Yes" },
+  { label: "Premium tools", free: false, premium: "Yes" },
+  { label: "Guided structure & coaching", free: "Limited", premium: "Yes" },
+];
+
+function ComparisonTable() {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur overflow-hidden">
+      {/* Header row */}
+      <div className="grid grid-cols-[1.3fr_0.8fr_0.9fr] items-center px-4 py-3 border-b border-white/10 bg-white/[0.02]">
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground">FEATURE</span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground text-center">FREE</span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-neon text-center flex items-center justify-center gap-1">
+          <Sparkles className="h-3 w-3" /> PREMIUM
+        </span>
+      </div>
+
+      {COMPARISON_ROWS.map((row, i) => (
+        <div
+          key={row.label}
+          className={cn(
+            "grid grid-cols-[1.3fr_0.8fr_0.9fr] items-center px-4 py-3",
+            i !== COMPARISON_ROWS.length - 1 && "border-b border-white/5",
+          )}
+        >
+          <span className="text-[13px] font-medium pr-2">{row.label}</span>
+          <span className="text-center">
+            {row.free === false ? (
+              <X className="inline h-4 w-4 text-muted-foreground/50" />
+            ) : (
+              <span className="text-xs text-muted-foreground">{row.free}</span>
+            )}
+          </span>
+          <span className="text-center">
+            {row.premium === true || row.premium === "Yes" ? (
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neon/15 border border-neon/30">
+                <Check className="h-3 w-3 text-neon" strokeWidth={3} />
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-neon">{row.premium}</span>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
