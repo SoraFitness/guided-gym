@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Clock, Flame, Play, Heart, Eye } from "lucide-react";
 import { getWorkout, type Workout } from "@/lib/workouts";
+import { startSession } from "@/lib/workoutSessionStore";
 
 export const Route = createFileRoute("/workout/$id")({
   head: ({ params }) => ({
@@ -25,8 +26,13 @@ export const Route = createFileRoute("/workout/$id")({
 function WorkoutDetail() {
   const w = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
-  const startSessionNav = () =>
+  const startSessionNav = () => {
+    // eslint-disable-next-line no-console
+    console.log("[workout] Let's workout clicked", w.id);
+    startSession(w.id);
     navigate({ to: "/workout/$id/session", params: { id: w.id } });
+  };
+
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
