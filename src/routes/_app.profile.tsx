@@ -232,9 +232,7 @@ function EquipmentSheet({
   open, initial, onClose, onSave,
 }: { open: boolean; initial: string[]; onClose: () => void; onSave: (items: string[]) => void }) {
   const [selected, setSelected] = useState<string[]>(initial);
-  // Reset local state whenever sheet opens
-  const key = open ? initial.join("|") : "closed";
-  useState(() => key); // noop — local state below resets on remount via parent key strategy
+
 
   const toggle = (item: string) => {
     setSelected((cur) => {
