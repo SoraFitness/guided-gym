@@ -1,8 +1,11 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Home, Dumbbell, Apple, ScanLine, User } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
+import { AppTour } from "@/components/tour/AppTour";
+import { TOUR_STEPS } from "@/lib/tourSteps";
+import { markTourCompleted, useTourCompleted } from "@/lib/tourStore";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
@@ -21,10 +24,19 @@ function AppShell() {
   const { profile, ready } = useProfile();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const tourCompleted = useTourCompleted();
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     if (ready && !profile) navigate({ to: "/onboarding" });
   }, [ready, profile, navigate]);
+
+  // auto-open tour the first time the user lands in the app with a profile
+  useEffect(() => {
+    if (ready && profile && !tourCompleted && !tourOpen) {
+      setTourOpen(true);
+    }
+  }, [ready, profile, tourCompleted, tourOpen]);
 
   const hideTabs =
     pathname.startsWith("/workout/") ||
@@ -60,6 +72,16 @@ function AppShell() {
 
         </nav>
       )}
+
+      <AppTour
+        open={tourOpen}
+        steps={TOUR_STEPS}
+        onClose={(completed) => {
+          if (completed) markTourCompleted();
+          setTourOpen(false);
+        }}
+      />
     </div>
   );
 }
+
