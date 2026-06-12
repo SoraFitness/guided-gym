@@ -564,6 +564,145 @@ function WeightImperialSlider({ label, valueKg, onChange }: { label: string; val
   );
 }
 
+function ActivityStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+  const items: { id: ActivityLevel; icon: typeof Flame }[] = [
+    { id: "sedentary", icon: Heart },
+    { id: "light", icon: Activity },
+    { id: "moderate", icon: Bike },
+    { id: "very", icon: Flame },
+    { id: "athlete", icon: Zap },
+  ];
+  return (
+    <div>
+      <StepHeader
+        title="Daily activity"
+        sub="Outside of planned workouts. We use this for TDEE — we won't double-count your training."
+      />
+      <div className="space-y-2.5">
+        {items.map(({ id, icon }) => (
+          <ChoiceCard
+            key={id}
+            active={d.activityLevel === id}
+            onClick={() => update("activityLevel", id)}
+            icon={icon}
+            label={ACTIVITY_LABELS[id]}
+            sub={ACTIVITY_DESCRIPTIONS[id]}
+          />
+        ))}
+      </div>
+      <div className="mt-5 rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+          Average daily steps (optional)
+        </label>
+        <div className="mt-2 flex items-center gap-3">
+          <Footprints className="size-5 text-neon shrink-0" />
+          <input
+            inputMode="numeric"
+            placeholder="e.g. 8000"
+            value={d.avgStepsPerDay ?? ""}
+            onChange={(e) => {
+              const v = Number(e.target.value.replace(/[^0-9]/g, ""));
+              update("avgStepsPerDay", v > 0 ? v : undefined);
+            }}
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tabular-nums outline-none focus:border-neon/40"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+  const goalKind: "lose" | "gain" | "maintain" | "recomp" =
+    d.goal === "lose_weight" ? "lose" :
+    d.goal === "build_muscle" ? "gain" :
+    d.goal === "recomp" ? "recomp" :
+    d.goal === "maintain" ? "maintain" :
+    d.currentWeightKg > d.goalWeightKg ? "lose" :
+    d.currentWeightKg < d.goalWeightKg ? "gain" : "maintain";
+
+  const minDate = new Date(); minDate.setDate(minDate.getDate() + 14);
+  const minStr = minDate.toISOString().slice(0, 10);
+  const cur = d.goalTargetDate ? d.goalTargetDate.slice(0, 10) : minStr;
+  const splits: DeficitSplit[] = ["mostly_diet", "balanced", "mostly_exercise"];
+
+  return (
+    <div>
+      <StepHeader
+        title="Your timeline"
+        sub="Pick a realistic target date — we'll calculate the deficit, intake, and workout burn for you."
+      />
+
+      <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">Target date</label>
+        <div className="mt-2 flex items-center gap-3">
+          <Calendar className="size-5 text-neon shrink-0" />
+          <input
+            type="date"
+            min={minStr}
+            value={cur}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              update("goalTargetDate", new Date(e.target.value).toISOString());
+            }}
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base outline-none focus:border-neon/40 [color-scheme:dark]"
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          We recommend at least 2 weeks per pound (or per ~0.5 kg) for sustainable progress.
+        </p>
+      </div>
+
+      {goalKind === "lose" && (
+        <div className="mt-5">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+            How do you want to create the deficit?
+          </div>
+          <div className="space-y-2">
+            {splits.map((s) => (
+              <ChoiceCard
+                key={s}
+                active={d.deficitSplit === s}
+                onClick={() => update("deficitSplit", s)}
+                icon={s === "mostly_diet" ? Salad : s === "mostly_exercise" ? Flame : Apple}
+                label={SPLIT_LABELS[s]}
+                sub={
+                  s === "mostly_diet" ? "90% from food cuts, 10% from workouts" :
+                  s === "balanced" ? "70% from food cuts, 30% from workouts" :
+                  "50% from food cuts, 50% from workouts"
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {goalKind === "gain" && (
+        <div className="mt-5">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Bulk pace</div>
+          <div className="grid grid-cols-2 gap-3">
+            {(["lean", "faster"] as BulkPace[]).map((b) => (
+              <button
+                key={b}
+                onClick={() => update("bulkPace", b)}
+                className={cn(
+                  "h-20 rounded-2xl border flex flex-col items-center justify-center transition",
+                  d.bulkPace === b ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
+                )}
+              >
+                <span className="text-base font-bold capitalize">{b} bulk</span>
+                <span className="text-[11px] text-muted-foreground mt-0.5">
+                  {b === "lean" ? "+7% TDEE · cleaner" : "+12% TDEE · faster"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function NutritionStep({ value, onChange }: { value: NutritionPlan; onChange: (v: NutritionPlan) => void }) {
   const items: { id: NutritionPlan; sub: string; icon: typeof Flame }[] = [
