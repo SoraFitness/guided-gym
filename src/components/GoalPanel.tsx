@@ -68,7 +68,7 @@ export function GoalPanel() {
 
   // Plan progress
   const startKg = profile.currentWeightKg;
-  const latest = getLatestWeight();
+  const latest = weights.length > 0 ? weights[weights.length - 1] : null;
   const currentKg = latest?.kg ?? startKg;
   const goalKg = profile.goalWeightKg;
   const totalDeltaKg = startKg - goalKg;
