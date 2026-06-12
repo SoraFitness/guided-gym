@@ -2,8 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   LogOut, Settings, ChevronRight, Target, Dumbbell, Apple, Flame, Sparkles, Check,
-  BarChart3, ScanLine, Compass, type LucideIcon,
+  BarChart3, ScanLine, Compass, Camera, type LucideIcon,
 } from "lucide-react";
+
 import {
   useProfile, GOAL_LABELS, GOAL_OPTIONS, EQUIPMENT_LABELS, EQUIPMENT_OPTIONS,
   EXPERIENCE_LABELS, deriveEquipmentSetup,
@@ -128,9 +129,13 @@ function ProfilePage() {
         <Link to="/progress" className="block active:bg-white/[0.03]">
           <RowContent icon={BarChart3} label="Progress" value="View workouts & streaks" />
         </Link>
+        <Link to="/photos" className="block active:bg-white/[0.03]">
+          <RowContent icon={Camera} label="Progress Pictures" value="Private transformation gallery" />
+        </Link>
         <Link to="/scan/body" className="block active:bg-white/[0.03]">
           <RowContent icon={ScanLine} label="Body Scan history" value="Track your physique over time" />
         </Link>
+
         <button type="button" onClick={restartTour} className="block w-full text-left active:bg-white/[0.03]">
           <RowContent icon={Compass} label="App tour" value="Restart the guided walkthrough" />
         </button>
