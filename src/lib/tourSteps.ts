@@ -25,7 +25,7 @@ export interface TourStep {
 export const TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
-    title: "Welcome to Pulse",
+    title: "Welcome to Ascendr",
     body: "A 60-second tour of everything you can do — your workouts, nutrition, scans, and progress.",
     icon: Sparkles,
     placement: "center",

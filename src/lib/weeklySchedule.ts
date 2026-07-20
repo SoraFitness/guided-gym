@@ -1,5 +1,11 @@
 import type { Profile, EquipmentSetup, ExperienceLevel } from "./profile";
-import { workouts, type Workout, type Difficulty } from "./workouts";
+import {
+  getWorkout,
+  workoutRecommendationService,
+  type Workout,
+  type Difficulty,
+} from "./workouts";
+import type { WorkoutSplitId } from "./workoutSplits";
 
 export type SplitLabel =
   | "Push Day"
@@ -11,6 +17,16 @@ export type SplitLabel =
   | "Full Body Conditioning"
   | "Pull + Core"
   | "Conditioning / Core"
+  | "Chest + Back"
+  | "Shoulders + Arms"
+  | "Chest"
+  | "Back"
+  | "Shoulders"
+  | "Arms"
+  | "Power Upper"
+  | "Power Lower"
+  | "Hypertrophy Upper"
+  | "Hypertrophy Lower"
   | "Rest";
 
 export interface WeeklyScheduleDay {
@@ -33,7 +49,7 @@ export interface WeeklyScheduleDay {
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-const SPLITS: Record<2 | 3 | 4 | 5 | 6, SplitLabel[]> = {
+const AUTO_SPLITS: Record<2 | 3 | 4 | 5 | 6, SplitLabel[]> = {
   2: ["Full Body Strength", "Rest", "Full Body Conditioning", "Rest", "Rest", "Rest", "Rest"],
   3: ["Push Day", "Rest", "Pull Day", "Rest", "Leg Day", "Rest", "Rest"],
   4: ["Upper Body", "Rest", "Lower Body", "Rest", "Push Day", "Pull + Core", "Rest"],
@@ -41,21 +57,93 @@ const SPLITS: Record<2 | 3 | 4 | 5 | 6, SplitLabel[]> = {
   6: ["Push Day", "Pull Day", "Leg Day", "Rest", "Push Day", "Pull Day", "Leg Day"],
 };
 
+const TRAINING_POSITIONS: Record<2 | 3 | 4 | 5 | 6, number[]> = {
+  2: [0, 3],
+  3: [0, 2, 4],
+  4: [0, 1, 3, 4],
+  5: [0, 1, 2, 4, 5],
+  6: [0, 1, 2, 4, 5, 6],
+};
+
+const SPLIT_CYCLES: Record<Exclude<WorkoutSplitId, "auto">, SplitLabel[]> = {
+  full_body: ["Full Body Strength", "Full Body Conditioning"],
+  upper_lower: ["Upper Body", "Lower Body"],
+  push_pull_legs: ["Push Day", "Pull Day", "Leg Day"],
+  ppl_upper_lower: ["Push Day", "Pull Day", "Leg Day", "Upper Body", "Lower Body"],
+  phul: ["Power Upper", "Power Lower", "Hypertrophy Upper", "Hypertrophy Lower"],
+  arnold: ["Chest + Back", "Shoulders + Arms", "Leg Day"],
+  body_part: ["Chest", "Back", "Leg Day", "Shoulders", "Arms"],
+};
+
+function buildWeeklySplit(
+  splitId: WorkoutSplitId,
+  daysPerWeek: 2 | 3 | 4 | 5 | 6,
+  weekStart: string,
+): SplitLabel[] {
+  if (splitId === "auto") return AUTO_SPLITS[daysPerWeek];
+
+  const cycle = SPLIT_CYCLES[splitId];
+  const labels: SplitLabel[] = Array.from({ length: 7 }, () => "Rest");
+  const epochWeek = Math.floor(new Date(`${weekStart}T00:00:00Z`).getTime() / 604_800_000);
+  const cycleOffset = (epochWeek * daysPerWeek) % cycle.length;
+
+  TRAINING_POSITIONS[daysPerWeek].forEach((dayPosition, trainingIndex) => {
+    labels[dayPosition] = cycle[(cycleOffset + trainingIndex) % cycle.length];
+  });
+
+  return labels;
+}
+
+type ExercisePoolLabel =
+  | "Push Day"
+  | "Pull Day"
+  | "Leg Day"
+  | "Upper Body"
+  | "Lower Body"
+  | "Full Body Strength"
+  | "Full Body Conditioning"
+  | "Pull + Core"
+  | "Conditioning / Core";
+
 // Equipment-specific exercise pools per split label
-const EXERCISE_POOLS: Record<EquipmentSetup, Record<Exclude<SplitLabel, "Rest">, string[]>> = {
+const EXERCISE_POOLS: Record<EquipmentSetup, Record<ExercisePoolLabel, string[]>> = {
   gym: {
-    "Push Day": ["Bench Press", "Shoulder Press", "Incline DB Press", "Triceps Pushdown", "Lateral Raise"],
+    "Push Day": [
+      "Bench Press",
+      "Shoulder Press",
+      "Incline DB Press",
+      "Triceps Pushdown",
+      "Lateral Raise",
+    ],
     "Pull Day": ["Lat Pulldown", "Cable Row", "Barbell Row", "Face Pull", "Bicep Curl"],
     "Leg Day": ["Barbell Squat", "Leg Press", "Romanian Deadlift", "Hamstring Curl", "Calf Raise"],
     "Upper Body": ["Bench Press", "Lat Pulldown", "Shoulder Press", "Cable Row", "Bicep Curl"],
     "Lower Body": ["Barbell Squat", "Leg Press", "Hamstring Curl", "Walking Lunge", "Calf Raise"],
     "Full Body Strength": ["Barbell Squat", "Bench Press", "Cable Row", "Shoulder Press", "Plank"],
-    "Full Body Conditioning": ["Kettlebell Swing", "Goblet Squat", "Push Press", "Row Erg", "Burpees"],
+    "Full Body Conditioning": [
+      "Kettlebell Swing",
+      "Goblet Squat",
+      "Push Press",
+      "Row Erg",
+      "Burpees",
+    ],
     "Pull + Core": ["Lat Pulldown", "Cable Row", "Face Pull", "Cable Crunch", "Hanging Leg Raise"],
-    "Conditioning / Core": ["Assault Bike", "Kettlebell Swing", "Cable Crunch", "Plank", "Mountain Climbers"],
+    "Conditioning / Core": [
+      "Assault Bike",
+      "Kettlebell Swing",
+      "Cable Crunch",
+      "Plank",
+      "Mountain Climbers",
+    ],
   },
   dumbbells: {
-    "Push Day": ["DB Bench Press", "DB Shoulder Press", "Incline DB Press", "Skullcrusher", "DB Lateral Raise"],
+    "Push Day": [
+      "DB Bench Press",
+      "DB Shoulder Press",
+      "Incline DB Press",
+      "Skullcrusher",
+      "DB Lateral Raise",
+    ],
     "Pull Day": ["DB Row", "Renegade Row", "Reverse Fly", "Hammer Curl", "DB Curl"],
     "Leg Day": ["Goblet Squat", "DB Romanian Deadlift", "DB Lunge", "DB Step Up", "Calf Raise"],
     "Upper Body": ["DB Bench", "DB Row", "DB Shoulder Press", "Hammer Curl", "Skullcrusher"],
@@ -63,20 +151,50 @@ const EXERCISE_POOLS: Record<EquipmentSetup, Record<Exclude<SplitLabel, "Rest">,
     "Full Body Strength": ["Goblet Squat", "DB Bench", "DB Row", "DB Press", "Plank"],
     "Full Body Conditioning": ["DB Thruster", "DB Swing", "Renegade Row", "DB Lunge", "Burpees"],
     "Pull + Core": ["DB Row", "Reverse Fly", "Hammer Curl", "Plank", "Russian Twist"],
-    "Conditioning / Core": ["DB Thruster", "Burpees", "Mountain Climbers", "Plank", "Russian Twist"],
+    "Conditioning / Core": [
+      "DB Thruster",
+      "Burpees",
+      "Mountain Climbers",
+      "Plank",
+      "Russian Twist",
+    ],
   },
   none: {
-    "Push Day": ["Push Ups", "Pike Push Ups", "Decline Push Ups", "Diamond Push Ups", "Triceps Dips"],
+    "Push Day": [
+      "Push Ups",
+      "Pike Push Ups",
+      "Decline Push Ups",
+      "Diamond Push Ups",
+      "Triceps Dips",
+    ],
     "Pull Day": ["Pull Ups", "Inverted Row", "Doorway Row", "Superman", "Reverse Snow Angels"],
-    "Leg Day": ["Bodyweight Squat", "Reverse Lunge", "Glute Bridge", "Bulgarian Split Squat", "Calf Raise"],
+    "Leg Day": [
+      "Bodyweight Squat",
+      "Reverse Lunge",
+      "Glute Bridge",
+      "Bulgarian Split Squat",
+      "Calf Raise",
+    ],
     "Upper Body": ["Push Ups", "Pull Ups", "Pike Push Ups", "Inverted Row", "Triceps Dips"],
     "Lower Body": ["Squat", "Lunge", "Glute Bridge", "Step Up", "Wall Sit"],
     "Full Body Strength": ["Squat", "Push Ups", "Inverted Row", "Glute Bridge", "Plank"],
-    "Full Body Conditioning": ["Burpees", "Jump Squats", "Mountain Climbers", "Push Ups", "High Knees"],
+    "Full Body Conditioning": [
+      "Burpees",
+      "Jump Squats",
+      "Mountain Climbers",
+      "Push Ups",
+      "High Knees",
+    ],
     "Pull + Core": ["Pull Ups", "Superman", "Plank", "Hollow Hold", "Leg Raise"],
-    "Conditioning / Core": ["Burpees", "Mountain Climbers", "Plank", "Russian Twist", "Jumping Jacks"],
+    "Conditioning / Core": [
+      "Burpees",
+      "Mountain Climbers",
+      "Plank",
+      "Russian Twist",
+      "Jumping Jacks",
+    ],
   },
-  mixed: {} as Record<Exclude<SplitLabel, "Rest">, string[]>,
+  mixed: {} as Record<ExercisePoolLabel, string[]>,
 };
 // Mixed reuses gym pool
 EXERCISE_POOLS.mixed = EXERCISE_POOLS.gym;
@@ -90,34 +208,132 @@ const EQUIPMENT_LABEL: Record<EquipmentSetup, string> = {
 
 function focusFor(label: SplitLabel): string {
   switch (label) {
-    case "Push Day": return "Chest · Shoulders · Triceps";
-    case "Pull Day": return "Back · Biceps · Rear Delts";
-    case "Leg Day": return "Quads · Hamstrings · Glutes";
-    case "Upper Body": return "Chest · Back · Shoulders · Arms";
-    case "Lower Body": return "Quads · Glutes · Hamstrings";
-    case "Full Body Strength": return "Full Body · Compound Lifts";
-    case "Full Body Conditioning": return "Full Body · Cardio";
-    case "Pull + Core": return "Back · Core";
-    case "Conditioning / Core": return "Cardio · Core";
-    case "Rest": return "Recovery";
+    case "Push Day":
+      return "Chest · Shoulders · Triceps";
+    case "Pull Day":
+      return "Back · Biceps · Rear Delts";
+    case "Leg Day":
+      return "Quads · Hamstrings · Glutes";
+    case "Upper Body":
+      return "Chest · Back · Shoulders · Arms";
+    case "Lower Body":
+      return "Quads · Glutes · Hamstrings";
+    case "Full Body Strength":
+      return "Full Body · Compound Lifts";
+    case "Full Body Conditioning":
+      return "Full Body · Cardio";
+    case "Pull + Core":
+      return "Back · Core";
+    case "Conditioning / Core":
+      return "Cardio · Core";
+    case "Chest + Back":
+      return "Chest · Back · Rear Delts";
+    case "Shoulders + Arms":
+      return "Shoulders · Biceps · Triceps";
+    case "Chest":
+      return "Chest · Front Delts · Triceps";
+    case "Back":
+      return "Lats · Upper Back · Biceps";
+    case "Shoulders":
+      return "Front · Side · Rear Delts";
+    case "Arms":
+      return "Biceps · Triceps · Forearms";
+    case "Power Upper":
+      return "Upper Body · Heavy Compounds";
+    case "Power Lower":
+      return "Lower Body · Heavy Compounds";
+    case "Hypertrophy Upper":
+      return "Upper Body · Muscle Growth";
+    case "Hypertrophy Lower":
+      return "Lower Body · Muscle Growth";
+    case "Rest":
+      return "Recovery";
   }
 }
 
-function matchWorkoutId(label: SplitLabel, profile: Profile): string | undefined {
-  const eq = profile.equipment;
-  const ok = (w: Workout) => eq === "mixed" || w.equipment.includes(eq);
-  const pick = (fn: (w: Workout) => boolean) => workouts.find((w) => ok(w) && fn(w))?.id;
+function exercisePoolLabel(label: Exclude<SplitLabel, "Rest">): ExercisePoolLabel {
   switch (label) {
-    case "Push Day": return pick((w) => w.targetMuscles.includes("chest"));
-    case "Pull Day": return pick((w) => w.targetMuscles.includes("back"));
-    case "Leg Day": return pick((w) => w.targetMuscles.includes("legs") || w.targetMuscles.includes("glutes"));
-    case "Upper Body": return pick((w) => w.id === "upper-body-strength") ?? pick((w) => w.targetMuscles.includes("chest"));
-    case "Lower Body": return pick((w) => w.id === "lower-body-burn") ?? pick((w) => w.targetMuscles.includes("legs"));
-    case "Full Body Strength": return pick((w) => w.id === "dumbbell-builder" || w.id === "bodyweight-starter") ?? pick(() => true);
-    case "Full Body Conditioning": return pick((w) => w.id === "full-body-sweat") ?? pick((w) => w.category === "HIIT");
-    case "Pull + Core": return pick((w) => w.targetMuscles.includes("back")) ?? pick((w) => w.category === "Core");
-    case "Conditioning / Core": return pick((w) => w.category === "HIIT" || w.category === "Cardio");
-    default: return undefined;
+    case "Chest + Back":
+    case "Power Upper":
+    case "Hypertrophy Upper":
+    case "Shoulders + Arms":
+    case "Shoulders":
+    case "Arms":
+      return "Upper Body";
+    case "Chest":
+      return "Push Day";
+    case "Back":
+      return "Pull Day";
+    case "Power Lower":
+    case "Hypertrophy Lower":
+      return "Lower Body";
+    default:
+      return label;
+  }
+}
+
+function matchWorkoutId(
+  label: SplitLabel,
+  ranked: Workout[],
+  dayIndex: number,
+): string | undefined {
+  const pick = (fn: (w: Workout) => boolean) => {
+    const matches = ranked.filter(fn);
+    return matches.length ? matches[dayIndex % Math.min(matches.length, 5)]?.id : undefined;
+  };
+  switch (label) {
+    case "Push Day":
+      return pick((w) => w.targetMuscles.includes("chest"));
+    case "Pull Day":
+      return pick((w) => w.targetMuscles.includes("back"));
+    case "Leg Day":
+      return pick((w) => w.targetMuscles.includes("legs") || w.targetMuscles.includes("glutes"));
+    case "Upper Body":
+      return (
+        pick((w) => w.id === "upper-body-strength") ??
+        pick((w) => w.targetMuscles.includes("chest"))
+      );
+    case "Lower Body":
+      return (
+        pick((w) => w.id === "lower-body-burn") ?? pick((w) => w.targetMuscles.includes("legs"))
+      );
+    case "Full Body Strength":
+      return (
+        pick((w) => w.id === "dumbbell-builder" || w.id === "bodyweight-starter") ??
+        pick(() => true)
+      );
+    case "Full Body Conditioning":
+      return pick((w) => w.id === "full-body-sweat") ?? pick((w) => w.category === "HIIT");
+    case "Pull + Core":
+      return pick((w) => w.targetMuscles.includes("back")) ?? pick((w) => w.category === "Core");
+    case "Conditioning / Core":
+      return pick((w) => w.category === "HIIT" || w.category === "Cardio");
+    case "Chest + Back":
+      return (
+        pick((w) => w.targetMuscles.includes("chest") && w.targetMuscles.includes("back")) ??
+        pick((w) => w.targetMuscles.includes("chest") || w.targetMuscles.includes("back"))
+      );
+    case "Shoulders + Arms":
+    case "Arms":
+      return pick((w) => w.targetMuscles.includes("arms"));
+    case "Chest":
+      return pick((w) => w.targetMuscles.includes("chest"));
+    case "Back":
+      return pick((w) => w.targetMuscles.includes("back"));
+    case "Shoulders":
+      return pick(
+        (w) =>
+          w.targetMuscles.includes("arms") &&
+          (w.targetMuscles.includes("chest") || w.targetMuscles.includes("back")),
+      );
+    case "Power Upper":
+    case "Hypertrophy Upper":
+      return pick((w) => w.targetMuscles.includes("chest") || w.targetMuscles.includes("back"));
+    case "Power Lower":
+    case "Hypertrophy Lower":
+      return pick((w) => w.targetMuscles.includes("legs") || w.targetMuscles.includes("glutes"));
+    default:
+      return undefined;
   }
 }
 
@@ -154,7 +370,9 @@ export function loadCompletion(): CompletionState {
       const parsed = JSON.parse(raw) as CompletionState;
       if (parsed.weekStartISO === weekStartISO()) return parsed;
     }
-  } catch {}
+  } catch {
+    // Ignore malformed device-local completion state and start a fresh week.
+  }
   return { weekStartISO: weekStartISO(), completed: {} };
 }
 
@@ -175,13 +393,19 @@ export function toggleCompletion(dayId: string): CompletionState {
 }
 
 export const weeklyScheduleService = {
-  generateSchedule(profile: Profile): WeeklyScheduleDay[] {
-    const split = SPLITS[profile.daysPerWeek];
+  generateSchedule(profile: Profile, activeWorkoutIds: string[] = []): WeeklyScheduleDay[] {
     const todayIdx = todayMondayIndex();
     const monday = new Date();
     monday.setDate(monday.getDate() - todayIdx);
     const completion = loadCompletion();
+    const split = buildWeeklySplit(
+      profile.workoutSplit ?? "auto",
+      profile.daysPerWeek,
+      completion.weekStartISO,
+    );
     const pool = EXERCISE_POOLS[profile.equipment];
+    const ranked = workoutRecommendationService.recommend(profile, 500);
+    let trainingIndex = 0;
 
     return split.map((label, i) => {
       const date = new Date(monday);
@@ -193,33 +417,53 @@ export const weeklyScheduleService = {
 
       if (label === "Rest") {
         return {
-          id, dayName: DAY_NAMES[i], dateISO, splitLabel: label,
+          id,
+          dayName: DAY_NAMES[i],
+          dateISO,
+          splitLabel: label,
           workoutTitle: "Rest & Recovery",
           focus: "Recovery",
-          duration: 0, difficulty: "Beginner" as Difficulty,
-          equipment: "—", estimatedCalories: 0,
-          exercises: [], isRestDay: true, isToday, isCompleted,
+          duration: 0,
+          difficulty: "Beginner" as Difficulty,
+          equipment: "—",
+          estimatedCalories: 0,
+          exercises: [],
+          isRestDay: true,
+          isToday,
+          isCompleted,
         };
       }
 
-      const workoutId = matchWorkoutId(label, profile);
-      const w = workoutId ? workouts.find((x) => x.id === workoutId) : undefined;
-      const exercises = pool[label] ?? w?.exercises.map((e) => e.name) ?? [];
+      const activeWorkoutId = activeWorkoutIds[trainingIndex];
+      trainingIndex += 1;
+      const activeWorkout = activeWorkoutId ? getWorkout(activeWorkoutId) : undefined;
+      const matchedWorkoutId = matchWorkoutId(label, ranked, i);
+      const workoutId = activeWorkout?.id ?? matchedWorkoutId;
+      const w = activeWorkout ?? ranked.find((x) => x.id === matchedWorkoutId);
+      const exercises = activeWorkout
+        ? activeWorkout.exercises.map((exercise) => exercise.name)
+        : (pool[exercisePoolLabel(label)] ?? w?.exercises.map((e) => e.name) ?? []);
       const duration = profile.sessionMinutes;
       const difficulty = difficultyFor(profile.experience);
       const caloriesPerMin = w ? w.calories / w.duration : 7;
       const estimatedCalories = Math.round(caloriesPerMin * duration);
 
       return {
-        id, dayName: DAY_NAMES[i], dateISO, splitLabel: label,
+        id,
+        dayName: DAY_NAMES[i],
+        dateISO,
+        splitLabel: label,
         workoutId,
         workoutTitle: label,
         focus: focusFor(label),
-        duration, difficulty,
+        duration,
+        difficulty,
         equipment: EQUIPMENT_LABEL[profile.equipment],
         estimatedCalories,
         exercises: exercises.slice(0, 5),
-        isRestDay: false, isToday, isCompleted,
+        isRestDay: false,
+        isToday,
+        isCompleted,
       };
     });
   },

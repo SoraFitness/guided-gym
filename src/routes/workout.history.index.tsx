@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, Clock, Dumbbell, Trophy, ChevronRight } from "luci
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 
 export const Route = createFileRoute("/workout/history/")({
-  head: () => ({ meta: [{ title: "Workout History — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Workout History — Ascendr" }] }),
   component: HistoryPage,
 });
 
@@ -72,7 +72,8 @@ function HistoryPage() {
                   </span>
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                  {w.totalSets} sets · {w.totalReps} reps · {w.totalVolume.toLocaleString()} {w.unit}
+                  {w.totalSets} sets · {w.totalReps} reps · {w.totalVolume.toLocaleString()}{" "}
+                  {w.unit}
                 </div>
               </div>
               <ChevronRight className="size-4 text-muted-foreground" />

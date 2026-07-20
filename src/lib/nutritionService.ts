@@ -11,7 +11,20 @@ import { computePlan, macrosFromPlan } from "./calorieEngine";
 export function suggestNutrition(profile: Profile): NutritionGoals {
   const targetDate = profile.goalTargetDate
     ? new Date(profile.goalTargetDate)
-    : (() => { const d = new Date(); d.setDate(d.getDate() + 84); return d; })();
+    : (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 84);
+        return d;
+      })();
+
+  const nutritionGoal: Profile["goal"] =
+    profile.nutritionPlan === "fat_loss"
+      ? "lose_weight"
+      : profile.nutritionPlan === "muscle_gain"
+        ? "build_muscle"
+        : profile.nutritionPlan === "maintenance"
+          ? "maintain"
+          : profile.goal;
 
   const plan = computePlan({
     gender: profile.gender,
@@ -19,7 +32,7 @@ export function suggestNutrition(profile: Profile): NutritionGoals {
     heightCm: profile.heightCm,
     currentWeightKg: profile.currentWeightKg,
     goalWeightKg: profile.goalWeightKg,
-    goalType: profile.goal,
+    goalType: nutritionGoal,
     activity: profile.activityLevel,
     targetDate,
     splitPreset: profile.deficitSplit,

@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, stepCountIs, tool, type UIMessage } from "ai";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "@/lib/openrouter.server";
 
 type Body = {
   messages: UIMessage[];
@@ -10,7 +11,7 @@ type Body = {
   userContext?: unknown;
 };
 
-const SYSTEM_PROMPT = `You are "Coach", the in-app AI fitness coach for the Pulse fitness app.
+const SYSTEM_PROMPT = `You are "Coach", the in-app AI fitness coach for the Ascendr fitness app.
 
 PERSONALITY
 - Friendly, direct, motivating. Talk like a smart trainer, not a robot.
@@ -34,6 +35,12 @@ ACTION TOOLS
 - When the right next step is opening another screen, call open_screen with "nutrition" | "workouts" | "progress" | "profile".
 - Always also write a short natural-language response alongside any tool call.
 
+LONG-TERM MEMORY
+- A LONG_TERM_MEMORY list of durable facts you saved in previous sessions may be provided. Treat it as trusted context about the user.
+- When you learn something durable and coaching-relevant — injuries or pain, equipment changes, schedule constraints, strong food preferences or allergies, PRs, motivations, life events affecting training — call the remember tool with one short, self-contained sentence (e.g. "Left knee pain on deep squats — prefers box squats").
+- Do NOT save trivia, one-off numbers already tracked by the app (daily calories, weights), or anything the user asks you to forget. If asked to forget something, apologize and stop referencing it.
+- Never announce that you are saving a memory; just call the tool silently.
+
 SAFETY RULES (NON-NEGOTIABLE)
 - Never recommend intakes below ~1500 kcal for men or ~1200 kcal for women.
 - Never recommend weight loss faster than 1% bodyweight per week.
@@ -45,29 +52,8 @@ export const Route = createFileRoute("/api/coach")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const key = process.env.LOVABLE_API_KEY;
-        if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
-
-        const authHeader = request.headers.get("authorization");
-        if (!authHeader?.startsWith("Bearer ")) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-        const token = authHeader.slice("Bearer ".length);
-
-        const SUPABASE_URL = process.env.SUPABASE_URL;
-        const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
-        if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-          return new Response("Backend not configured", { status: 500 });
-        }
-        const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-          global: { headers: { Authorization: `Bearer ${token}` } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
-        if (claimsErr || !claims?.claims?.sub) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-        const userId = claims.claims.sub as string;
+        const key = process.env.OPENROUTER_API_KEY;
+        if (!key) return new Response("Missing OPENROUTER_API_KEY", { status: 500 });
 
         let body: Body;
         try {
@@ -80,18 +66,49 @@ export const Route = createFileRoute("/api/coach")({
           return new Response("Missing messages/threadId", { status: 400 });
         }
 
-        // Verify the thread belongs to this user
-        const { data: thread } = await supabase
-          .from("coach_threads")
-          .select("id")
-          .eq("id", threadId)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (!thread) return new Response("Thread not found", { status: 404 });
+        const authHeader = request.headers.get("authorization");
+        const guestMode = !authHeader && threadId.startsWith("guest-");
+        let supabase: ReturnType<typeof createClient<Database>> | null = null;
+        let userId: string | null = null;
+
+        if (authHeader) {
+          if (!authHeader.startsWith("Bearer ")) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          const token = authHeader.slice("Bearer ".length);
+
+          const SUPABASE_URL = process.env.SUPABASE_URL;
+          const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+          if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+            return new Response("Backend not configured", { status: 500 });
+          }
+          supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+            global: { headers: { Authorization: `Bearer ${token}` } },
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
+          if (claimsErr || !claims?.claims?.sub) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          userId = claims.claims.sub as string;
+        } else if (!guestMode) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        if (supabase && userId) {
+          // Verify the thread belongs to this user
+          const { data: thread } = await supabase
+            .from("coach_threads")
+            .select("id")
+            .eq("id", threadId)
+            .eq("user_id", userId)
+            .maybeSingle();
+          if (!thread) return new Response("Thread not found", { status: 404 });
+        }
 
         // Persist latest user message before streaming (last item of messages)
         const lastUser = [...messages].reverse().find((m) => m.role === "user");
-        if (lastUser) {
+        if (supabase && userId && lastUser) {
           // Avoid duplicate insert on retries by checking id existence
           const { data: existing } = await supabase
             .from("coach_messages")
@@ -104,13 +121,31 @@ export const Route = createFileRoute("/api/coach")({
               thread_id: threadId,
               user_id: userId,
               role: "user",
-              parts: lastUser.parts as unknown as object,
+              parts: lastUser.parts as unknown as Json,
             });
           }
         }
 
-        const gateway = createLovableAiGatewayProvider(key);
-        const model = gateway("google/gemini-3-flash-preview");
+        const openrouter = createOpenRouterProvider(key);
+        const model = openrouter(OPENROUTER_COACH_MODEL);
+
+        // Long-term memory: durable facts saved by the coach in past sessions.
+        // (consts so the tool closures below keep the non-null narrowing)
+        const authedSupabase = supabase;
+        const authedUserId = userId;
+        let memories: string[] = [];
+        if (authedSupabase && authedUserId) {
+          const { data: mem } = await authedSupabase
+            .from("coach_user_memory")
+            .select("memories")
+            .eq("user_id", authedUserId)
+            .maybeSingle();
+          if (Array.isArray(mem?.memories)) {
+            memories = (mem.memories as unknown[]).filter(
+              (m): m is string => typeof m === "string",
+            );
+          }
+        }
 
         const tools = {
           suggest_workout: tool({
@@ -160,9 +195,42 @@ export const Route = createFileRoute("/api/coach")({
             }),
             execute: async (input) => input,
           }),
+          ...(authedSupabase && authedUserId
+            ? {
+                remember: tool({
+                  description:
+                    "Save one short durable fact about the user for future coaching sessions (injuries, preferences, constraints, PRs, motivations). Only for facts that stay relevant for weeks or longer.",
+                  inputSchema: z.object({
+                    fact: z
+                      .string()
+                      .min(3)
+                      .max(300)
+                      .describe("Self-contained sentence, e.g. 'Trains fasted in the mornings'."),
+                  }),
+                  execute: async ({ fact }) => {
+                    memories = [...memories.filter((m) => m !== fact), fact].slice(-50);
+                    const { error } = await authedSupabase
+                      .from("coach_user_memory")
+                      .upsert({ user_id: authedUserId, memories }, { onConflict: "user_id" });
+                    if (error) {
+                      console.error("[coach] remember failed", error);
+                      return { saved: false };
+                    }
+                    return { saved: true, totalMemories: memories.length };
+                  },
+                }),
+              }
+            : {}),
         } as const;
 
-        const system = `${SYSTEM_PROMPT}\n\nUSER_CONTEXT:\n${JSON.stringify(
+        const memoryBlock =
+          memories.length > 0
+            ? `\n\nLONG_TERM_MEMORY (facts you saved in earlier sessions):\n${memories
+                .map((m) => `- ${m}`)
+                .join("\n")}`
+            : "";
+
+        const system = `${SYSTEM_PROMPT}${memoryBlock}\n\nUSER_CONTEXT:\n${JSON.stringify(
           userContext ?? {},
           null,
           2,
@@ -174,11 +242,21 @@ export const Route = createFileRoute("/api/coach")({
           messages: await convertToModelMessages(messages),
           tools,
           stopWhen: stepCountIs(50),
+          providerOptions: {
+            // Merged into the OpenRouter request body. Qwen 3.5 Plus is a hybrid
+            // reasoning model: low effort keeps coach replies snappy, and exclude
+            // keeps thinking tokens out of the streamed response. Raise effort or
+            // drop exclude to surface step-by-step reasoning in the UI.
+            openrouter: {
+              reasoning: { enabled: true, effort: "low", exclude: true },
+            },
+          },
         });
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
           onFinish: async ({ messages: finalMessages }) => {
+            if (!supabase || !userId) return;
             const assistant = [...finalMessages].reverse().find((m) => m.role === "assistant");
             if (!assistant) return;
             try {
@@ -190,7 +268,7 @@ export const Route = createFileRoute("/api/coach")({
               if (existing) {
                 await supabase
                   .from("coach_messages")
-                  .update({ parts: assistant.parts as unknown as object })
+                  .update({ parts: assistant.parts as unknown as Json })
                   .eq("id", assistant.id);
               } else {
                 await supabase.from("coach_messages").insert({
@@ -198,7 +276,7 @@ export const Route = createFileRoute("/api/coach")({
                   thread_id: threadId,
                   user_id: userId,
                   role: "assistant",
-                  parts: assistant.parts as unknown as object,
+                  parts: assistant.parts as unknown as Json,
                 });
               }
               await supabase

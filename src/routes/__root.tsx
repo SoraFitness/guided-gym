@@ -13,7 +13,6 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ProfileProvider } from "../lib/profile";
 
-
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -80,21 +79,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#0A0A0A" },
-      { title: "Pulse — Your Fitness Companion" },
-      { name: "description", content: "Personalized workout plans, animated guidance, and progress tracking." },
-      { property: "og:title", content: "Pulse — Your Fitness Companion" },
-      { property: "og:description", content: "Personalized workout plans, animated guidance, and progress tracking." },
+      { title: "Ascendr — Your Fitness Companion" },
+      {
+        name: "description",
+        content: "Personalized workout plans, animated guidance, and progress tracking.",
+      },
+      { property: "og:title", content: "Ascendr — Your Fitness Companion" },
+      {
+        property: "og:description",
+        content: "Personalized workout plans, animated guidance, and progress tracking.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Pulse — Your Fitness Companion" },
-      { name: "twitter:description", content: "Personalized workout plans, animated guidance, and progress tracking." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1f6890c-afc4-4bdf-85ed-22651cfbf32a/id-preview-f2a5fcd4--03a015a9-bf62-48ea-aaf7-e21b4e0cd901.lovable.app-1781215401158.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1f6890c-afc4-4bdf-85ed-22651cfbf32a/id-preview-f2a5fcd4--03a015a9-bf62-48ea-aaf7-e21b4e0cd901.lovable.app-1781215401158.png" },
+      { name: "twitter:title", content: "Ascendr — Your Fitness Companion" },
+      {
+        name: "twitter:description",
+        content: "Personalized workout plans, animated guidance, and progress tracking.",
+      },
+      { property: "og:image", content: "/og.png" },
+      { name: "twitter:image", content: "/og.png" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { name: "apple-mobile-web-app-title", content: "Pulse" },
-      { name: "application-name", content: "Pulse" },
+      { name: "apple-mobile-web-app-title", content: "Ascendr" },
+      { name: "application-name", content: "Ascendr" },
       { name: "format-detection", content: "telephone=no" },
     ],
     links: [
@@ -116,7 +124,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
-
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
@@ -143,4 +150,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

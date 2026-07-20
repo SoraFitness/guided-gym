@@ -1,16 +1,31 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, AlertTriangle, Lightbulb, Target, ShieldCheck } from "lucide-react";
-import { getWorkout, type Workout } from "@/lib/workouts";
-import { useProfile } from "@/lib/profile";
+import { useMemo } from "react";
+import {
+  ArrowLeft,
+  Dumbbell,
+  ShieldCheck,
+  Target,
+  Wind,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { Exercise3DViewer } from "@/components/exercise3d/Exercise3DViewer";
-import { detectAnimation, getCoaching } from "@/lib/exerciseCoaching";
-import type { AvatarGender } from "@/components/exercise3d/AvatarModel";
+import { getExerciseAnimationConfig } from "@/components/exercise3d/exerciseSceneConfig";
+import { resolveDemoModelGender } from "@/lib/demoModel";
+import {
+  getExerciseDemoInfo,
+  MUSCLE_LABELS,
+  type ExerciseDemoInfo,
+  type MuscleKey,
+} from "@/lib/exerciseCoaching";
+import { useProfile } from "@/lib/profile";
+import { getWorkout, type Workout } from "@/lib/workouts";
 
 export const Route = createFileRoute("/workout/$id/demo/$exerciseId")({
   head: ({ params }) => {
     const w = getWorkout(params.id);
     const ex = w?.exercises.find((e) => e.id === params.exerciseId);
-    return { meta: [{ title: `${ex?.name ?? "Exercise"} — 3D demo` }] };
+    return { meta: [{ title: `${ex?.name ?? "Exercise"} - 3D demo` }] };
   },
   loader: ({ params }) => {
     const w = getWorkout(params.id);
@@ -22,111 +37,217 @@ export const Route = createFileRoute("/workout/$id/demo/$exerciseId")({
   component: DemoPage,
 });
 
-function toAvatar(g?: string): AvatarGender {
-  if (g === "male" || g === "female") return g;
-  return "neutral";
-}
-
 function DemoPage() {
   const { w, ex } = Route.useLoaderData() as {
     w: Workout;
     ex: Workout["exercises"][number];
   };
   const { profile } = useProfile();
-  const anim = detectAnimation(ex.name, ex.demoType);
-  const coaching = getCoaching(anim, profile?.experience, profile?.goal);
-  const speed = profile?.experience === "beginner" ? 0.7 : 1;
+  const demo = getExerciseDemoInfo(ex, profile?.experience, profile?.goal);
+  const scene = useMemo(
+    () =>
+      getExerciseAnimationConfig({
+        exerciseId: ex.id,
+        animation: demo.animation,
+        equipment: demo.equipment,
+        name: ex.name,
+      }),
+    [demo.animation, demo.equipment, ex.id, ex.name],
+  );
+  const speed = profile?.experience === "beginner" ? 0.5 : 1;
 
   return (
-    <div className="min-h-dvh bg-background pb-20">
-      <div className="px-5 pt-5 flex items-center gap-3">
-        <Link
-          to="/workout/$id"
-          params={{ id: w.id }}
-          className="size-10 rounded-full bg-white/[0.06] grid place-items-center"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] text-muted-foreground">3D demo</div>
-          <h1 className="font-bold truncate">{ex.name}</h1>
-        </div>
-      </div>
-
-      <div className="px-5 mt-4">
-        <Exercise3DViewer animation={anim} gender={toAvatar(profile?.gender)} defaultSpeed={speed} />
-      </div>
-
-      <div className="px-5 mt-5 grid gap-3">
-        <Card icon={<Lightbulb className="size-4 text-neon" />} title="Form tips">
-          <ul className="space-y-1.5 text-sm">
-            {coaching.tips.map((t) => (
-              <li key={t} className="flex gap-2">
-                <span className="text-neon">•</span>
-                <span>{t}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card icon={<AlertTriangle className="size-4 text-amber-300" />} title="Common mistakes">
-          <ul className="space-y-1.5 text-sm">
-            {coaching.mistakes.map((m) => (
-              <li key={m} className="flex gap-2">
-                <span className="text-amber-300">×</span>
-                <span>{m}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card icon={<Target className="size-4 text-rose-300" />} title="Target muscles">
-          <div className="flex flex-wrap gap-1.5">
-            {coaching.muscles.map((m) => (
-              <span
-                key={m}
-                className="px-2.5 py-1 rounded-full bg-white/[0.06] text-[11px] font-semibold"
-              >
-                {m}
-              </span>
-            ))}
+    <div className="min-h-dvh overflow-y-auto bg-[#030405] text-white pb-safe">
+      <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col px-4 pt-safe">
+        <header className="flex shrink-0 items-center gap-3 py-4">
+          <Link
+            to="/workout/$id"
+            params={{ id: w.id }}
+            className="grid size-10 place-items-center rounded-full border border-white/[0.08] bg-white/[0.06] text-white shadow-lg shadow-black/20"
+            aria-label="Back"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neon">
+              3D demo
+            </div>
+            <h1 className="truncate text-xl font-extrabold leading-tight">{ex.name}</h1>
           </div>
-        </Card>
-        <Card icon={<ShieldCheck className="size-4 text-emerald-300" />} title="Safety">
-          <p className="text-sm text-muted-foreground">
-            This demo is for fitness education only. Warm up first, move with control, and stop if you
-            feel pain.
-          </p>
-        </Card>
-      </div>
+        </header>
 
-      <div className="px-5 mt-6">
-        <Link
-          to="/workout/$id/session"
-          params={{ id: w.id }}
-          className="block w-full h-13 py-4 rounded-full bg-neon text-neon-foreground font-semibold text-center glow-neon active:scale-[0.98] transition"
-        >
-          Start workout
-        </Link>
+        <main className="flex flex-1 flex-col gap-3 pb-5">
+          <Exercise3DViewer
+            animation={demo.animation}
+            gender={resolveDemoModelGender(profile)}
+            defaultSpeed={speed}
+            label={ex.name}
+            exerciseId={ex.id}
+            primaryMuscles={demo.primaryMuscles}
+            secondaryMuscles={demo.secondaryMuscles}
+            equipment={demo.equipment}
+            className="h-[clamp(430px,58dvh,620px)] min-h-[430px]"
+          />
+
+          <section className="grid grid-cols-2 gap-2">
+            <MetricTile
+              icon={Dumbbell}
+              label="Setup"
+              value={scene.setup.posture}
+              detail={scene.setup.description}
+            />
+            <MetricTile
+              icon={Wind}
+              label="Tempo"
+              value={scene.tempo.label}
+              detail={`${scene.tempo.concentricSeconds}s up / ${scene.tempo.eccentricSeconds}s down`}
+            />
+          </section>
+
+          <MusclePanel primary={demo.primaryMuscles} secondary={demo.secondaryMuscles} />
+          <CoachingPanel demo={demo} />
+        </main>
       </div>
     </div>
   );
 }
 
-function Card({
-  icon,
-  title,
-  children,
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
 }) {
   return (
-    <div className="rounded-3xl bg-surface border border-white/[0.05] p-4">
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <h2 className="font-bold text-sm">{title}</h2>
+    <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.045] p-3 shadow-lg shadow-black/20">
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/48">
+        <Icon className="size-3.5 text-neon" />
+        {label}
       </div>
-      {children}
+      <div className="mt-2 truncate text-sm font-extrabold capitalize text-white">{value}</div>
+      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/58">{detail}</p>
+    </div>
+  );
+}
+
+function MusclePanel({ primary, secondary }: { primary: MuscleKey[]; secondary: MuscleKey[] }) {
+  return (
+    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.045] p-4 shadow-lg shadow-black/20">
+      <div className="flex items-center gap-2">
+        <Target className="size-4 text-neon" />
+        <h2 className="text-sm font-extrabold">Muscles trained</h2>
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        <MuscleRow label="Primary" muscles={primary} tone="primary" />
+        <MuscleRow label="Secondary" muscles={secondary} tone="secondary" />
+      </div>
+    </section>
+  );
+}
+
+function MuscleRow({
+  label,
+  muscles,
+  tone,
+}: {
+  label: string;
+  muscles: MuscleKey[];
+  tone: "primary" | "secondary";
+}) {
+  const dot =
+    tone === "primary"
+      ? "bg-[#ff2038] shadow-[0_0_12px_rgba(255,32,56,0.75)]"
+      : "bg-[#ff7a2f] shadow-[0_0_10px_rgba(255,122,47,0.65)]";
+
+  return (
+    <div className="flex items-start gap-2">
+      <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${dot}`} />
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+          {label}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {muscles.map((muscle) => (
+            <span
+              key={muscle}
+              className="rounded-full border border-white/[0.07] bg-black/30 px-2.5 py-1 text-[11px] font-semibold text-white/78"
+            >
+              {MUSCLE_LABELS[muscle]}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CoachingPanel({ demo }: { demo: ExerciseDemoInfo }) {
+  return (
+    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.045] p-4 shadow-lg shadow-black/20">
+      <div className="flex items-center gap-2">
+        <Dumbbell className="size-4 text-neon" />
+        <h2 className="text-sm font-extrabold">{demo.trainerCue}</h2>
+      </div>
+      <div className="mt-4 grid gap-4">
+        <GuidanceList icon={Target} title="Form" items={demo.formInstructions} />
+        <GuidanceText icon={Wind} title="Breathing" text={demo.breathing} />
+        <GuidanceList icon={XCircle} title="Common mistakes" items={demo.mistakes} />
+        <GuidanceList icon={ShieldCheck} title="Safety" items={demo.safetyTips} />
+      </div>
+    </section>
+  );
+}
+
+function GuidanceText({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: LucideIcon;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+        <Icon className="size-3.5 text-neon" />
+        {title}
+      </div>
+      <p className="mt-1 text-sm leading-relaxed text-white/72">{text}</p>
+    </div>
+  );
+}
+
+function GuidanceList({
+  icon: Icon,
+  title,
+  items,
+}: {
+  icon: LucideIcon;
+  title: string;
+  items: string[];
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+        <Icon className="size-3.5 text-neon" />
+        {title}
+      </div>
+      <ul className="mt-1 space-y-1.5 text-sm leading-relaxed text-white/72">
+        {items.map((item) => (
+          <li
+            key={item}
+            className="pl-3 before:-ml-3 before:pr-2 before:text-neon before:content-['•']"
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

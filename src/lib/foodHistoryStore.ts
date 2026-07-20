@@ -92,6 +92,19 @@ export function toggleFavorite(food: StoredFood): boolean {
   return nowFav;
 }
 
+// Snapshots + bulk replace (used by cloud sync).
+export function getRecentFoodsSnapshot(): StoredFood[] {
+  return read(RECENT_KEY);
+}
+export function getFavoriteFoodsSnapshot(): StoredFood[] {
+  return read(FAV_KEY);
+}
+export function replaceFoodHistory(recent: StoredFood[], favorites: StoredFood[]) {
+  write(RECENT_KEY, recent.slice(0, MAX_RECENT));
+  write(FAV_KEY, favorites);
+  emit();
+}
+
 export function resultToStored(r: FoodSearchResult): StoredFood {
   return {
     id: r.id,

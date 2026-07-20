@@ -2,31 +2,37 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Camera, Plus, ChevronRight } from "lucide-react";
 import { listProgressPhotos, type ProgressPhotoRow } from "@/lib/progressPhotos.functions";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  listLocalProgressPhotos,
+  syncLocalProgressPhotosToCloud,
+} from "@/lib/progressPhotos.local";
+import { useAuthSession } from "@/lib/authSession";
 import { formatPhotoDate } from "@/components/photos/photoUtils";
 
 export function ProgressPicturesCard() {
+  const session = useAuthSession();
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
+    if (session === "loading") return;
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      const s = !!data.session;
-      setSignedIn(s);
-      if (s) {
-        listProgressPhotos()
-          .then((p) => mounted && setPhotos(p))
-          .catch(() => mounted && setPhotos([]));
-      } else {
-        setPhotos([]);
-      }
-    });
+
+    if (!session) {
+      setPhotos(listLocalProgressPhotos());
+      return () => {
+        mounted = false;
+      };
+    }
+
+    syncLocalProgressPhotosToCloud(session.userId)
+      .then(() => listProgressPhotos())
+      .then((p) => mounted && setPhotos(p))
+      .catch(() => mounted && setPhotos([]));
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [session]);
 
   const latest = photos?.[0];
   const count = photos?.length ?? 0;
@@ -39,9 +45,7 @@ export function ProgressPicturesCard() {
             <Camera className="size-4 text-neon" />
             <h2 className="font-bold">Progress Pictures</h2>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Track your transformation over time
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">Track your transformation over time</p>
         </div>
         <Link
           to="/photos/new"
@@ -68,9 +72,9 @@ export function ProgressPicturesCard() {
           )}
         </Link>
         <div className="flex-1 min-w-0">
-          {signedIn === false ? (
+          {!session ? (
             <p className="text-sm text-muted-foreground">
-              Sign in to save private progress photos.
+              Saved on this device. Sign in later to sync.
             </p>
           ) : count === 0 ? (
             <p className="text-sm text-muted-foreground">

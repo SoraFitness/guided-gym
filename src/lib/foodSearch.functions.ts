@@ -14,7 +14,7 @@ export interface FoodSearchResult {
   carbs: number;
   fat: number;
   verified: boolean;
-  estimated?: boolean;     // true when macros may be approximate (e.g. Nutritionix instant w/o detail)
+  estimated?: boolean; // true when macros may be approximate (e.g. Nutritionix instant w/o detail)
   category?: "restaurant" | "protein" | "grocery" | "generic";
   imageUrl?: string;
 }
@@ -23,7 +23,12 @@ export type FoodSearchResponse =
   | { ok: true; results: FoodSearchResult[]; sources: FoodSearchSource[] }
   | { ok: false; reason: "empty_query" | "all_sources_failed"; results: [] };
 
+export type BarcodeLookupResponse =
+  | { ok: true; result: FoodSearchResult }
+  | { ok: false; reason: "invalid_barcode" | "not_found" | "service_unavailable" };
+
 const QuerySchema = z.object({ query: z.string().min(1).max(80) });
+const BarcodeSchema = z.object({ barcode: z.string().min(1).max(32) });
 
 const round = (n: unknown, d = 1) => {
   const v = typeof n === "number" ? n : Number(n);
@@ -48,9 +53,26 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
       headers: { "x-app-id": appId, "x-app-key": appKey, "x-remote-user-id": "0" },
     });
     if (!res.ok) return [];
-    const data = await res.json() as {
-      common?: Array<{ food_name: string; serving_unit?: string; serving_qty?: number; photo?: { thumb?: string }; full_nutrients?: Array<{ attr_id: number; value: number }> }>;
-      branded?: Array<{ food_name: string; brand_name?: string; serving_unit?: string; serving_qty?: number; nf_calories?: number; nf_protein?: number; nf_total_carbohydrate?: number; nf_total_fat?: number; nix_item_id?: string; photo?: { thumb?: string } }>;
+    const data = (await res.json()) as {
+      common?: Array<{
+        food_name: string;
+        serving_unit?: string;
+        serving_qty?: number;
+        photo?: { thumb?: string };
+        full_nutrients?: Array<{ attr_id: number; value: number }>;
+      }>;
+      branded?: Array<{
+        food_name: string;
+        brand_name?: string;
+        serving_unit?: string;
+        serving_qty?: number;
+        nf_calories?: number;
+        nf_protein?: number;
+        nf_total_carbohydrate?: number;
+        nf_total_fat?: number;
+        nix_item_id?: string;
+        photo?: { thumb?: string };
+      }>;
     };
 
     const out: FoodSearchResult[] = [];
@@ -58,9 +80,12 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
     // Branded items: prefer brand-tagged results first (closer to "Big Mac" / "Prime")
     for (const b of (data.branded ?? []).slice(0, 12)) {
       const serving = `${b.serving_qty ?? 1} ${b.serving_unit ?? "serving"}`.trim();
-      const hasMacros = b.nf_protein != null || b.nf_total_carbohydrate != null || b.nf_total_fat != null;
+      const hasMacros =
+        b.nf_protein != null || b.nf_total_carbohydrate != null || b.nf_total_fat != null;
       out.push({
-        id: `nutritionix:${b.nix_item_id ?? `${b.brand_name}-${b.food_name}`}`.toLowerCase().replace(/\s+/g, "-"),
+        id: `nutritionix:${b.nix_item_id ?? `${b.brand_name}-${b.food_name}`}`
+          .toLowerCase()
+          .replace(/\s+/g, "-"),
         source: "nutritionix",
         brand: b.brand_name,
         name: b.food_name,
@@ -114,7 +139,7 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
     const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&pageSize=15&dataType=Branded,SR%20Legacy,Foundation`;
     const res = await fetch(url);
     if (!res.ok) return [];
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       foods?: Array<{
         fdcId: number;
         description: string;
@@ -124,7 +149,12 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
         servingSizeUnit?: string;
         householdServingFullText?: string;
         dataType?: string;
-        foodNutrients?: Array<{ nutrientNumber?: string; nutrientName?: string; value?: number; unitName?: string }>;
+        foodNutrients?: Array<{
+          nutrientNumber?: string;
+          nutrientName?: string;
+          value?: number;
+          unitName?: string;
+        }>;
       }>;
     };
 
@@ -134,8 +164,9 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
       const getByNum = (num: string) => nuts.find((n) => n.nutrientNumber === num)?.value ?? 0;
       const kcal = getByNum("208");
       if (!kcal) continue;
-      const serving = f.householdServingFullText
-        ?? (f.servingSize ? `${f.servingSize} ${f.servingSizeUnit ?? "g"}` : "1 serving");
+      const serving =
+        f.householdServingFullText ??
+        (f.servingSize ? `${f.servingSize} ${f.servingSizeUnit ?? "g"}` : "1 serving");
       out.push({
         id: `usda:${f.fdcId}`,
         source: "usda",
@@ -162,9 +193,9 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
 async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
   try {
     const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=15&fields=code,product_name,brands,serving_size,nutriments,image_thumb_url`;
-    const res = await fetch(url, { headers: { "User-Agent": "Pulse-Fitness/1.0" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Ascendr-Fitness/1.0" } });
     if (!res.ok) return [];
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       products?: Array<{
         code?: string;
         product_name?: string;
@@ -208,6 +239,104 @@ async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
   }
 }
 
+export const lookupFoodByBarcode = createServerFn({ method: "POST" })
+  .validator(BarcodeSchema)
+  .handler(async ({ data }): Promise<BarcodeLookupResponse> => {
+    const barcode = data.barcode.trim();
+    if (!/^\d{8,14}$/.test(barcode)) {
+      return { ok: false, reason: "invalid_barcode" };
+    }
+
+    try {
+      const fields = [
+        "code",
+        "product_name",
+        "brands",
+        "serving_size",
+        "quantity",
+        "nutriments",
+        "image_front_small_url",
+        "image_thumb_url",
+      ].join(",");
+      // Some camera decoders return a UPC-A without the EAN-13 leading zero
+      // (or the reverse). Try both canonical forms before calling it missing.
+      const candidates = [
+        barcode,
+        ...(barcode.length === 12 ? [`0${barcode}`] : []),
+        ...(barcode.length === 13 && barcode.startsWith("0") ? [barcode.slice(1)] : []),
+      ];
+      let product:
+        | {
+            code?: string;
+            product_name?: string;
+            brands?: string;
+            serving_size?: string;
+            quantity?: string;
+            image_front_small_url?: string;
+            image_thumb_url?: string;
+            nutriments?: Record<string, number | string>;
+          }
+        | undefined;
+      let serviceUnavailable = false;
+
+      for (const candidate of [...new Set(candidates)]) {
+        const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(candidate)}?fields=${fields}`;
+        const response = await fetch(url, {
+          headers: { "User-Agent": "Ascendr-Fitness/1.0 (barcode lookup)" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) {
+          if (response.status !== 404) serviceUnavailable = true;
+          continue;
+        }
+        const payload = (await response.json()) as {
+          status?: number;
+          product?: typeof product;
+        };
+        if (payload.status === 1 && payload.product?.product_name) {
+          product = payload.product;
+          break;
+        }
+      }
+
+      if (!product?.product_name) {
+        return { ok: false, reason: serviceUnavailable ? "service_unavailable" : "not_found" };
+      }
+
+      const nutrients = product.nutriments ?? {};
+      const hasServingNutrition = Object.prototype.hasOwnProperty.call(
+        nutrients,
+        "energy-kcal_serving",
+      );
+      const suffix = hasServingNutrition ? "serving" : "100g";
+      const value = (key: string) => round(nutrients[`${key}_${suffix}`] ?? 0);
+
+      return {
+        ok: true,
+        result: {
+          id: `off:${product.code ?? barcode}`,
+          source: "openfoodfacts",
+          brand: product.brands?.split(",")[0]?.trim(),
+          name: product.product_name,
+          serving:
+            hasServingNutrition && product.serving_size
+              ? product.serving_size
+              : product.quantity || "100 g",
+          kcal: Math.round(value("energy-kcal")),
+          protein: value("proteins"),
+          carbs: value("carbohydrates"),
+          fat: value("fat"),
+          verified: true,
+          category: "grocery",
+          imageUrl: product.image_front_small_url || product.image_thumb_url,
+        },
+      };
+    } catch (error) {
+      console.error("[lookupFoodByBarcode]", error);
+      return { ok: false, reason: "service_unavailable" };
+    }
+  });
+
 function dedupe(results: FoodSearchResult[]): FoodSearchResult[] {
   const seen = new Set<string>();
   const out: FoodSearchResult[] = [];
@@ -234,9 +363,9 @@ export const searchFoodDatabase = createServerFn({ method: "POST" })
 
     const merged = dedupe([...nix, ...usda, ...off]).slice(0, 40);
     const sources: FoodSearchSource[] = [];
-    if (nix.length)  sources.push("nutritionix");
+    if (nix.length) sources.push("nutritionix");
     if (usda.length) sources.push("usda");
-    if (off.length)  sources.push("openfoodfacts");
+    if (off.length) sources.push("openfoodfacts");
 
     if (!merged.length && sources.length === 0) {
       // All sources empty AND none configured -> fail soft so the client falls back to presets only

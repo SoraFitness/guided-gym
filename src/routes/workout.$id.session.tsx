@@ -19,11 +19,14 @@ import {
   Flame,
   Dumbbell,
   History as HistoryIcon,
+  ListPlus,
+  Search,
 } from "lucide-react";
 import { getWorkout, type Workout } from "@/lib/workouts";
 import { useProfile } from "@/lib/profile";
 import {
   addExtraSet,
+  addExerciseToSession,
   clearSession,
   completeSetInSession,
   computeSummary,
@@ -43,8 +46,10 @@ import {
 } from "@/lib/workoutSessionStore";
 import { logWorkout } from "@/lib/progressStore";
 import { Exercise3DViewer } from "@/components/exercise3d/Exercise3DViewer";
-import { detectAnimation } from "@/lib/exerciseCoaching";
-import type { AvatarGender } from "@/components/exercise3d/AvatarModel";
+import { getExerciseDemoInfo } from "@/lib/exerciseCoaching";
+import { resolveDemoModelGender } from "@/lib/demoModel";
+import { EXERCISE_LIBRARY, type ExerciseLibraryItem } from "@/lib/workoutCatalog";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/workout/$id/session")({
   head: ({ params }) => ({
@@ -58,14 +63,12 @@ export const Route = createFileRoute("/workout/$id/session")({
   component: SessionPage,
 });
 
-function genderToAvatar(g: string | undefined): AvatarGender {
-  if (g === "male" || g === "female") return g;
-  return "neutral";
-}
-
 function parseRest(rest: string | undefined): number {
   if (!rest) return 45;
-  const m = rest.trim().toLowerCase().match(/^(\d+)\s*([sm]?)$/);
+  const m = rest
+    .trim()
+    .toLowerCase()
+    .match(/^(\d+)\s*([sm]?)$/);
   if (!m) return 45;
   const n = parseInt(m[1], 10);
   return m[2] === "m" ? n * 60 : n;
@@ -104,13 +107,35 @@ function SessionPage() {
   const [restTotal, setRestTotal] = useState(45);
   const [restLeft, setRestLeft] = useState(45);
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
   const restTimer = useRef<number | null>(null);
 
   const activeForThis =
     session && session.workoutId === w.id && session.status === "active" ? session : null;
-  const idx = activeForThis ? Math.min(activeForThis.currentExerciseIndex, w.exercises.length - 1) : 0;
-  const ex = w.exercises[idx];
+  const sessionExerciseCount = activeForThis?.exercises.length ?? w.exercises.length;
+  const idx = activeForThis
+    ? Math.min(activeForThis.currentExerciseIndex, Math.max(0, sessionExerciseCount - 1))
+    : 0;
   const exLog = activeForThis?.exercises[idx];
+  const libraryExercise = exLog
+    ? EXERCISE_LIBRARY.find(
+        (item) => item.id === exLog.exerciseId || item.name === exLog.exerciseName,
+      )
+    : undefined;
+  const ex =
+    (exLog ? w.exercises.find((item) => item.id === exLog.exerciseId) : undefined) ??
+    (exLog && libraryExercise
+      ? {
+          id: libraryExercise.id,
+          name: libraryExercise.name,
+          sets: exLog.sets.length,
+          reps: exLog.sets[0]?.plannedReps ?? libraryExercise.defaultReps,
+          rest: libraryExercise.defaultRest,
+          muscleGroup: libraryExercise.muscleGroup,
+          difficulty: w.difficulty,
+          demoType: libraryExercise.demoType,
+        }
+      : (w.exercises[idx] ?? w.exercises[0]));
 
   const summary = useMemo(
     () =>
@@ -119,11 +144,16 @@ function SessionPage() {
         : { totalSets: 0, totalReps: 0, totalVolume: 0, exercisesCompleted: 0 },
     [activeForThis],
   );
-  const plannedTotal = useMemo(() => w.exercises.reduce((s, e) => s + e.sets, 0), [w]);
+  const plannedTotal = useMemo(
+    () =>
+      activeForThis?.exercises.reduce((total, exercise) => total + exercise.sets.length, 0) ??
+      w.exercises.reduce((total, exercise) => total + exercise.sets, 0),
+    [activeForThis, w.exercises],
+  );
   const progressPct = plannedTotal ? Math.min(100, (summary.totalSets / plannedTotal) * 100) : 0;
 
-  const animation = detectAnimation(ex.name, ex.demoType);
-  const gender = genderToAvatar(profile?.gender);
+  const demo = getExerciseDemoInfo(ex, profile?.experience, profile?.goal);
+  const gender = resolveDemoModelGender(profile);
 
   // ----- rest timer -----
   const startRest = useCallback((seconds: number) => {
@@ -197,7 +227,7 @@ function SessionPage() {
 
   const handleNextExercise = () => {
     if (!session) return;
-    if (idx + 1 >= w.exercises.length) {
+    if (idx + 1 >= session.exercises.length) {
       finalize();
       return;
     }
@@ -228,7 +258,7 @@ function SessionPage() {
 
   const completedCount = exLog.sets.filter((s) => s.completed).length;
   const nextIncomplete = exLog.sets.find((s) => !s.completed);
-  const nextEx = w.exercises[Math.min(idx + 1, w.exercises.length - 1)];
+  const nextExLog = activeForThis.exercises[Math.min(idx + 1, activeForThis.exercises.length - 1)];
 
   return (
     <div className="min-h-dvh bg-background flex flex-col pb-32">
@@ -243,10 +273,18 @@ function SessionPage() {
         </button>
         <div className="flex-1 min-w-0">
           <div className="text-[11px] text-muted-foreground">
-            Exercise {idx + 1} of {w.exercises.length}
+            Exercise {idx + 1} of {activeForThis.exercises.length}
           </div>
           <div className="font-bold truncate">{w.title}</div>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowExercisePicker(true)}
+          className="grid size-10 place-items-center rounded-full border border-neon/20 bg-neon/10 text-neon"
+          aria-label="Add an exercise"
+        >
+          <ListPlus className="size-4" />
+        </button>
         <UnitToggle unit={activeForThis.unit} onChange={setSessionUnit} />
       </div>
 
@@ -292,10 +330,14 @@ function SessionPage() {
             {/* 3D viewer */}
             <div className="px-5 mt-4">
               <Exercise3DViewer
-                animation={animation}
+                animation={demo.animation}
                 gender={gender}
                 showControls={false}
                 label={ex.name}
+                exerciseId={ex.id}
+                primaryMuscles={demo.primaryMuscles}
+                secondaryMuscles={demo.secondaryMuscles}
+                equipment={demo.equipment}
               />
             </div>
 
@@ -329,7 +371,7 @@ function SessionPage() {
                   className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <SkipForward className="size-4" />
-                  {idx + 1 >= w.exercises.length ? "Finish" : "Next"}
+                  {idx + 1 >= activeForThis.exercises.length ? "Finish" : "Next"}
                 </button>
                 <button
                   onClick={handleEndWorkout}
@@ -351,15 +393,13 @@ function SessionPage() {
             key="rest"
             restLeft={restLeft}
             restTotal={restTotal}
-            nextName={nextIncomplete ? ex.name : nextEx.name}
+            nextName={nextIncomplete ? ex.name : nextExLog.exerciseName}
             nextSet={nextIncomplete?.setNumber ?? 1}
-            nextSetsTotal={nextIncomplete ? exLog.sets.length : nextEx.sets}
+            nextSetsTotal={nextIncomplete ? exLog.sets.length : nextExLog.sets.length}
             nextReps={
               nextIncomplete
                 ? `${nextIncomplete.actualReps} reps`
-                : nextEx.reps
-                  ? `${nextEx.reps} reps`
-                  : nextEx.time ?? ""
+                : `${nextExLog.sets[0]?.plannedReps ?? "10"} reps`
             }
             isNextExercise={!nextIncomplete}
             onAdjust={(d) => setRestLeft((r) => Math.max(5, r + d))}
@@ -371,7 +411,151 @@ function SessionPage() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {showExercisePicker && (
+          <ExercisePicker
+            equipment={profile?.equipment ?? "mixed"}
+            onClose={() => setShowExercisePicker(false)}
+            onAdd={(exercise) => {
+              addExerciseToSession({
+                id: exercise.id,
+                name: exercise.name,
+                sets: exercise.defaultSets,
+                reps: exercise.defaultReps,
+                muscleGroup: exercise.muscleGroup,
+              });
+              setShowExercisePicker(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+function ExercisePicker({
+  equipment,
+  onAdd,
+  onClose,
+}: {
+  equipment: "none" | "dumbbells" | "gym" | "mixed";
+  onAdd: (exercise: ExerciseLibraryItem) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [muscle, setMuscle] = useState("All");
+  const muscleGroups = useMemo(
+    () => [
+      "All",
+      ...Array.from(new Set(EXERCISE_LIBRARY.map((exercise) => exercise.muscleGroup))).sort(),
+    ],
+    [],
+  );
+  const matches = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return EXERCISE_LIBRARY.filter(
+      (exercise) =>
+        (equipment === "mixed" || exercise.equipment.includes(equipment)) &&
+        (muscle === "All" || exercise.muscleGroup === muscle) &&
+        (!normalized ||
+          exercise.name.toLowerCase().includes(normalized) ||
+          exercise.muscleGroup.toLowerCase().includes(normalized)),
+    ).slice(0, 80);
+  }, [equipment, muscle, query]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-end bg-black/75 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add an exercise"
+    >
+      <motion.div
+        initial={{ y: 40 }}
+        animate={{ y: 0 }}
+        exit={{ y: 40 }}
+        className="max-h-[88dvh] w-full overflow-hidden rounded-t-[30px] border border-white/[0.08] bg-background"
+      >
+        <div className="px-5 pb-3 pt-4">
+          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+                Exercise library
+              </p>
+              <h2 className="text-xl font-extrabold">Add an exercise</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid size-10 place-items-center rounded-full bg-white/[0.06]"
+              aria-label="Close exercise picker"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <label className="mt-4 flex h-12 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] px-4">
+            <Search className="size-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search exercise or muscle"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </label>
+          <div className="-mx-5 mt-3 flex gap-2 overflow-x-auto px-5 pb-1 scrollbar-none">
+            {muscleGroups.map((group) => (
+              <button
+                key={group}
+                type="button"
+                onClick={() => setMuscle(group)}
+                className={cn(
+                  "h-9 shrink-0 rounded-full border px-3 text-[10px] font-semibold",
+                  muscle === group
+                    ? "border-neon bg-neon text-neon-foreground"
+                    : "border-white/[0.07] bg-white/[0.03] text-muted-foreground",
+                )}
+              >
+                {group}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-h-[58dvh] overflow-y-auto border-t border-white/[0.06] px-5 pb-8 pt-3">
+          <p className="mb-2 text-[10px] text-muted-foreground">{matches.length} exercises</p>
+          <div className="grid gap-2">
+            {matches.map((exercise) => (
+              <button
+                key={exercise.id}
+                type="button"
+                onClick={() => onAdd(exercise)}
+                className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-left active:bg-neon/10"
+              >
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-neon/10 text-neon">
+                  <Dumbbell className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{exercise.name}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {exercise.muscleGroup} · {exercise.defaultSets} sets · {exercise.defaultReps}{" "}
+                    reps
+                  </p>
+                </div>
+                <span className="grid size-8 place-items-center rounded-full bg-neon text-neon-foreground">
+                  <Plus className="size-4" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -450,16 +634,16 @@ function SetRow({
   const bumpReps = (d: number) =>
     updateSet(exLog.id, set.setNumber, { actualReps: Math.max(0, set.actualReps + d) });
   const bumpWeight = (d: number) =>
-    updateSet(exLog.id, set.setNumber, { weight: Math.max(0, Math.round((set.weight + d) * 10) / 10) });
+    updateSet(exLog.id, set.setNumber, {
+      weight: Math.max(0, Math.round((set.weight + d) * 10) / 10),
+    });
   const weightStep = unit === "kg" ? 2.5 : 5;
 
   return (
     <div
       className={
         "rounded-2xl border " +
-        (set.completed
-          ? "bg-neon/10 border-neon/30"
-          : "bg-white/[0.03] border-white/[0.05]")
+        (set.completed ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-white/[0.05]")
       }
     >
       <div className="grid grid-cols-[28px_1fr_1fr_36px_36px] gap-2 items-center p-2">
@@ -579,13 +763,7 @@ function SetRow({
   );
 }
 
-function UnitToggle({
-  unit,
-  onChange,
-}: {
-  unit: WeightUnit;
-  onChange: (u: WeightUnit) => void;
-}) {
+function UnitToggle({ unit, onChange }: { unit: WeightUnit; onChange: (u: WeightUnit) => void }) {
   return (
     <div className="flex bg-white/[0.05] rounded-full p-0.5 text-[10px] font-bold">
       {(["lb", "kg"] as const).map((u) => (
@@ -658,7 +836,14 @@ function RestScreen({
 
       <div className="relative mt-4">
         <svg width="260" height="260" viewBox="0 0 260 260">
-          <circle cx="130" cy="130" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+          <circle
+            cx="130"
+            cy="130"
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="10"
+          />
           <circle
             cx="130"
             cy="130"
@@ -725,19 +910,15 @@ function RestScreen({
 
 /* ============================= Completion screen ============================= */
 
-function CompletionScreen({
-  workout,
-  savedId,
-}: {
-  workout: Workout;
-  savedId: string | null;
-}) {
+function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: string | null }) {
   // Read saved record so totals reflect actual logged sets.
   const saved =
     typeof window !== "undefined" && savedId
-      ? (JSON.parse(localStorage.getItem("fitness:completedWorkouts:v2") || "[]") as CompletedWorkout[]).find(
-          (w) => w.id === savedId,
-        )
+      ? (
+          JSON.parse(
+            localStorage.getItem("fitness:completedWorkouts:v2") || "[]",
+          ) as CompletedWorkout[]
+        ).find((w) => w.id === savedId)
       : undefined;
 
   const totals = saved
@@ -761,6 +942,21 @@ function CompletionScreen({
         exercises: workout.exercises.length,
         best: undefined,
       };
+  const loggedWeights =
+    saved?.exercises
+      .map((exercise) => {
+        const weightedSets = exercise.sets.filter((set) => set.completed && set.weight > 0);
+        const heaviest = weightedSets.sort((a, b) => b.weight - a.weight)[0];
+        return heaviest
+          ? {
+              name: exercise.exerciseName,
+              weight: heaviest.weight,
+              reps: heaviest.actualReps,
+              unit: heaviest.unit,
+            }
+          : null;
+      })
+      .filter(Boolean) ?? [];
 
   return (
     <div className="min-h-dvh bg-background px-5 py-8 pb-24">
@@ -804,6 +1000,43 @@ function CompletionScreen({
           </div>
         )}
 
+        <div className="mt-4 rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-neon">
+                Weights recorded
+              </div>
+              <div className="mt-1 text-sm font-bold">
+                {loggedWeights.length
+                  ? `${loggedWeights.length} weighted exercise${loggedWeights.length === 1 ? "" : "s"} saved`
+                  : "Add weights before you leave"}
+              </div>
+            </div>
+            <Dumbbell className="size-5 text-neon" />
+          </div>
+          {loggedWeights.length > 0 && (
+            <div className="mt-3 grid gap-1.5">
+              {loggedWeights.slice(0, 4).map((entry) =>
+                entry ? (
+                  <div
+                    key={entry.name}
+                    className="flex items-center justify-between text-[11px] text-muted-foreground"
+                  >
+                    <span className="truncate pr-3">{entry.name}</span>
+                    <span className="shrink-0 font-semibold text-foreground">
+                      {entry.weight} {entry.unit} × {entry.reps}
+                    </span>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
+          <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+            Review any missed reps or weights now. Changes are included in your workout history and
+            synced to your account.
+          </p>
+        </div>
+
         <div className="mt-6 flex flex-col gap-2">
           {savedId && (
             <Link
@@ -811,7 +1044,7 @@ function CompletionScreen({
               params={{ id: savedId }}
               className="h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2"
             >
-              <HistoryIcon className="size-4" /> View / edit workout
+              <HistoryIcon className="size-4" /> Review & save weights
             </Link>
           )}
           <Link

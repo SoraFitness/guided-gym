@@ -1,169 +1,166 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { motion } from "framer-motion";
-import { ArrowLeft, ChevronRight, Sparkles, Trash2 } from "lucide-react";
-import { deleteScan, useScans } from "@/lib/bodyScanStore";
-import { SCAN_DISCLAIMER } from "@/lib/bodyScan";
+import {
+  ArrowLeft,
+  Dumbbell,
+  Loader2,
+  LockKeyhole,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
+  Target,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
+import { useAuthSession } from "@/lib/authSession";
+import { deleteScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/scan/body/")({
-  head: () => ({ meta: [{ title: "Body Scan — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Body Scan — Ascendr" }] }),
   component: BodyScanIntro,
 });
 
 function BodyScanIntro() {
   const navigate = useNavigate();
-  const scans = useScans();
-  const latest = scans[0];
+  const session = useAuthSession();
+  const listHistory = useServerFn(listScanSubmissions);
+  const deleteSubmission = useServerFn(deleteScanSubmission);
+  const queryClient = useQueryClient();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const historyQuery = useQuery({
+    queryKey: [
+      "scan-submissions",
+      "body",
+      session && session !== "loading" ? session.userId : "guest",
+    ],
+    queryFn: () => listHistory({ data: { scanType: "body" } }),
+    enabled: Boolean(session && session !== "loading"),
+  });
+
+  async function removeScan(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteSubmission({ data: { id } });
+      await queryClient.invalidateQueries({ queryKey: ["scan-submissions", "body"] });
+      toast.success("Body Scan deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't delete the scan.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
-    <div className="px-5 pt-6 pb-10 animate-slide-up">
-      <header className="flex items-center gap-3 mb-6">
+    <div className="mx-auto max-w-md px-5 pb-12 pt-5">
+      <header className="flex items-center gap-3">
         <Link
           to="/scan"
-          className="size-10 rounded-full bg-surface grid place-items-center"
-          aria-label="Back"
+          className="grid size-10 place-items-center rounded-full border border-white/[0.06] bg-surface"
+          aria-label="Back to scans"
         >
           <ArrowLeft className="size-5" />
         </Link>
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">Body Scan</p>
-          <h1 className="text-2xl font-bold">Scan Your Physique</h1>
+          <p className="text-[9px] font-black uppercase tracking-[0.23em] text-neon">
+            Ascendr Vision
+          </p>
+          <h1 className="text-lg font-bold">Body Scan</h1>
         </div>
       </header>
 
-      <motion.div
+      <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative rounded-[28px] overflow-hidden border border-white/5 bg-gradient-to-br from-surface via-black to-black aspect-[4/5]"
+        className="relative mt-6 overflow-hidden rounded-[32px] border border-neon/15 bg-gradient-to-br from-neon/[0.12] via-surface to-black p-6"
       >
+        <div className="absolute -right-16 -top-16 size-48 rounded-full bg-neon/10 blur-3xl" />
         <div
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-[0.08]"
           style={{
             backgroundImage:
-              "linear-gradient(to right, oklch(0.92 0.21 130 / 0.25) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.92 0.21 130 / 0.25) 1px, transparent 1px)",
-            backgroundSize: "44px 44px",
+              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+            backgroundSize: "36px 36px",
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-        <div className="absolute top-5 left-5 right-5 flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-[0.22em] text-white/60 font-bold">
-            Physique AI
-          </span>
-          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-neon/20 text-neon">
-            <Sparkles className="size-3" /> Vision
+        <div className="relative flex items-center justify-between">
+          <div className="grid size-14 place-items-center rounded-2xl bg-neon/15 text-neon">
+            <ScanLine className="size-7" />
+          </div>
+          <span className="flex items-center gap-1.5 rounded-full border border-neon/20 bg-black/30 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-neon">
+            <Sparkles className="size-3" /> AI report
           </span>
         </div>
-
-        <div className="absolute bottom-6 left-6 right-6">
-          <h2 className="text-3xl font-bold leading-tight text-balance">
-            Get instant ratings tailored to your physique.
-          </h2>
-          <p className="text-sm text-muted-foreground mt-2 max-w-[28ch]">
-            Upload front, side and back photos. Get posture, symmetry, and a plan.
-          </p>
+        <h2 className="relative mt-16 text-3xl font-bold leading-tight">
+          Turn one photo into a clearer plan.
+        </h2>
+        <p className="relative mt-3 max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+          See visible muscularity, a broad body-fat range, proportions, potential, and nine distinct
+          muscle groups—then get your highest-impact next steps.
+        </p>
+        <div className="relative mt-5 grid grid-cols-3 gap-2">
+          {[
+            { value: "9", label: "Muscle groups" },
+            { value: "6", label: "Core metrics" },
+            { value: "1", label: "Action plan" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl bg-black/25 p-3">
+              <p className="text-xl font-black text-neon">{item.value}</p>
+              <p className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-white/45">
+                {item.label}
+              </p>
+            </div>
+          ))}
         </div>
-      </motion.div>
+      </motion.section>
 
       <button
+        type="button"
         onClick={() => navigate({ to: "/scan/body/new" })}
-        className="mt-5 w-full h-14 rounded-2xl bg-neon text-neon-foreground font-bold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition"
-        style={{ boxShadow: "0 14px 40px -10px oklch(0.92 0.21 130 / 0.55)" }}
+        className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon text-base font-bold text-neon-foreground shadow-[0_14px_40px_-14px_var(--neon)] transition active:scale-[0.985]"
       >
-        Start Body Scan
+        <Sparkles className="size-5" /> Start Body Scan
       </button>
-      <p className="mt-3 text-[11px] text-center text-muted-foreground leading-relaxed">
-        {SCAN_DISCLAIMER}
-      </p>
 
-      {scans.length > 0 && (
-        <section className="mt-8">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold">History</h3>
-            <span className="text-xs text-muted-foreground">{scans.length} scans</span>
+      <section className="mt-5 grid grid-cols-3 gap-2">
+        {[
+          { icon: Dumbbell, label: "Clear muscle groups" },
+          { icon: Target, label: "Prioritized actions" },
+          { icon: LockKeyhole, label: "Private by default" },
+        ].map(({ icon: Icon, label }) => (
+          <div
+            key={label}
+            className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-center"
+          >
+            <Icon className="mx-auto size-4 text-neon" />
+            <p className="mt-2 text-[9px] font-semibold leading-snug text-white/55">{label}</p>
           </div>
-          <div className="space-y-2">
-            {latest && (
-              <Link
-                to="/scan/body/$id"
-                params={{ id: latest.id }}
-                className="block rounded-2xl bg-surface border border-neon/20 p-4 hover:border-neon/40 transition"
-              >
-                <div className="flex items-center gap-4">
-                  {latest.thumbnail ? (
-                    <img
-                      src={latest.thumbnail}
-                      alt="Latest scan"
-                      className="size-16 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <div className="size-16 rounded-xl bg-black grid place-items-center text-2xl font-extrabold text-neon">
-                      {latest.overallScore}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-wider text-neon font-bold">
-                      Latest · {latest.level}
-                    </p>
-                    <p className="font-bold">Score {latest.overallScore}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {new Date(latest.createdAt).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <ChevronRight className="size-5 text-muted-foreground" />
-                </div>
-              </Link>
-            )}
-            {scans.slice(1).map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-3 rounded-2xl bg-surface/60 p-3 border border-white/5"
-              >
-                <Link
-                  to="/scan/body/$id"
-                  params={{ id: s.id }}
-                  className="flex items-center gap-3 flex-1 min-w-0"
-                >
-                  {s.thumbnail ? (
-                    <img
-                      src={s.thumbnail}
-                      alt="Scan"
-                      className="size-12 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="size-12 rounded-lg bg-black grid place-items-center text-sm font-extrabold text-neon">
-                      {s.overallScore}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">
-                      {s.level} · {s.overallScore}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(s.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </Link>
-                <button
-                  onClick={() => {
-                    if (confirm("Delete this scan?")) deleteScan(s.id);
-                  }}
-                  className="size-8 rounded-full grid place-items-center text-muted-foreground hover:text-destructive transition"
-                  aria-label="Delete scan"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
+        ))}
+      </section>
+
+      {historyQuery.isLoading && (
+        <div className="mt-8 flex items-center justify-center gap-2 rounded-3xl border border-white/[0.06] bg-surface py-8 text-xs text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading your private history
+        </div>
       )}
 
-      <p className="mt-8 text-[11px] text-muted-foreground text-center leading-relaxed">
-        Photos are only used to generate your scan and stay on this device unless you save them.
-      </p>
+      <ScanHistoryList
+        items={historyQuery.data ?? []}
+        label="Body"
+        deletingId={deletingId}
+        onOpen={(id) => navigate({ to: "/scan/body/$id", params: { id } })}
+        onDelete={removeScan}
+      />
+
+      <div className="mt-8 flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          Photos and reports are stored in your private account. Results are photo-dependent visual
+          opinions, not medical or body-composition measurements.
+        </p>
+      </div>
     </div>
   );
 }

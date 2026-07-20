@@ -1,10 +1,27 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type { WorkoutSplitId } from "./workoutSplits";
 
-export type Goal = "lose_weight" | "build_muscle" | "recomp" | "endurance" | "maintain" | "get_stronger" | "overall";
+export type Goal =
+  | "lose_weight"
+  | "build_muscle"
+  | "recomp"
+  | "endurance"
+  | "maintain"
+  | "get_stronger"
+  | "overall";
 export type Gender = "male" | "female" | "other";
+export type DemoModelPreference = "auto" | "male" | "female";
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 export type EquipmentSetup = "none" | "dumbbells" | "gym" | "mixed";
-export type FocusArea = "chest" | "back" | "legs" | "glutes" | "arms" | "core" | "cardio" | "mobility";
+export type FocusArea =
+  | "chest"
+  | "back"
+  | "legs"
+  | "glutes"
+  | "arms"
+  | "core"
+  | "cardio"
+  | "mobility";
 export type NutritionPlan = "fat_loss" | "muscle_gain" | "maintenance" | "custom";
 
 export const GOAL_LABELS: Record<Goal, string> = {
@@ -61,8 +78,14 @@ export const NUTRITION_LABELS: Record<NutritionPlan, string> = {
   custom: "Custom",
 };
 export const FOCUS_LABELS: Record<FocusArea, string> = {
-  chest: "Chest", back: "Back", legs: "Legs", glutes: "Glutes",
-  arms: "Arms", core: "Core", cardio: "Cardio", mobility: "Mobility",
+  chest: "Chest",
+  back: "Back",
+  legs: "Legs",
+  glutes: "Glutes",
+  arms: "Arms",
+  core: "Core",
+  cardio: "Cardio",
+  mobility: "Mobility",
 };
 
 export interface Profile {
@@ -74,6 +97,7 @@ export interface Profile {
   daysPerWeek: 2 | 3 | 4 | 5 | 6;
   sessionMinutes: 20 | 30 | 45 | 60;
   focusAreas: FocusArea[];
+  workoutSplit?: WorkoutSplitId;
   // Body
   currentWeightKg: number;
   goalWeightKg: number;
@@ -92,6 +116,7 @@ export interface Profile {
   nutritionPlan: NutritionPlan;
   // Misc
   units?: "metric" | "imperial";
+  demoModelPreference?: DemoModelPreference;
   injuries?: string;
   equipmentItems?: string[];
   referralSource?: "tiktok" | "instagram" | "youtube" | "friend" | "appstore" | "google" | "other";
@@ -109,8 +134,31 @@ interface Ctx {
 }
 
 const ProfileContext = createContext<Ctx>({
-  profile: null, setProfile: () => {}, updateProfile: () => {}, ready: false,
+  profile: null,
+  setProfile: () => {},
+  updateProfile: () => {},
+  ready: false,
 });
+
+// Fired by ProfileProvider whenever the user changes their profile (cloud sync listens).
+export const PROFILE_CHANGE_EVT = "fitness:profile-change";
+// Fired by cloud sync after writing a pulled profile to localStorage (provider re-reads).
+export const PROFILE_EXTERNAL_EVT = "fitness:profile-external";
+
+export function readStoredProfile(): Profile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? migrate(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredProfile(p: Profile) {
+  localStorage.setItem(KEY, JSON.stringify(p));
+  window.dispatchEvent(new Event(PROFILE_EXTERNAL_EVT));
+}
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfileState] = useState<Profile | null>(null);
@@ -120,14 +168,21 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) setProfileState(migrate(JSON.parse(raw)));
-    } catch {}
+    } catch {
+      // Ignore malformed legacy profile data and continue with onboarding defaults.
+    }
     setReady(true);
+
+    const onExternal = () => setProfileState(readStoredProfile());
+    window.addEventListener(PROFILE_EXTERNAL_EVT, onExternal);
+    return () => window.removeEventListener(PROFILE_EXTERNAL_EVT, onExternal);
   }, []);
 
   const setProfile = (p: Profile | null) => {
     setProfileState(p);
     if (p) localStorage.setItem(KEY, JSON.stringify(p));
     else localStorage.removeItem(KEY);
+    window.dispatchEvent(new Event(PROFILE_CHANGE_EVT));
   };
   const updateProfile = (patch: Partial<Profile>) => {
     setProfileState((cur) => {
@@ -136,6 +191,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(KEY, JSON.stringify(next));
       return next;
     });
+    window.dispatchEvent(new Event(PROFILE_CHANGE_EVT));
   };
 
   return (
@@ -163,26 +219,33 @@ function migrate(raw: Record<string, unknown>): Profile {
   defaultTarget.setDate(defaultTarget.getDate() + 84); // 12 weeks
   return {
     name: (raw.name as string) ?? "Athlete",
-    goal: (raw.goal as string) in goalMap ? goalMap[raw.goal as string] : ((raw.goal as Goal) ?? "build_muscle"),
+    goal:
+      (raw.goal as string) in goalMap
+        ? goalMap[raw.goal as string]
+        : ((raw.goal as Goal) ?? "build_muscle"),
     experience: (raw.experience as ExperienceLevel) ?? "intermediate",
     equipment: (raw.equipment as EquipmentSetup) ?? equipMap(raw.location),
     daysPerWeek: days,
     sessionMinutes: (raw.sessionMinutes as 20 | 30 | 45 | 60) ?? 30,
     focusAreas: (raw.focusAreas as FocusArea[]) ?? ["chest", "back", "legs"],
+    workoutSplit: (raw.workoutSplit as WorkoutSplitId) ?? "auto",
     currentWeightKg: (raw.currentWeightKg as number) ?? (raw.weightKg as number) ?? 70,
     goalWeightKg: (raw.goalWeightKg as number) ?? (raw.weightKg as number) ?? 70,
     heightCm: (raw.heightCm as number) ?? 170,
     age: (raw.age as number) ?? 25,
     gender: (raw.gender as Gender) ?? "other",
-    bodyFatPct: (raw.bodyFatPct as number | undefined),
+    bodyFatPct: raw.bodyFatPct as number | undefined,
     activityLevel: (raw.activityLevel as Profile["activityLevel"]) ?? defaultActivity,
-    avgStepsPerDay: (raw.avgStepsPerDay as number | undefined),
+    avgStepsPerDay: raw.avgStepsPerDay as number | undefined,
     goalTargetDate: (raw.goalTargetDate as string) ?? defaultTarget.toISOString(),
     deficitSplit: (raw.deficitSplit as Profile["deficitSplit"]) ?? "balanced",
     bulkPace: (raw.bulkPace as Profile["bulkPace"]) ?? "lean",
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
+    demoModelPreference: (raw.demoModelPreference as DemoModelPreference) ?? "auto",
     injuries: (raw.injuries as string) ?? "",
-    equipmentItems: (raw.equipmentItems as string[]) ?? defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
+    equipmentItems:
+      (raw.equipmentItems as string[]) ??
+      defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
     referralSource: raw.referralSource as Profile["referralSource"],
     referralCode: raw.referralCode as string | undefined,
     completedAt: (raw.completedAt as string) ?? new Date().toISOString(),
@@ -191,9 +254,13 @@ function migrate(raw: Record<string, unknown>): Profile {
 
 function defaultEquipmentItems(setup: EquipmentSetup): string[] {
   switch (setup) {
-    case "gym": return ["Full gym access"];
-    case "dumbbells": return ["Dumbbells"];
-    case "mixed": return ["Dumbbells", "Bench"];
-    default: return ["No equipment"];
+    case "gym":
+      return ["Full gym access"];
+    case "dumbbells":
+      return ["Dumbbells"];
+    case "mixed":
+      return ["Dumbbells", "Bench"];
+    default:
+      return ["No equipment"];
   }
 }

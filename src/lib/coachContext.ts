@@ -4,10 +4,18 @@ import type { Profile } from "./profile";
 import { loadLog, loadGoals, macrosFor, entriesOn } from "./foods";
 import { getCompletedWorkouts } from "./workoutSessionStore";
 import { computePlan } from "./calorieEngine";
+import { getActiveWorkoutPlan, getSavedWorkoutPlans } from "./workoutPlanStore";
 
 export interface CoachUserContext {
   profile: Record<string, unknown> | null;
   plan: Record<string, unknown> | null;
+  activeWorkoutPlan: {
+    name: string;
+    summary: string;
+    source: "ai" | "smart";
+    workoutIds: string[];
+    input: Record<string, unknown>;
+  } | null;
   nutritionToday: {
     date: string;
     target: { kcal: number; protein: number; carbs: number; fat: number };
@@ -23,7 +31,11 @@ export interface CoachUserContext {
   recentWeightLog: { date: string; kg: number }[];
 }
 
-interface WeightEntry { id: string; kg: number; date: string }
+interface WeightEntry {
+  id: string;
+  kg: number;
+  date: string;
+}
 
 function readWeightLog(): WeightEntry[] {
   if (typeof window === "undefined") return [];
@@ -39,7 +51,26 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
   let plan: Record<string, unknown> | null = null;
   try {
     if (profile) {
-      const p = computePlan(profile as unknown as Parameters<typeof computePlan>[0]);
+      const nutritionGoal: Profile["goal"] =
+        profile.nutritionPlan === "fat_loss"
+          ? "lose_weight"
+          : profile.nutritionPlan === "muscle_gain"
+            ? "build_muscle"
+            : profile.nutritionPlan === "maintenance"
+              ? "maintain"
+              : profile.goal;
+      const p = computePlan({
+        gender: profile.gender,
+        age: profile.age,
+        heightCm: profile.heightCm,
+        currentWeightKg: profile.currentWeightKg,
+        goalWeightKg: profile.goalWeightKg,
+        goalType: nutritionGoal,
+        activity: profile.activityLevel,
+        targetDate: new Date(profile.goalTargetDate),
+        splitPreset: profile.deficitSplit,
+        bulkPace: profile.bulkPace,
+      });
       plan = {
         maintenanceKcal: Math.round(p.maintenanceKcal),
         recommendedIntakeKcal: Math.round(p.recommendedIntakeKcal),
@@ -50,7 +81,9 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
         isAggressive: p.isAggressive,
       };
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const goals = loadGoals();
   const log = loadLog();
@@ -87,6 +120,7 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
     .map((w) => ({ date: w.date.slice(0, 10), kg: w.kg }));
 
   const p = profile as unknown as Record<string, unknown> | null;
+  const savedWorkoutPlan = getActiveWorkoutPlan(getSavedWorkoutPlans(), profile);
   return {
     profile: p
       ? {
@@ -97,6 +131,9 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
           daysPerWeek: p.daysPerWeek,
           sessionMinutes: p.sessionMinutes,
           focusAreas: p.focusAreas,
+          workoutSplit: p.workoutSplit,
+          equipmentItems: p.equipmentItems,
+          nutritionPlan: p.nutritionPlan,
           age: p.age,
           gender: p.gender,
           heightCm: p.heightCm,
@@ -109,6 +146,15 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
         }
       : null,
     plan,
+    activeWorkoutPlan: savedWorkoutPlan
+      ? {
+          name: savedWorkoutPlan.name,
+          summary: savedWorkoutPlan.summary,
+          source: savedWorkoutPlan.source,
+          workoutIds: savedWorkoutPlan.workoutIds,
+          input: savedWorkoutPlan.input as unknown as Record<string, unknown>,
+        }
+      : null,
     nutritionToday: {
       date: todayISO,
       target: { kcal: goals.kcal, protein: goals.protein, carbs: goals.carbs, fat: goals.fat },

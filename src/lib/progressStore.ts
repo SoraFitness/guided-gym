@@ -31,6 +31,14 @@ export function logWorkout(minutes: number, workoutId?: string) {
   save(list);
 }
 
+// Snapshot + bulk replace (used by cloud sync).
+export function getWorkoutLogEntries(): WorkoutLogEntry[] {
+  return load();
+}
+export function replaceWorkoutLogEntries(list: WorkoutLogEntry[]) {
+  save(list);
+}
+
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
   const invalidate = () => { cache = null; cb(); };

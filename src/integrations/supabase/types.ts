@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      body_scans: {
+        Row: {
+          created_at: string
+          id: string
+          result: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          result: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          result?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coach_user_memory: {
+        Row: {
+          memories: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          memories?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          memories?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_app_state: {
+        Row: {
+          key: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          user_id: string
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       coach_messages: {
         Row: {
           created_at: string
@@ -108,8 +168,10 @@ export type Database = {
           calories: number
           carbs_g: number
           created_at: string
+          entry: Json | null
           fat_g: number
           id: string
+          logged_at: string | null
           logged_on: string
           meal: string
           name: string
@@ -120,8 +182,10 @@ export type Database = {
           calories?: number
           carbs_g?: number
           created_at?: string
+          entry?: Json | null
           fat_g?: number
           id?: string
+          logged_at?: string | null
           logged_on?: string
           meal?: string
           name: string
@@ -132,8 +196,10 @@ export type Database = {
           calories?: number
           carbs_g?: number
           created_at?: string
+          entry?: Json | null
           fat_g?: number
           id?: string
+          logged_at?: string | null
           logged_on?: string
           meal?: string
           name?: string
@@ -211,10 +277,60 @@ export type Database = {
         }
         Relationships: []
       }
+      user_profiles: {
+        Row: {
+          age: number | null
+          created_at: string
+          current_weight_kg: number | null
+          demo_model_preference: string
+          display_name: string
+          experience: string
+          gender: string
+          goal: string
+          goal_weight_kg: number | null
+          height_cm: number | null
+          profile: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          age?: number | null
+          created_at?: string
+          current_weight_kg?: number | null
+          demo_model_preference?: string
+          display_name?: string
+          experience: string
+          gender: string
+          goal: string
+          goal_weight_kg?: number | null
+          height_cm?: number | null
+          profile?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          age?: number | null
+          created_at?: string
+          current_weight_kg?: number | null
+          demo_model_preference?: string
+          display_name?: string
+          experience?: string
+          gender?: string
+          goal?: string
+          goal_weight_kg?: number | null
+          height_cm?: number | null
+          profile?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_goals: {
         Row: {
           created_at: string
           daily_calorie_target: number
+          daily_carbs_g_target: number
+          daily_fat_g_target: number
           daily_protein_g_target: number
           daily_step_target: number
           goal_weight_kg: number | null
@@ -227,6 +343,8 @@ export type Database = {
         Insert: {
           created_at?: string
           daily_calorie_target?: number
+          daily_carbs_g_target?: number
+          daily_fat_g_target?: number
           daily_protein_g_target?: number
           daily_step_target?: number
           goal_weight_kg?: number | null
@@ -239,6 +357,8 @@ export type Database = {
         Update: {
           created_at?: string
           daily_calorie_target?: number
+          daily_carbs_g_target?: number
+          daily_fat_g_target?: number
           daily_protein_g_target?: number
           daily_step_target?: number
           goal_weight_kg?: number | null
@@ -363,6 +483,8 @@ export type Database = {
       }
       workout_logs: {
         Row: {
+          calories: number
+          completed_at: string | null
           created_at: string
           duration_min: number
           id: string
@@ -372,13 +494,19 @@ export type Database = {
           notes: string | null
           performed_on: string
           pr_note: string | null
+          session: Json | null
+          started_at: string | null
           total_reps: number
           total_sets: number
           total_volume_kg: number
+          unit: string
           updated_at: string
           user_id: string
+          workout_id: string | null
         }
         Insert: {
+          calories?: number
+          completed_at?: string | null
           created_at?: string
           duration_min?: number
           id?: string
@@ -388,13 +516,19 @@ export type Database = {
           notes?: string | null
           performed_on?: string
           pr_note?: string | null
+          session?: Json | null
+          started_at?: string | null
           total_reps?: number
           total_sets?: number
           total_volume_kg?: number
+          unit?: string
           updated_at?: string
           user_id: string
+          workout_id?: string | null
         }
         Update: {
+          calories?: number
+          completed_at?: string | null
           created_at?: string
           duration_min?: number
           id?: string
@@ -404,11 +538,15 @@ export type Database = {
           notes?: string | null
           performed_on?: string
           pr_note?: string | null
+          session?: Json | null
+          started_at?: string | null
           total_reps?: number
           total_sets?: number
           total_volume_kg?: number
+          unit?: string
           updated_at?: string
           user_id?: string
+          workout_id?: string | null
         }
         Relationships: []
       }

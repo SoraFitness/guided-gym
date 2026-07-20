@@ -11,12 +11,7 @@ export interface BodyScanScores {
   core: number;
 }
 
-export type PhysiqueLevel =
-  | "Starting Point"
-  | "Building Base"
-  | "Athletic"
-  | "Strong"
-  | "Advanced";
+export type PhysiqueLevel = "Starting Point" | "Building Base" | "Athletic" | "Strong" | "Advanced";
 
 export interface BodyScanResult {
   id: string;
@@ -52,9 +47,9 @@ export const SCORE_LABELS: Record<keyof BodyScanScores, string> = {
   proportions: "Proportions",
   definition: "Definition",
   conditioning: "Conditioning",
-  upperBody: "Upper Body",
-  lowerBody: "Lower Body",
-  core: "Core",
+  upperBody: "Upper Body Development",
+  lowerBody: "Lower Body Development",
+  core: "Core Development",
 };
 
 // Deterministic hash so the same profile -> same mock result
@@ -86,29 +81,18 @@ export function mockScanFor(profile: Profile, photoSalt = ""): BodyScanResult {
   const photoSwing = photoSalt ? jitter(seed, 99, 14) : 0;
   const base = baseFromExp + bmiAdj + photoSwing;
 
-
   const scores: BodyScanScores = {
     posture: clamp(base + jitter(seed, 1)),
     symmetry: clamp(base + jitter(seed, 2)),
     proportions: clamp(base + jitter(seed, 3)),
-    definition: clamp(
-      base + jitter(seed, 4) + (profile.goal === "lose_weight" ? -4 : 0),
-    ),
-    conditioning: clamp(
-      base + jitter(seed, 5) + (profile.goal === "endurance" ? 6 : 0),
-    ),
-    upperBody: clamp(
-      base + jitter(seed, 6) + (profile.focusAreas.includes("chest") ? 3 : 0),
-    ),
-    lowerBody: clamp(
-      base + jitter(seed, 7) + (profile.focusAreas.includes("legs") ? 4 : 0),
-    ),
+    definition: clamp(base + jitter(seed, 4) + (profile.goal === "lose_weight" ? -4 : 0)),
+    conditioning: clamp(base + jitter(seed, 5) + (profile.goal === "endurance" ? 6 : 0)),
+    upperBody: clamp(base + jitter(seed, 6) + (profile.focusAreas.includes("chest") ? 3 : 0)),
+    lowerBody: clamp(base + jitter(seed, 7) + (profile.focusAreas.includes("legs") ? 4 : 0)),
     core: clamp(base + jitter(seed, 8) - 4),
   };
 
-  const overallScore = Math.round(
-    Object.values(scores).reduce((a, b) => a + b, 0) / 8,
-  );
+  const overallScore = Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / 8);
 
   const strengthsPool = [
     "Balanced shoulder-to-waist ratio",
@@ -126,7 +110,7 @@ export function mockScanFor(profile: Profile, photoSalt = ""): BodyScanResult {
     "Tighten waistline through conditioning",
     "Increase overall muscle density",
   ];
-  const pick = <T,>(arr: T[], n: number, s: number) =>
+  const pick = <T>(arr: T[], n: number, s: number) =>
     arr
       .map((v, i) => ({ v, k: (s * 31 + i * 17) % 1000 }))
       .sort((a, b) => a.k - b.k)

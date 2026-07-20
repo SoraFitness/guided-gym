@@ -38,6 +38,15 @@ export function saveScan(scan: BodyScanResult) {
 export function deleteScan(id: string) {
   write(read().filter((s) => s.id !== id));
 }
+
+// Bulk replace (used by cloud sync hydration).
+export function replaceScans(list: BodyScanResult[]) {
+  write(list.slice(0, 30));
+}
+
+export function getScans(): BodyScanResult[] {
+  return read();
+}
 export function getScan(id: string): BodyScanResult | null {
   return read().find((s) => s.id === id) ?? null;
 }

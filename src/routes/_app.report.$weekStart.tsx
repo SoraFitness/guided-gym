@@ -6,9 +6,11 @@ import { getWeeklyReport } from "@/lib/weeklyReport.functions";
 import { ReportView } from "@/components/weekly/ReportView";
 
 export const Route = createFileRoute("/_app/report/$weekStart")({
-  head: () => ({ meta: [{ title: "Weekly Report — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Weekly Report — Ascendr" }] }),
   component: ReportDetail,
-  errorComponent: () => <div className="p-6 text-sm text-muted-foreground">Couldn't load this report.</div>,
+  errorComponent: () => (
+    <div className="p-6 text-sm text-muted-foreground">Couldn't load this report.</div>
+  ),
   notFoundComponent: () => <div className="p-6">Report not found</div>,
 });
 
@@ -22,11 +24,18 @@ function ReportDetail() {
   return (
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-center gap-3 mb-5">
-        <Link to="/report/history" className="size-9 rounded-full bg-surface grid place-items-center"><ArrowLeft className="size-4" /></Link>
+        <Link
+          to="/report/history"
+          className="size-9 rounded-full bg-surface grid place-items-center"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
         <h1 className="font-bold">Weekly Report</h1>
       </header>
       {isLoading || !data ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+        <div className="flex justify-center py-12">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
       ) : (
         <ReportView r={data} />
       )}

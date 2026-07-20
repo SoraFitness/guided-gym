@@ -5,9 +5,11 @@ import { ArrowLeft, ChevronRight, Loader2 } from "lucide-react";
 import { listWeeklyReports } from "@/lib/weeklyReport.functions";
 
 export const Route = createFileRoute("/_app/report/history")({
-  head: () => ({ meta: [{ title: "Report History — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Report History — Ascendr" }] }),
   component: HistoryPage,
-  errorComponent: () => <div className="p-6 text-sm text-muted-foreground">Couldn't load history.</div>,
+  errorComponent: () => (
+    <div className="p-6 text-sm text-muted-foreground">Couldn't load history.</div>
+  ),
   notFoundComponent: () => <div className="p-6">Not found</div>,
 });
 
@@ -18,15 +20,22 @@ function fmt(s: string) {
 
 function HistoryPage() {
   const fn = useServerFn(listWeeklyReports);
-  const { data, isLoading } = useQuery({ queryKey: ["weeklyReport", "history"], queryFn: () => fn() });
+  const { data, isLoading } = useQuery({
+    queryKey: ["weeklyReport", "history"],
+    queryFn: () => fn(),
+  });
   return (
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-center gap-3 mb-5">
-        <Link to="/report" className="size-9 rounded-full bg-surface grid place-items-center"><ArrowLeft className="size-4" /></Link>
+        <Link to="/report" className="size-9 rounded-full bg-surface grid place-items-center">
+          <ArrowLeft className="size-4" />
+        </Link>
         <h1 className="font-bold text-lg">Report history</h1>
       </header>
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+        <div className="flex justify-center py-12">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
       ) : !data || data.length === 0 ? (
         <div className="rounded-3xl bg-surface p-6 text-center text-sm text-muted-foreground">
           No finalized reports yet. Your first report finalizes Sunday evening.
@@ -41,13 +50,21 @@ function HistoryPage() {
                 className="flex items-center justify-between rounded-2xl bg-surface border border-white/[0.05] p-4 active:bg-white/[0.02]"
               >
                 <div>
-                  <div className="font-semibold text-sm">{fmt(r.week_start as string)} – {fmt(r.week_end as string)}</div>
+                  <div className="font-semibold text-sm">
+                    {fmt(r.week_start as string)} – {fmt(r.week_end as string)}
+                  </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
-                    {r.workouts_completed}/{r.planned_workouts} workouts · {r.protein_hit_days}/7 protein · {r.weight_change_kg !== null ? `${(r.weight_change_kg as number) > 0 ? "+" : ""}${r.weight_change_kg} kg` : "no weight"}
+                    {r.workouts_completed}/{r.planned_workouts} workouts · {r.protein_hit_days}/7
+                    protein ·{" "}
+                    {r.weight_change_kg !== null
+                      ? `${(r.weight_change_kg as number) > 0 ? "+" : ""}${r.weight_change_kg} kg`
+                      : "no weight"}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-extrabold text-neon tabular-nums">{r.overall_score}</span>
+                  <span className="text-base font-extrabold text-neon tabular-nums">
+                    {r.overall_score}
+                  </span>
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </div>
               </Link>

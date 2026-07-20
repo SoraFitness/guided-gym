@@ -4,13 +4,13 @@ import { ArrowLeft, Camera, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthSession } from "@/lib/authSession";
+import { createLocalProgressPhoto } from "@/lib/progressPhotos.local";
+import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  createProgressPhoto,
-  type PhotoType,
-} from "@/lib/progressPhotos.functions";
+import { createProgressPhoto, type PhotoType } from "@/lib/progressPhotos.functions";
 import { compressImage } from "@/lib/imageCompress";
 import { PHOTO_TYPES, todayIso, typeLabel } from "@/components/photos/photoUtils";
 
@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_app/photos/new")({
 
 function NewPhoto() {
   const navigate = useNavigate();
+  const session = useAuthSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -45,31 +46,39 @@ function NewPhoto() {
     if (!file || busy) return;
     setBusy(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
-      if (!userId) throw new Error("Please sign in again");
-
       const blob = await compressImage(file, 1600, 0.85);
-      const uuid =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const path = `${userId}/${uuid}.jpg`;
-      const { error: upErr } = await supabase.storage
-        .from("progress-photos")
-        .upload(path, blob, { contentType: "image/jpeg", upsert: false });
-      if (upErr) throw new Error(upErr.message);
-
       const weightNum = weight.trim() ? Number(weight.replace(",", ".")) : null;
-      await createProgressPhoto({
-        data: {
-          image_path: path,
+      const weight_kg = Number.isFinite(weightNum) ? (weightNum as number) : null;
+
+      if (session && session !== "loading") {
+        const uuid =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const path = `${session.userId}/${uuid}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from("progress-photos")
+          .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+        if (upErr) throw new Error(upErr.message);
+
+        await createProgressPhoto({
+          data: {
+            image_path: path,
+            photo_type: photoType,
+            taken_on: date,
+            weight_kg,
+            notes: notes.trim() ? notes.trim() : null,
+          },
+        });
+      } else {
+        await createLocalProgressPhoto({
+          imageBlob: blob,
           photo_type: photoType,
           taken_on: date,
-          weight_kg: Number.isFinite(weightNum) ? (weightNum as number) : null,
+          weight_kg,
           notes: notes.trim() ? notes.trim() : null,
-        },
-      });
+        });
+      }
       toast.success("Progress photo saved");
       navigate({ to: "/photos" });
     } catch (e) {
@@ -92,6 +101,17 @@ function NewPhoto() {
         </Link>
         <h1 className="text-2xl font-bold">Add Progress Photo</h1>
       </header>
+
+      {session === null && (
+        <div className="mt-5">
+          <SoftAccountPrompt
+            title="Save photos across devices"
+            description="You can add photos now. They stay on this device until you create an account for cloud backup."
+            redirectPath="/photos/new"
+            storageKey="fitness:dismiss-photo-new-account-prompt"
+          />
+        </div>
+      )}
 
       <div className="mt-5 rounded-3xl bg-surface border border-border p-4">
         <div className="aspect-[3/4] rounded-2xl bg-black overflow-hidden grid place-items-center relative">
@@ -197,7 +217,7 @@ function NewPhoto() {
 
         <Button
           onClick={save}
-          disabled={!file || busy}
+          disabled={!file || busy || session === "loading"}
           className="w-full h-14 rounded-full bg-neon text-neon-foreground hover:bg-neon/90 text-base font-bold"
         >
           {busy ? (
@@ -209,7 +229,9 @@ function NewPhoto() {
           )}
         </Button>
         <p className="text-[11px] text-muted-foreground text-center">
-          Your progress photos are private and only visible to you.
+          {session
+            ? "Your progress photos are private and only visible to you."
+            : "Saved privately on this device."}
         </p>
       </section>
     </div>

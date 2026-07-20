@@ -1,7 +1,9 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Home, Dumbbell, Apple, User, Sparkles, Camera } from "lucide-react";
+import { Home, Dumbbell, Apple, User, Sparkles, ScanLine } from "lucide-react";
 import { useProfile } from "@/lib/profile";
+import { useAuthSession } from "@/lib/authSession";
+import { startCloudSync } from "@/lib/cloudSync";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
 import { TOUR_STEPS } from "@/lib/tourSteps";
@@ -16,11 +18,22 @@ const tabs = [
   { to: "/workouts", label: "Workouts", Icon: Dumbbell },
   { to: "/coach", label: "Coach", Icon: Sparkles },
   { to: "/nutrition", label: "Nutrition", Icon: Apple },
-  { to: "/photos", label: "Photos", Icon: Camera },
+  { to: "/scan", label: "Scans", Icon: ScanLine },
   { to: "/profile", label: "Profile", Icon: User },
 ] as const;
 
+// Runs the localStorage <-> Supabase sync engine while a user is signed in.
+function CloudSyncGate() {
+  const session = useAuthSession();
+  const userId = session && session !== "loading" ? session.userId : null;
 
+  useEffect(() => {
+    if (!userId) return;
+    return startCloudSync(userId);
+  }, [userId]);
+
+  return null;
+}
 
 function AppShell() {
   const { profile, ready } = useProfile();
@@ -43,11 +56,16 @@ function AppShell() {
   const hideTabs =
     pathname.startsWith("/workout/") ||
     pathname.startsWith("/scan/body/new") ||
-    pathname.startsWith("/scan/body/");
+    pathname.startsWith("/scan/body/") ||
+    pathname.startsWith("/scan/face");
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
-      <div className="flex-1" style={{ paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 6rem)" }}>
+      <CloudSyncGate />
+      <div
+        className="flex-1"
+        style={{ paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 6rem)" }}
+      >
         <Outlet />
       </div>
       {!hideTabs && (
@@ -57,7 +75,10 @@ function AppShell() {
         >
           <div className="mx-auto max-w-md bg-surface/90 backdrop-blur rounded-full border border-border h-16 px-2 flex items-center justify-between gap-1">
             {tabs.map(({ to, label, Icon }) => {
-              const active = pathname === to;
+              const active =
+                pathname === to ||
+                pathname.startsWith(`${to}/`) ||
+                (to === "/profile" && pathname.startsWith("/photos"));
               return (
                 <Link
                   key={to}
@@ -65,7 +86,7 @@ function AppShell() {
                   aria-label={label}
                   className={cn(
                     "flex-1 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition tap",
-                    active ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+                    active ? "bg-neon text-neon-foreground" : "text-muted-foreground",
                   )}
                 >
                   <Icon className="size-5" />
@@ -74,7 +95,6 @@ function AppShell() {
               );
             })}
           </div>
-
         </nav>
       )}
 
@@ -89,4 +109,3 @@ function AppShell() {
     </div>
   );
 }
-

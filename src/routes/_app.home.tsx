@@ -1,263 +1,587 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Bell, Flame, Trophy, Calendar, Apple, Dumbbell, Zap } from "lucide-react";
+import {
+  Apple,
+  Bell,
+  Check,
+  ChevronRight,
+  Clock3,
+  Dumbbell,
+  Flame,
+  HeartPulse,
+  MessageCircle,
+  Play,
+  ScanLine,
+  Sparkles,
+  Target,
+  Trophy,
+  Utensils,
+  Zap,
+} from "lucide-react";
 import { useProfile } from "@/lib/profile";
-import { workoutRecommendationService, getWorkout } from "@/lib/workouts";
-import { WorkoutCardHero, WorkoutCardRow } from "@/components/WorkoutCard";
+import { getWorkout, workoutRecommendationService, type Workout } from "@/lib/workouts";
+import { weeklyScheduleService, type WeeklyScheduleDay } from "@/lib/weeklySchedule";
+import { WorkoutCardHero } from "@/components/WorkoutCard";
 import { useNutrition } from "@/lib/nutritionStore";
 import { useProgress } from "@/lib/progressStore";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 import { QuickLogFab } from "@/components/weekly/QuickLogFab";
 import { listNotifications } from "@/lib/weeklyReport.functions";
+import { cn } from "@/lib/utils";
+import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
 
 export const Route = createFileRoute("/_app/home")({
-  head: () => ({ meta: [{ title: "Home — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Home — Ascendr" }] }),
   component: HomePage,
 });
 
 const GOAL_SUBTITLES: Record<string, string> = {
-  lose_weight: "Today's focus: burn calories and stay consistent",
-  build_muscle: "Today's focus: strength, volume, and recovery",
-  recomp: "Today's focus: build muscle while staying lean",
-  endurance: "Today's focus: stamina and conditioning",
-  maintain: "Today's focus: move with intention, stay sharp",
+  lose_weight: "Lean down without losing momentum",
+  build_muscle: "Build strength, size, and consistency",
+  recomp: "Build muscle while staying lean",
+  endurance: "Improve stamina and conditioning",
+  get_stronger: "Get stronger, one session at a time",
+  overall: "Move better and feel stronger",
+  maintain: "Stay sharp and keep moving forward",
 };
 
 function HomePage() {
   const { profile } = useProfile();
-  const name = profile?.name ?? "athlete";
-
+  const displayName = getDisplayName(profile?.name);
   const { totals, goals } = useNutrition();
   const progress = useProgress(profile?.sessionMinutes ?? 30);
+  const savedPlans = useSavedWorkoutPlans();
+  const activePlan = useMemo(
+    () => getActiveWorkoutPlan(savedPlans, profile),
+    [savedPlans, profile],
+  );
+
+  const schedule = useMemo(
+    () =>
+      profile ? weeklyScheduleService.generateSchedule(profile, activePlan?.workoutIds ?? []) : [],
+    [profile, activePlan?.workoutIds],
+  );
+  const todayPlan = schedule.find((day) => day.isToday);
+  const scheduledWorkout = todayPlan?.workoutId ? getWorkout(todayPlan.workoutId) : null;
+  const recoveryWorkout = getWorkout("mobility-recovery");
+  const heroWorkout = scheduledWorkout ?? recoveryWorkout ?? null;
 
   const recommended = useMemo(
-    () => (profile ? workoutRecommendationService.recommend(profile, 8) : []),
-    [profile]
+    () =>
+      profile
+        ? workoutRecommendationService
+            .recommend(profile, 10)
+            .filter((workout) => workout.id !== scheduledWorkout?.id)
+            .slice(0, 5)
+        : [],
+    [profile, scheduledWorkout?.id],
   );
-  const plan = useMemo(
-    () => (profile ? workoutRecommendationService.weeklyPlan(profile) : []),
-    [profile]
-  );
-
-  const todayIdx = (new Date().getDay() + 6) % 7;
-  const todayPlan = plan[todayIdx];
-  const todayWorkout = todayPlan?.workoutId ? getWorkout(todayPlan.workoutId) : null;
-
-  const subtitle = profile ? GOAL_SUBTITLES[profile.goal] : "Welcome to your training plan";
 
   const listNotif = useServerFn(listNotifications);
-  const { data: notifs } = useQuery({ queryKey: ["notifications"], queryFn: () => listNotif(), staleTime: 60_000 });
-  const unread = (notifs ?? []).filter((n) => !n.read_at).length;
+  const { data: notifs } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => listNotif(),
+    staleTime: 60_000,
+  });
+  const unread = (notifs ?? []).filter((notification) => !notification.read_at).length;
+
+  const subtitle = profile
+    ? (GOAL_SUBTITLES[profile.goal] ?? "Keep building toward your goal")
+    : "Your training, nutrition, and progress in one place";
 
   return (
-    <div className="px-5 pt-6 animate-slide-up">
-      <header data-tour="tour-home-header" className="flex items-center justify-between">
+    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
+      <header data-tour="tour-home-header" className="flex items-center justify-between gap-4 px-1">
         <div className="min-w-0">
-          <p className="text-muted-foreground text-xs">Welcome back</p>
-          <h1 className="text-2xl font-bold truncate">Hi, {name} 👋</h1>
-          <p className="text-[11px] text-neon mt-0.5 truncate">{subtitle}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neon">
+            {formatToday()}
+          </p>
+          <h1 className="mt-1 truncate text-[25px] font-extrabold leading-tight tracking-[-0.03em]">
+            {getGreeting()}, {displayName}
+          </h1>
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
-        <Link to="/notifications" className="size-11 rounded-full bg-surface grid place-items-center relative shrink-0" aria-label="Notifications">
+        <Link
+          to="/notifications"
+          className="relative grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface shadow-[0_14px_30px_-18px_oklch(0_0_0/0.9)] transition active:scale-95"
+          aria-label={unread ? `${unread} unread notifications` : "Notifications"}
+        >
           <Bell className="size-5" />
-          {unread > 0 && <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-neon" />}
+          {unread > 0 && (
+            <span className="absolute right-2 top-2 grid min-w-4 place-items-center rounded-full bg-neon px-1 text-[8px] font-extrabold leading-4 text-neon-foreground">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
         </Link>
       </header>
 
-      <div className="mt-5"><WeeklyReportCard /></div>
-
-
-      {/* Today's Nutrition */}
-      <section data-tour="tour-nutrition-card" className="mt-5 rounded-3xl bg-surface p-5 border border-white/[0.05]">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Apple className="size-4 text-neon" />
-            <h2 className="font-bold text-sm">Today's Nutrition</h2>
-          </div>
-          <Link to="/nutrition" className="text-[11px] text-neon font-semibold">Open</Link>
-        </div>
-
-        <div className="flex items-center gap-5">
-          <CalorieRing consumed={totals.kcal} goal={goals.kcal} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tabular-nums">{totals.kcal}</span>
-              <span className="text-xs text-muted-foreground">/ {goals.kcal} kcal</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {totals.itemCount === 0 ? "Nothing logged yet" : `${totals.itemCount} item${totals.itemCount === 1 ? "" : "s"} logged`}
-            </p>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon/10 border border-neon/20">
-              <Flame className="size-3 text-neon" />
-              <span className="text-[11px] font-semibold text-neon tabular-nums">{totals.remaining} kcal left</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2.5">
-          <MacroBar label="Protein" value={totals.protein} goal={goals.protein} hue="oklch(0.92 0.21 130)" />
-          <MacroBar label="Carbs" value={totals.carbs} goal={goals.carbs} hue="oklch(0.82 0.17 65)" />
-          <MacroBar label="Fat" value={totals.fat} goal={goals.fat} hue="oklch(0.72 0.18 25)" />
-        </div>
-
-        {totals.itemCount === 0 && (
-          <Link
-            to="/nutrition"
-            className="mt-4 flex items-center justify-center gap-1.5 h-10 rounded-full bg-neon/10 border border-neon/20 text-neon text-[12px] font-semibold"
-          >
-            <Zap className="size-3.5" /> Log your first meal
-          </Link>
-        )}
+      <section data-tour="tour-today-workout" className="mt-5">
+        <TodayHero
+          plan={todayPlan}
+          workout={heroWorkout}
+          completed={Boolean(todayPlan?.isCompleted || progress.workoutMinutesToday > 0)}
+          planSource={activePlan?.source}
+        />
       </section>
 
-      {/* Today's Activity */}
-      <section data-tour="tour-progress-card" className="mt-4 rounded-3xl bg-surface p-5 border border-white/[0.05]">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Dumbbell className="size-4 text-neon" />
-            <h2 className="font-bold text-sm">Today's Activity</h2>
-          </div>
-          <Link to="/workouts" className="text-[11px] text-neon font-semibold">Open</Link>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <ActivityStat label="Minutes" value={`${progress.workoutMinutesToday}`} sub={`/ ${progress.workoutMinutesTarget}`} />
-          <ActivityStat label="This week" value={`${progress.completedThisWeek}`} sub="workouts" />
-          <ActivityStat
-            icon={<Trophy className="size-3.5 text-neon" />}
-            label="Streak"
-            value={`${progress.streakDays}`}
-            sub={progress.streakDays === 1 ? "day" : "days"}
+      <section className="mt-6">
+        <SectionHeader
+          eyebrow="Today"
+          title="Your daily targets"
+          action="View progress"
+          linkTo="/progress"
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <NutritionSnapshot
+            consumed={totals.kcal}
+            remaining={totals.remaining}
+            calorieGoal={goals.kcal}
+            protein={totals.protein}
+            proteinGoal={goals.protein}
+            itemCount={totals.itemCount}
+          />
+          <ActivitySnapshot
+            completed={progress.completedThisWeek}
+            target={profile?.daysPerWeek ?? 4}
+            minutes={progress.workoutMinutesToday}
+            minuteTarget={progress.workoutMinutesTarget}
+            streak={progress.streakDays}
           />
         </div>
       </section>
 
-      {todayWorkout && (
-        <section data-tour="tour-today-workout" className="mt-6">
-          <SectionHeader title="Today's workout" sub={todayPlan?.label} />
-          <WorkoutCardRow w={todayWorkout} />
+      <section className="mt-6">
+        <SectionHeader eyebrow="Shortcuts" title="Keep moving" />
+        <div className="grid grid-cols-4 gap-2.5">
+          <QuickAction to="/nutrition" icon={<Utensils />} label="Log food" />
+          <QuickAction to="/coach" icon={<MessageCircle />} label="Ask coach" />
+          <QuickAction to="/scan" icon={<ScanLine />} label="Run scan" />
+          <QuickAction to="/workouts" icon={<Sparkles />} label="Build plan" />
+        </div>
+      </section>
+
+      {schedule.length > 0 && (
+        <section className="mt-6">
+          <SectionHeader
+            eyebrow="Training plan"
+            title="Your week"
+            action="Full schedule"
+            linkTo="/workouts"
+          />
+          <WeekRail schedule={schedule} />
         </section>
       )}
 
       <section className="mt-6">
-        <SectionHeader title="Recommended for you" sub="Based on your goals" linkTo="/workouts" />
-        <div className="-mx-5 px-5 flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-none">
-          {recommended.map((w) => <WorkoutCardHero key={w.id} w={w} />)}
-          <div className="shrink-0 w-2" />
-        </div>
+        <WeeklyReportCard compact />
       </section>
 
-      <section className="mt-6 mb-2">
-        <SectionHeader title="Your week" sub={`${profile?.daysPerWeek ?? 4} training days`} />
-        <ul className="rounded-3xl bg-surface border border-white/[0.05] divide-y divide-white/[0.05] overflow-hidden">
-          {plan.map((day, i) => {
-            const w = day.workoutId ? getWorkout(day.workoutId) : null;
-            const isToday = i === todayIdx;
-            return (
-              <li key={day.day}>
-                {w ? (
-                  <Link to="/workout/$id" params={{ id: w.id }} className="flex items-center gap-3 p-3.5 active:bg-white/[0.02]">
-                    <DayChip day={day.day} isToday={isToday} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm truncate">{day.label}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">{w.title} · {w.duration}m</div>
-                    </div>
-                    <span className="text-[10px] text-neon font-semibold">Open</span>
-                  </Link>
-                ) : (
-                  <div className="flex items-center gap-3 p-3.5">
-                    <DayChip day={day.day} isToday={isToday} />
-                    <div className="flex-1">
-                      <div className="font-semibold text-sm text-muted-foreground">{day.label}</div>
-                      <div className="text-[11px] text-muted-foreground">Recover and refuel</div>
-                    </div>
-                    <Calendar className="size-4 text-muted-foreground" />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {recommended.length > 0 && (
+        <section className="mt-7">
+          <SectionHeader
+            eyebrow="Personalized"
+            title="More picked for you"
+            action="View all"
+            linkTo="/workouts"
+          />
+          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 scrollbar-none sm:-mx-5 sm:px-5">
+            {recommended.map((workout) => (
+              <WorkoutCardHero key={workout.id} w={workout} className="w-[218px]" />
+            ))}
+            <div className="w-1 shrink-0" />
+          </div>
+        </section>
+      )}
+
       <QuickLogFab />
     </div>
   );
 }
 
-function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
-  const pct = goal ? Math.min(100, (consumed / goal) * 100) : 0;
-  const C = 2 * Math.PI * 42;
+function TodayHero({
+  plan,
+  workout,
+  completed,
+  planSource,
+}: {
+  plan?: WeeklyScheduleDay;
+  workout: Workout | null;
+  completed: boolean;
+  planSource?: "ai" | "smart";
+}) {
+  const isRecovery = !plan || plan.isRestDay || !plan.workoutId;
+  const primaryPath = isRecovery ? "/workout/$id" : "/workout/$id/session";
+  const workoutId = workout?.id ?? "mobility-recovery";
+  const duration = isRecovery
+    ? (workout?.duration ?? 15)
+    : (plan?.duration ?? workout?.duration ?? 30);
+  const exerciseCount = isRecovery
+    ? (workout?.exercises.length ?? 0)
+    : (plan?.exercises.length ?? 0);
+  const calories = isRecovery
+    ? (workout?.calories ?? 0)
+    : (plan?.estimatedCalories ?? workout?.calories ?? 0);
+
   return (
-    <div className="relative size-24 shrink-0">
-      <svg viewBox="0 0 100 100" className="-rotate-90 size-full">
-        <circle cx="50" cy="50" r="42" fill="none" stroke="oklch(1 0 0 / 0.07)" strokeWidth="10" />
-        <circle
-          cx="50" cy="50" r="42" fill="none"
-          stroke="var(--color-neon)" strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={`${(pct / 100) * C} ${C}`}
-          style={{ transition: "stroke-dasharray 0.6s ease" }}
+    <div className="relative min-h-[355px] overflow-hidden rounded-[30px] border border-white/[0.08] bg-surface-2 shadow-[0_28px_65px_-32px_oklch(0_0_0/0.95)]">
+      {workout?.image && (
+        <img
+          src={workout.image}
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+          style={{ objectPosition: workout.imagePosition }}
         />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">
-        <div>
-          <div className="text-lg font-extrabold tabular-nums">{consumed}</div>
-          <div className="text-[10px] text-muted-foreground">kcal</div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/25 to-black" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(0.92_0.21_130/0.16),transparent_38%)]" />
+
+      <div className="relative flex min-h-[355px] flex-col p-5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] backdrop-blur-md">
+            {isRecovery ? (
+              <HeartPulse className="size-3 text-neon" />
+            ) : (
+              <Zap className="size-3 text-neon" />
+            )}
+            {isRecovery
+              ? "Recovery day"
+              : planSource === "ai"
+                ? "AI plan · Today’s training"
+                : "Today’s training"}
+          </span>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider backdrop-blur-md",
+              completed
+                ? "border-emerald-300/25 bg-emerald-300/15 text-emerald-300"
+                : "border-white/10 bg-black/45 text-white/75",
+            )}
+          >
+            {completed ? "Completed" : isRecovery ? "Recharge" : plan?.difficulty}
+          </span>
+        </div>
+
+        <div className="mt-auto max-w-[92%]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
+            {isRecovery ? "Reset · Restore · Recover" : plan?.splitLabel}
+          </p>
+          <h2 className="mt-2 text-[30px] font-extrabold leading-[1.02] tracking-[-0.04em]">
+            {isRecovery ? "Recovery is part of the plan." : (workout?.title ?? plan?.workoutTitle)}
+          </h2>
+          <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-white/65">
+            {isRecovery
+              ? "Loosen up, restore range of motion, and come back ready for your next session."
+              : plan?.focus || workout?.description}
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-white/80">
+            <HeroStat icon={<Clock3 />} label={`${duration} min`} />
+            <HeroStat icon={<Dumbbell />} label={`${exerciseCount} exercises`} />
+            {calories > 0 && <HeroStat icon={<Flame />} label={`~${calories} kcal`} />}
+          </div>
+
+          <div className="mt-5 flex items-center gap-2.5">
+            <Link
+              to={primaryPath}
+              params={{ id: workoutId }}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-neon px-5 text-[13px] font-extrabold text-neon-foreground shadow-[0_14px_30px_-15px_var(--color-neon)] transition active:scale-[0.98]"
+            >
+              {isRecovery ? (
+                <HeartPulse className="size-4" />
+              ) : (
+                <Play className="size-4 fill-current" />
+              )}
+              {isRecovery ? "Start recovery" : completed ? "Train again" : "Start workout"}
+            </Link>
+            <Link
+              to="/workouts"
+              aria-label="Choose another workout"
+              className="grid size-12 place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
+            >
+              <ChevronRight className="size-5" />
+            </Link>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function MacroBar({ label, value, goal, hue }: { label: string; value: number; goal: number; hue: string }) {
-  const pct = goal ? Math.min(100, (value / goal) * 100) : 0;
+function HeroStat({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/[0.05] p-2.5">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] text-muted-foreground">{label}</span>
-        <span className="text-[10px] text-muted-foreground tabular-nums">{goal}g</span>
-      </div>
-      <div className="mt-0.5 text-sm font-bold tabular-nums leading-none">
-        {value}<span className="text-[10px] text-muted-foreground font-medium">g</span>
-      </div>
-      <div className="mt-1.5 h-1 rounded-full bg-white/5 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: hue }} />
-      </div>
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 backdrop-blur-sm [&_svg]:size-3 [&_svg]:text-neon">
+      {icon}
+      {label}
+    </span>
   );
 }
 
-function ActivityStat({ icon, label, value, sub }: { icon?: React.ReactNode; label: string; value: string; sub: string }) {
+function NutritionSnapshot({
+  consumed,
+  remaining,
+  calorieGoal,
+  protein,
+  proteinGoal,
+  itemCount,
+}: {
+  consumed: number;
+  remaining: number;
+  calorieGoal: number;
+  protein: number;
+  proteinGoal: number;
+  itemCount: number;
+}) {
+  const calorieProgress = percent(consumed, calorieGoal);
+  const proteinProgress = percent(protein, proteinGoal);
+
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3">
-      <div className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider">
+    <Link
+      data-tour="tour-nutrition-card"
+      to="/nutrition"
+      className="group relative min-h-[190px] overflow-hidden rounded-[25px] border border-white/[0.06] bg-surface p-4 transition active:scale-[0.99]"
+    >
+      <div className="absolute right-[-34px] top-[-36px] size-28 rounded-full bg-neon/[0.07] blur-2xl" />
+      <div className="relative flex items-center justify-between">
+        <span className="grid size-9 place-items-center rounded-xl bg-neon/10 text-neon">
+          <Apple className="size-[18px]" />
+        </span>
+        <ChevronRight className="size-4 text-muted-foreground transition group-active:translate-x-0.5" />
+      </div>
+      <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        Nutrition
+      </p>
+      <div className="mt-1 flex items-end gap-1">
+        <strong className="text-[24px] font-extrabold leading-none tabular-nums">
+          {remaining}
+        </strong>
+        <span className="pb-0.5 text-[10px] text-muted-foreground">kcal left</span>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full rounded-full bg-neon transition-all"
+          style={{ width: `${calorieProgress}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
+        <span>{itemCount ? `${itemCount} logged` : "Log first meal"}</span>
+        <span className="tabular-nums">
+          {consumed}/{calorieGoal}
+        </span>
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 text-[10px]">
+        <span className="text-muted-foreground">Protein</span>
+        <span className="font-semibold tabular-nums">
+          {protein}/{proteinGoal}g <span className="text-neon">· {proteinProgress}%</span>
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function ActivitySnapshot({
+  completed,
+  target,
+  minutes,
+  minuteTarget,
+  streak,
+}: {
+  completed: number;
+  target: number;
+  minutes: number;
+  minuteTarget: number;
+  streak: number;
+}) {
+  const targetDays = Math.max(1, target);
+
+  return (
+    <Link
+      data-tour="tour-progress-card"
+      to="/progress"
+      className="group relative min-h-[190px] overflow-hidden rounded-[25px] border border-white/[0.06] bg-surface p-4 transition active:scale-[0.99]"
+    >
+      <div className="absolute right-[-32px] top-[-34px] size-28 rounded-full bg-sky-400/[0.06] blur-2xl" />
+      <div className="relative flex items-center justify-between">
+        <span className="grid size-9 place-items-center rounded-xl bg-white/[0.05] text-neon">
+          <Dumbbell className="size-[18px]" />
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-neon/10 px-2 py-1 text-[9px] font-bold text-neon">
+          <Trophy className="size-3" /> {streak}d
+        </span>
+      </div>
+      <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        Training
+      </p>
+      <div className="mt-1 flex items-end gap-1">
+        <strong className="text-[24px] font-extrabold leading-none tabular-nums">
+          {completed}
+        </strong>
+        <span className="pb-0.5 text-[10px] text-muted-foreground">of {targetDays} this week</span>
+      </div>
+      <div className="mt-4 flex gap-1.5">
+        {Array.from({ length: targetDays }).map((_, index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-1.5 flex-1 rounded-full",
+              index < completed ? "bg-neon" : "bg-white/[0.07]",
+            )}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
+        <span>
+          {completed >= targetDays ? "Weekly goal hit" : `${targetDays - completed} to go`}
+        </span>
+        <span>{streak ? `${streak} day streak` : "Start your streak"}</span>
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 text-[10px]">
+        <span className="text-muted-foreground">Today</span>
+        <span className="font-semibold tabular-nums">
+          {minutes}/{minuteTarget} min
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function QuickAction({
+  to,
+  icon,
+  label,
+}: {
+  to: "/nutrition" | "/coach" | "/scan" | "/workouts";
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <Link to={to} className="group min-w-0 text-center active:scale-95">
+      <span className="mx-auto grid size-12 place-items-center rounded-2xl border border-white/[0.06] bg-surface text-white shadow-[0_12px_25px_-18px_oklch(0_0_0/0.9)] transition group-active:border-neon/30 group-active:text-neon [&_svg]:size-[19px]">
         {icon}
-        <span>{label}</span>
+      </span>
+      <span className="mt-2 block truncate text-[9px] font-semibold text-muted-foreground">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+function WeekRail({ schedule }: { schedule: WeeklyScheduleDay[] }) {
+  return (
+    <div className="rounded-[25px] border border-white/[0.06] bg-surface p-3.5">
+      <ol className="grid grid-cols-7 gap-1.5">
+        {schedule.map((day) => {
+          const content = (
+            <>
+              <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+                {day.dayName.slice(0, 1)}
+              </span>
+              <span className="mt-1 text-[12px] font-bold tabular-nums">
+                {new Date(`${day.dateISO}T12:00:00`).getDate()}
+              </span>
+              <span
+                className={cn(
+                  "mt-1.5 grid size-3 place-items-center rounded-full",
+                  day.isCompleted
+                    ? "bg-neon text-neon-foreground"
+                    : day.isRestDay
+                      ? "border border-white/15 bg-transparent"
+                      : day.isToday
+                        ? "bg-neon"
+                        : "bg-white/15",
+                )}
+              >
+                {day.isCompleted && <Check className="size-2.5" strokeWidth={3} />}
+              </span>
+            </>
+          );
+          const classes = cn(
+            "flex min-h-[69px] flex-col items-center justify-center rounded-2xl border transition",
+            day.isToday
+              ? "border-neon/40 bg-neon/[0.08] text-white"
+              : "border-transparent bg-white/[0.025] text-white/80",
+          );
+
+          return (
+            <li key={day.id}>
+              {day.workoutId ? (
+                <Link to="/workout/$id" params={{ id: day.workoutId }} className={classes}>
+                  {content}
+                </Link>
+              ) : (
+                <div className={classes}>{content}</div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] px-1 pt-3">
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold">
+            {schedule.find((day) => day.isToday)?.splitLabel ?? "Today"}
+          </p>
+          <p className="mt-0.5 truncate text-[9px] text-muted-foreground">
+            {schedule.filter((day) => day.isCompleted).length} complete ·{" "}
+            {schedule.filter((day) => !day.isRestDay).length} planned
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-neon">
+          <Target className="size-3" /> Stay consistent
+        </span>
       </div>
-      <div className="mt-1 text-xl font-extrabold tabular-nums leading-none">{value}</div>
-      <div className="text-[10px] text-muted-foreground tabular-nums mt-0.5">{sub}</div>
     </div>
   );
 }
 
-function DayChip({ day, isToday }: { day: string; isToday: boolean }) {
+function SectionHeader({
+  eyebrow,
+  title,
+  action,
+  linkTo,
+}: {
+  eyebrow?: string;
+  title: string;
+  action?: string;
+  linkTo?: "/progress" | "/workouts";
+}) {
   return (
-    <div className={
-      "size-11 rounded-2xl grid place-items-center text-[11px] font-bold border " +
-      (isToday ? "bg-neon text-neon-foreground border-neon" : "bg-white/[0.04] border-white/[0.06]")
-    }>
-      {day}
-    </div>
-  );
-}
-
-function SectionHeader({ title, sub, linkTo }: { title: string; sub?: string; linkTo?: string }) {
-  return (
-    <div className="flex items-end justify-between mb-3">
+    <div className="mb-3 flex items-end justify-between gap-4 px-1">
       <div>
-        <h2 className="text-lg font-bold">{title}</h2>
-        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+        {eyebrow && (
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">{eyebrow}</p>
+        )}
+        <h2 className="mt-0.5 text-[18px] font-extrabold tracking-[-0.02em]">{title}</h2>
       </div>
-      {linkTo && <Link to={linkTo} className="text-xs text-neon font-semibold">View all</Link>}
+      {action && linkTo && (
+        <Link to={linkTo} className="mb-0.5 text-[10px] font-semibold text-muted-foreground">
+          {action}
+        </Link>
+      )}
     </div>
   );
+}
+
+function getDisplayName(name?: string) {
+  const firstName = name?.trim().split(/\s+/)[0] || "Athlete";
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1);
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function formatToday() {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
+}
+
+function percent(value: number, goal: number) {
+  return goal ? Math.min(100, Math.max(0, Math.round((value / goal) * 100))) : 0;
 }

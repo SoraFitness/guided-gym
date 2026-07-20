@@ -1,25 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Loader2,
-  Sparkles,
-  GitCompareArrows,
-  ChevronsLeftRight,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles, GitCompareArrows, ChevronsLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuthSession } from "@/lib/authSession";
+import {
+  listLocalProgressPhotos,
+  syncLocalProgressPhotosToCloud,
+} from "@/lib/progressPhotos.local";
+import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import {
   compareProgressPhotosAI,
   listProgressPhotos,
   type ProgressPhotoRow,
 } from "@/lib/progressPhotos.functions";
-import {
-  daysBetween,
-  formatPhotoDate,
-  typeLabel,
-} from "@/components/photos/photoUtils";
+import { daysBetween, formatPhotoDate, typeLabel } from "@/components/photos/photoUtils";
 
 export const Route = createFileRoute("/_app/photos/compare")({
   component: ComparePage,
@@ -34,6 +30,7 @@ interface AiFeedback {
 }
 
 function ComparePage() {
+  const session = useAuthSession();
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
   const [beforeId, setBeforeId] = useState<string | null>(null);
   const [afterId, setAfterId] = useState<string | null>(null);
@@ -42,7 +39,22 @@ function ComparePage() {
   const [feedback, setFeedback] = useState<AiFeedback | null>(null);
 
   useEffect(() => {
-    listProgressPhotos()
+    if (session === "loading") return;
+    if (!session) {
+      const localPhotos = listLocalProgressPhotos();
+      setPhotos(localPhotos);
+      if (localPhotos.length >= 2) {
+        setAfterId(localPhotos[0].id);
+        setBeforeId(localPhotos[localPhotos.length - 1].id);
+      }
+      return;
+    }
+
+    syncLocalProgressPhotosToCloud(session.userId)
+      .then((result) => {
+        if (result.synced > 0) toast.success("Progress photos synced");
+      })
+      .then(() => listProgressPhotos())
       .then((p) => {
         setPhotos(p);
         if (p.length >= 2) {
@@ -55,19 +67,17 @@ function ComparePage() {
         toast.error("Couldn't load photos");
         setPhotos([]);
       });
-  }, []);
+  }, [session]);
 
-  const before = useMemo(
-    () => photos?.find((p) => p.id === beforeId) ?? null,
-    [photos, beforeId],
-  );
-  const after = useMemo(
-    () => photos?.find((p) => p.id === afterId) ?? null,
-    [photos, afterId],
-  );
+  const before = useMemo(() => photos?.find((p) => p.id === beforeId) ?? null, [photos, beforeId]);
+  const after = useMemo(() => photos?.find((p) => p.id === afterId) ?? null, [photos, afterId]);
 
   async function runAI() {
     if (!before || !after || aiBusy) return;
+    if (!session || before.id.startsWith("guest-") || after.id.startsWith("guest-")) {
+      toast.info("Save and sync your photos to unlock AI feedback.");
+      return;
+    }
     setAiBusy(true);
     setFeedback(null);
     try {
@@ -141,19 +151,20 @@ function ComparePage() {
         Tip: compare the same pose &amp; angle (front vs front) for the most honest read.
       </p>
 
+      {!session && (
+        <div className="mt-5">
+          <SoftAccountPrompt
+            title="Sync for AI photo feedback"
+            description="Local compare works now. Save your account when you want cloud backup and AI feedback on your progress photos."
+            redirectPath="/photos/compare"
+            storageKey="fitness:dismiss-photo-compare-account-prompt"
+          />
+        </div>
+      )}
+
       <section className="mt-5 space-y-3">
-        <PhotoPicker
-          label="Before"
-          photos={photos}
-          selectedId={beforeId}
-          onSelect={setBeforeId}
-        />
-        <PhotoPicker
-          label="After"
-          photos={photos}
-          selectedId={afterId}
-          onSelect={setAfterId}
-        />
+        <PhotoPicker label="Before" photos={photos} selectedId={beforeId} onSelect={setBeforeId} />
+        <PhotoPicker label="After" photos={photos} selectedId={afterId} onSelect={setAfterId} />
       </section>
 
       {before && after && before.id !== after.id && (
@@ -188,7 +199,8 @@ function ComparePage() {
               </>
             ) : (
               <>
-                <Sparkles className="size-4 mr-2" /> Get AI feedback
+                <Sparkles className="size-4 mr-2" />{" "}
+                {session ? "Get AI feedback" : "Save & sync for AI feedback"}
               </>
             )}
           </Button>
@@ -237,9 +249,7 @@ function PhotoPicker({
 }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
-        {label}
-      </div>
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">{label}</div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
         {photos.map((p) => {
           const active = p.id === selectedId;
@@ -266,13 +276,7 @@ function PhotoPicker({
   );
 }
 
-function SideBySide({
-  before,
-  after,
-}: {
-  before: ProgressPhotoRow;
-  after: ProgressPhotoRow;
-}) {
+function SideBySide({ before, after }: { before: ProgressPhotoRow; after: ProgressPhotoRow }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {[
@@ -298,13 +302,7 @@ function SideBySide({
   );
 }
 
-function SwipeSlider({
-  before,
-  after,
-}: {
-  before: ProgressPhotoRow;
-  after: ProgressPhotoRow;
-}) {
+function SwipeSlider({ before, after }: { before: ProgressPhotoRow; after: ProgressPhotoRow }) {
   const [pos, setPos] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -367,13 +365,7 @@ function SwipeSlider({
   );
 }
 
-function Stats({
-  before,
-  after,
-}: {
-  before: ProgressPhotoRow;
-  after: ProgressPhotoRow;
-}) {
+function Stats({ before, after }: { before: ProgressPhotoRow; after: ProgressPhotoRow }) {
   const days = daysBetween(before.taken_on, after.taken_on);
   const weightDiff =
     before.weight_kg !== null && after.weight_kg !== null
@@ -385,9 +377,7 @@ function Stats({
       <Stat label="Elapsed" value={`${Math.abs(days)} d`} />
       <Stat
         label="Weight"
-        value={
-          weightDiff === null ? "—" : `${weightDiff > 0 ? "+" : ""}${weightDiff} kg`
-        }
+        value={weightDiff === null ? "—" : `${weightDiff > 0 ? "+" : ""}${weightDiff} kg`}
         accent={weightDiff !== null}
       />
       <Stat

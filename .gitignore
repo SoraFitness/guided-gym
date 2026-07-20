@@ -16,9 +16,17 @@ dist-ssr
 .nitro
 *.local
 
+# Secrets — never commit API keys
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+
+# Local Supabase CLI state
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*

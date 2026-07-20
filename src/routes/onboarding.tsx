@@ -1,30 +1,83 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Check, Flame, Dumbbell, Sparkles, Heart, Activity, Home, Building2,
-  TrendingDown, Mountain, Layers, Calendar, Zap, Footprints, Salad, Apple, Bike,
-  Instagram, Youtube, Users, Search, Smartphone, MoreHorizontal, Music2, Scan, Camera, LineChart,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Flame,
+  Dumbbell,
+  Sparkles,
+  Heart,
+  Activity,
+  Home,
+  Building2,
+  TrendingDown,
+  Mountain,
+  Layers,
+  Calendar,
+  Zap,
+  Footprints,
+  Salad,
+  Apple,
+  Bike,
+  Instagram,
+  Youtube,
+  Users,
+  Search,
+  Smartphone,
+  MoreHorizontal,
+  Music2,
+  Scan,
+  Camera,
+  LineChart,
 } from "lucide-react";
 import { AnimatedAthlete } from "@/components/AnimatedAthlete";
 import {
-  useProfile, GOAL_LABELS, EQUIPMENT_LABELS, EXPERIENCE_LABELS, NUTRITION_LABELS, FOCUS_LABELS,
-  type Profile, type Goal, type Gender, type ExperienceLevel, type EquipmentSetup,
-  type FocusArea, type NutritionPlan,
+  useProfile,
+  GOAL_LABELS,
+  EQUIPMENT_LABELS,
+  EXPERIENCE_LABELS,
+  NUTRITION_LABELS,
+  FOCUS_LABELS,
+  type Profile,
+  type Goal,
+  type Gender,
+  type ExperienceLevel,
+  type EquipmentSetup,
+  type FocusArea,
+  type NutritionPlan,
 } from "@/lib/profile";
 import {
-  ACTIVITY_LABELS, ACTIVITY_DESCRIPTIONS, SPLIT_LABELS,
-  type ActivityLevel, type DeficitSplit, type BulkPace,
+  ACTIVITY_LABELS,
+  ACTIVITY_DESCRIPTIONS,
+  SPLIT_LABELS,
+  type ActivityLevel,
+  type DeficitSplit,
+  type BulkPace,
 } from "@/lib/calorieEngine";
 import { suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
 import { workoutRecommendationService } from "@/lib/workouts";
+import { weeklyScheduleService } from "@/lib/weeklySchedule";
+import {
+  getWorkoutSplitOption,
+  WORKOUT_SPLIT_OPTIONS,
+  type WorkoutSplitId,
+} from "@/lib/workoutSplits";
+import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
+import {
+  saveWorkoutPlan,
+  type SavedWorkoutPlan,
+  type WorkoutPlanInput,
+} from "@/lib/workoutPlanStore";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
-      { title: "Get Started — Pulse" },
+      { title: "Get Started — Ascendr" },
       { name: "description", content: "Tell us about you and get a personalized training plan." },
     ],
   }),
@@ -41,6 +94,7 @@ interface Draft {
   daysPerWeek: 2 | 3 | 4 | 5 | 6;
   sessionMinutes: 20 | 30 | 45 | 60;
   focusAreas: FocusArea[];
+  workoutSplit: WorkoutSplitId;
   currentWeightKg: number;
   goalWeightKg: number;
   heightCm: number;
@@ -73,6 +127,7 @@ const DEFAULT_DRAFT: Draft = {
   daysPerWeek: 4,
   sessionMinutes: 45,
   focusAreas: ["chest", "back", "legs"],
+  workoutSplit: "auto",
   currentWeightKg: 75,
   goalWeightKg: 72,
   heightCm: 175,
@@ -91,33 +146,70 @@ const DEFAULT_DRAFT: Draft = {
   equipmentItems: ["Dumbbells"],
 };
 
+function equipmentItemsForSetup(setup: EquipmentSetup): string[] {
+  switch (setup) {
+    case "gym":
+      return ["Full gym access"];
+    case "dumbbells":
+      return ["Dumbbells"];
+    case "mixed":
+      return ["Dumbbells", "Bench", "Resistance bands"];
+    default:
+      return ["No equipment"];
+  }
+}
+
+function buildSmartOnboardingPlan(profile: Profile, input: WorkoutPlanInput): SavedWorkoutPlan {
+  const split = getWorkoutSplitOption(profile.workoutSplit);
+  const workouts = workoutRecommendationService.recommend(profile, profile.daysPerWeek);
+  const focus = profile.focusAreas.map((area) => FOCUS_LABELS[area]).join(" + ");
+  return {
+    id: crypto.randomUUID(),
+    name: `${split.shortName} · ${GOAL_LABELS[profile.goal]}`.slice(0, 50),
+    summary: `A ${profile.daysPerWeek}-day ${split.shortName.toLowerCase()} plan focused on ${focus.toLowerCase()}, matched to your ${profile.sessionMinutes}-minute sessions and available equipment.`,
+    createdAt: new Date().toISOString(),
+    source: "smart",
+    input,
+    workoutIds: workouts.map((workout) => workout.id),
+  };
+}
 
 const TOTAL = 15; // welcome + 14 question steps
 
 function Onboarding() {
   const navigate = useNavigate();
   const { setProfile } = useProfile();
+  const generatePlan = useServerFn(generateWorkoutPlan);
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
   const [generating, setGenerating] = useState(false);
+  const [planReady, setPlanReady] = useState(false);
+  const [generatedPlan, setGeneratedPlan] = useState<SavedWorkoutPlan | null>(null);
   const [d, setD] = useState<Draft>(DEFAULT_DRAFT);
 
   const update = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return d.name.trim().length >= 2;
-      case 6: return d.focusAreas.length > 0;
-      case 7: return d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0 && d.goalWeightKg > 0;
-      case 9: return !!d.goalTargetDate && new Date(d.goalTargetDate).getTime() > Date.now();
-      default: return true;
+      case 0:
+        return d.name.trim().length >= 2;
+      case 6:
+        return d.focusAreas.length > 0;
+      case 7:
+        return d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0 && d.goalWeightKg > 0;
+      case 9:
+        return !!d.goalTargetDate && new Date(d.goalTargetDate).getTime() > Date.now();
+      default:
+        return true;
     }
   }, [step, d]);
 
-
   const goNext = () => {
     if (!canNext) return;
-    if (step === TOTAL - 1) return finish();
+    if (step === TOTAL - 1) {
+      void finish();
+      return;
+    }
     setDir(1);
     setStep((s) => s + 1);
   };
@@ -126,97 +218,197 @@ function Onboarding() {
     setStep((s) => Math.max(0, s - 1));
   };
 
-  const finish = () => {
+  const finish = async () => {
     const profile: Profile = {
       ...d,
       name: d.name.trim() || "Athlete",
       referralCode: d.referralCode?.trim() || undefined,
       completedAt: new Date().toISOString(),
     };
-    saveGoals(suggestNutrition(profile));
+    const nutritionGoals = suggestNutrition(profile);
+    saveGoals(nutritionGoals);
     setProfile(profile);
-    setGenerating(true); // CustomizingPlan handles navigation when its progress completes
+    setGenerating(true);
+
+    const input: WorkoutPlanInput = {
+      goal: profile.goal,
+      experience: profile.experience,
+      equipment: profile.equipment,
+      focusAreas: profile.focusAreas,
+      daysPerWeek: profile.daysPerWeek,
+      sessionMinutes: profile.sessionMinutes,
+      workoutSplit: profile.workoutSplit ?? "auto",
+    };
+
+    let plan: SavedWorkoutPlan;
+    try {
+      const response = await Promise.race([
+        generatePlan({ data: input }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Plan generation timed out")), 15_000),
+        ),
+      ]);
+      plan = response.plan;
+    } catch (error) {
+      console.warn("[onboarding] AI plan generation failed; using smart plan", error);
+      plan = buildSmartOnboardingPlan(profile, input);
+    }
+    saveWorkoutPlan(plan);
+    setGeneratedPlan(plan);
+    setPlanReady(true);
   };
 
   if (generating) {
-    return <CustomizingPlan onDone={() => navigate({ to: "/paywall" })} />;
+    return (
+      <CustomizingPlan
+        ready={planReady}
+        plan={generatedPlan}
+        onDone={() => navigate({ to: "/paywall" })}
+      />
+    );
   }
 
-  const stepLabels = ["", "Goal", "Experience", "Equipment", "Schedule", "Session", "Focus", "About you", "Activity", "Timeline", "Nutrition", "Source", "Referral", "Body Scan", "Plan"];
+  const stepLabels = [
+    "",
+    "Goal",
+    "Experience",
+    "Equipment",
+    "Schedule",
+    "Session",
+    "Focus",
+    "About you",
+    "Activity",
+    "Timeline",
+    "Nutrition",
+    "Source",
+    "Referral",
+    "Body Scan",
+    "Plan",
+  ];
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
-      <header className="flex items-center gap-3 px-5 pt-6">
-        {step > 0 ? (
-          <button
-            onClick={goBack}
-            className="size-10 grid place-items-center rounded-full bg-white/[0.05] border border-white/[0.06]"
-            aria-label="Back"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
-        ) : (
-          <div className="size-10" />
-        )}
-        <div className="flex-1">
-          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-            <motion.div
-              className="h-full bg-neon rounded-full"
-              initial={false}
-              animate={{ width: `${((step + 1) / TOTAL) * 100}%` }}
-              transition={{ type: "spring", stiffness: 120, damping: 20 }}
-            />
-          </div>
-          <div className="mt-1.5 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span>{stepLabels[step] || "Welcome"}</span>
-            <span className="tabular-nums">{step + 1} / {TOTAL}</span>
+      <header className="w-full px-6 pt-6">
+        <div className={cn("mx-auto flex w-full max-w-md items-center", step > 0 && "gap-3")}>
+          {step > 0 ? (
+            <button
+              onClick={goBack}
+              className="size-10 grid place-items-center rounded-full bg-white/[0.05] border border-white/[0.06]"
+              aria-label="Back"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <motion.div
+                className="h-full bg-neon rounded-full"
+                initial={false}
+                animate={{ width: `${((step + 1) / TOTAL) * 100}%` }}
+                transition={{ type: "spring", stiffness: 120, damping: 20 }}
+              />
+            </div>
+            <div className="mt-1.5 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span>{stepLabels[step] || "Welcome"}</span>
+              <span className="tabular-nums">
+                {step + 1} / {TOTAL}
+              </span>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 px-6 pt-6 pb-36 overflow-y-auto">
-        <AnimatePresence mode="wait" custom={dir}>
-          <motion.div
-            key={step}
-            custom={dir}
-            initial={{ opacity: 0, x: dir * 28 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: dir * -28 }}
-            transition={{ type: "spring", stiffness: 220, damping: 26 }}
-          >
-            {step === 0 && <Welcome name={d.name} onName={(n) => update("name", n)} />}
-            {step === 1 && <GoalStep value={d.goal} onChange={(g) => update("goal", g)} />}
-            {step === 2 && <ExperienceStep value={d.experience} onChange={(g) => update("experience", g)} />}
-            {step === 3 && <EquipmentStep value={d.equipment} onChange={(g) => update("equipment", g)} />}
-            {step === 4 && <DaysStep value={d.daysPerWeek} onChange={(g) => update("daysPerWeek", g)} />}
-            {step === 5 && <SessionStep value={d.sessionMinutes} onChange={(g) => update("sessionMinutes", g)} />}
-            {step === 6 && <FocusStep value={d.focusAreas} onChange={(g) => update("focusAreas", g)} />}
-            {step === 7 && <BodyStep d={d} update={update} />}
-            {step === 8 && <ActivityStep d={d} update={update} />}
-            {step === 9 && <TimelineStep d={d} update={update} />}
-            {step === 10 && <NutritionStep value={d.nutritionPlan} onChange={(g) => update("nutritionPlan", g)} />}
-            {step === 11 && <ReferralSourceStep value={d.referralSource} onChange={(v) => update("referralSource", v)} />}
-            {step === 12 && <ReferralCodeStep value={d.referralCode ?? ""} onChange={(v) => update("referralCode", v)} />}
-            {step === 13 && <BodyScanTeaserStep />}
-            {step === 14 && <ReviewStep d={d} />}
-          </motion.div>
-        </AnimatePresence>
+        <div className="mx-auto w-full max-w-md">
+          <AnimatePresence mode="wait" custom={dir}>
+            <motion.div
+              key={step}
+              custom={dir}
+              initial={{ opacity: 0, x: dir * 28 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: dir * -28 }}
+              transition={{ type: "spring", stiffness: 220, damping: 26 }}
+            >
+              {step === 0 && <Welcome name={d.name} onName={(n) => update("name", n)} />}
+              {step === 1 && <GoalStep value={d.goal} onChange={(g) => update("goal", g)} />}
+              {step === 2 && (
+                <ExperienceStep value={d.experience} onChange={(g) => update("experience", g)} />
+              )}
+              {step === 3 && (
+                <EquipmentStep
+                  value={d.equipment}
+                  onChange={(equipment) => {
+                    update("equipment", equipment);
+                    update("equipmentItems", equipmentItemsForSetup(equipment));
+                  }}
+                />
+              )}
+              {step === 4 && (
+                <DaysStep
+                  value={d.daysPerWeek}
+                  split={d.workoutSplit}
+                  onChange={(days) => {
+                    update("daysPerWeek", days);
+                    if (!getWorkoutSplitOption(d.workoutSplit).recommendedDays.includes(days)) {
+                      update("workoutSplit", "auto");
+                    }
+                  }}
+                  onSplitChange={(split) => update("workoutSplit", split)}
+                />
+              )}
+              {step === 5 && (
+                <SessionStep
+                  value={d.sessionMinutes}
+                  onChange={(g) => update("sessionMinutes", g)}
+                />
+              )}
+              {step === 6 && (
+                <FocusStep value={d.focusAreas} onChange={(g) => update("focusAreas", g)} />
+              )}
+              {step === 7 && <BodyStep d={d} update={update} />}
+              {step === 8 && <ActivityStep d={d} update={update} />}
+              {step === 9 && <TimelineStep d={d} update={update} />}
+              {step === 10 && (
+                <NutritionStep
+                  value={d.nutritionPlan}
+                  onChange={(g) => update("nutritionPlan", g)}
+                />
+              )}
+              {step === 11 && (
+                <ReferralSourceStep
+                  value={d.referralSource}
+                  onChange={(v) => update("referralSource", v)}
+                />
+              )}
+              {step === 12 && (
+                <ReferralCodeStep
+                  value={d.referralCode ?? ""}
+                  onChange={(v) => update("referralCode", v)}
+                />
+              )}
+              {step === 13 && <BodyScanTeaserStep />}
+              {step === 14 && <ReviewStep d={d} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </main>
 
       <footer className="fixed bottom-0 inset-x-0 px-6 pb-8 pt-6 bg-gradient-to-t from-background via-background/95 to-transparent">
-        <button
-          disabled={!canNext}
-          onClick={goNext}
-          className={cn(
-            "w-full h-14 rounded-full font-semibold text-base flex items-center justify-center gap-2 transition",
-            canNext
-              ? "bg-neon text-neon-foreground glow-neon active:scale-[0.98]"
-              : "bg-white/[0.05] text-muted-foreground"
-          )}
-        >
-          {step === TOTAL - 1 ? "Build My Plan" : step === 0 ? "Get Started" : "Continue"}
-          <ArrowRight className="size-5" />
-        </button>
+        <div className="mx-auto w-full max-w-md">
+          <button
+            disabled={!canNext}
+            onClick={goNext}
+            className={cn(
+              "w-full h-14 rounded-full font-semibold text-base flex items-center justify-center gap-2 transition",
+              canNext
+                ? "bg-neon text-neon-foreground glow-neon active:scale-[0.98]"
+                : "bg-white/[0.05] text-muted-foreground",
+            )}
+          >
+            {step === TOTAL - 1 ? "Build My AI Plan" : step === 0 ? "Get Started" : "Continue"}
+            <ArrowRight className="size-5" />
+          </button>
+        </div>
       </footer>
     </div>
   );
@@ -229,14 +421,17 @@ function Welcome({ name, onName }: { name: string; onName: (n: string) => void }
     <div className="text-center pt-2">
       <AnimatedAthlete size={220} className="mx-auto" />
       <h1 className="mt-6 text-[32px] leading-tight font-extrabold text-balance">
-        Let's build the plan that<br />
+        Let's build the plan that
+        <br />
         <span className="text-neon">moves you forward</span>
       </h1>
       <p className="mt-3 text-sm text-muted-foreground text-balance">
         A few quick questions and we'll personalize workouts, nutrition, and your weekly schedule.
       </p>
       <div className="mt-8 text-left">
-        <label className="text-[11px] uppercase tracking-wider text-muted-foreground">What should we call you?</label>
+        <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          What should we call you?
+        </label>
         <input
           value={name}
           onChange={(e) => onName(e.target.value)}
@@ -259,7 +454,11 @@ function StepHeader({ title, sub }: { title: string; sub?: string }) {
 }
 
 function ChoiceCard({
-  active, onClick, icon: Icon, label, sub,
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  sub,
 }: {
   active: boolean;
   onClick: () => void;
@@ -274,14 +473,14 @@ function ChoiceCard({
         "w-full text-left rounded-2xl border p-4 flex items-center gap-4 transition",
         active
           ? "border-neon bg-neon/10"
-          : "border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.05]"
+          : "border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.05]",
       )}
     >
       {Icon && (
         <span
           className={cn(
             "size-11 rounded-xl grid place-items-center shrink-0",
-            active ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-foreground"
+            active ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-foreground",
           )}
         >
           <Icon className="size-5" />
@@ -294,7 +493,7 @@ function ChoiceCard({
       <span
         className={cn(
           "size-6 rounded-full border-2 grid place-items-center shrink-0",
-          active ? "border-neon bg-neon text-neon-foreground" : "border-white/15"
+          active ? "border-neon bg-neon text-neon-foreground" : "border-white/15",
         )}
       >
         {active && <Check className="size-3.5" strokeWidth={3} />}
@@ -308,22 +507,40 @@ function GoalStep({ value, onChange }: { value: Goal; onChange: (g: Goal) => voi
     { id: "lose_weight", icon: TrendingDown, sub: "Burn fat and slim down" },
     { id: "build_muscle", icon: Dumbbell, sub: "Add lean muscle and strength" },
     { id: "recomp", icon: Layers, sub: "Build muscle while losing fat" },
+    { id: "get_stronger", icon: Zap, sub: "Increase strength on your main lifts" },
     { id: "endurance", icon: Activity, sub: "Improve cardio and stamina" },
+    { id: "overall", icon: Heart, sub: "Build balanced, all-around fitness" },
     { id: "maintain", icon: Mountain, sub: "Stay sharp and consistent" },
   ];
   return (
     <div>
-      <StepHeader title="What's your main goal?" sub="We'll tune training and nutrition around this." />
+      <StepHeader
+        title="What's your main goal?"
+        sub="We'll tune training and nutrition around this."
+      />
       <div className="space-y-2.5">
         {items.map(({ id, icon, sub }) => (
-          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} icon={icon} label={GOAL_LABELS[id]} sub={sub} />
+          <ChoiceCard
+            key={id}
+            active={value === id}
+            onClick={() => onChange(id)}
+            icon={icon}
+            label={GOAL_LABELS[id]}
+            sub={sub}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ExperienceStep({ value, onChange }: { value: ExperienceLevel; onChange: (v: ExperienceLevel) => void }) {
+function ExperienceStep({
+  value,
+  onChange,
+}: {
+  value: ExperienceLevel;
+  onChange: (v: ExperienceLevel) => void;
+}) {
   const items: { id: ExperienceLevel; sub: string }[] = [
     { id: "beginner", sub: "New to training, learning movements" },
     { id: "intermediate", sub: "Consistent for 6+ months" },
@@ -334,14 +551,26 @@ function ExperienceStep({ value, onChange }: { value: ExperienceLevel; onChange:
       <StepHeader title="Your experience level" sub="So we pick the right intensity and volume." />
       <div className="space-y-2.5">
         {items.map(({ id, sub }) => (
-          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} label={EXPERIENCE_LABELS[id]} sub={sub} />
+          <ChoiceCard
+            key={id}
+            active={value === id}
+            onClick={() => onChange(id)}
+            label={EXPERIENCE_LABELS[id]}
+            sub={sub}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function EquipmentStep({ value, onChange }: { value: EquipmentSetup; onChange: (v: EquipmentSetup) => void }) {
+function EquipmentStep({
+  value,
+  onChange,
+}: {
+  value: EquipmentSetup;
+  onChange: (v: EquipmentSetup) => void;
+}) {
   const items: { id: EquipmentSetup; icon: typeof Home; sub: string }[] = [
     { id: "none", icon: Home, sub: "Bodyweight workouts, anywhere" },
     { id: "dumbbells", icon: Dumbbell, sub: "Adjustable or fixed dumbbells" },
@@ -350,21 +579,47 @@ function EquipmentStep({ value, onChange }: { value: EquipmentSetup; onChange: (
   ];
   return (
     <div>
-      <StepHeader title="Where do you train?" sub="We only recommend workouts you can actually do." />
+      <StepHeader
+        title="Where do you train?"
+        sub="We only recommend workouts you can actually do."
+      />
       <div className="space-y-2.5">
         {items.map(({ id, icon, sub }) => (
-          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} icon={icon} label={EQUIPMENT_LABELS[id]} sub={sub} />
+          <ChoiceCard
+            key={id}
+            active={value === id}
+            onClick={() => onChange(id)}
+            icon={icon}
+            label={EQUIPMENT_LABELS[id]}
+            sub={sub}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function DaysStep({ value, onChange }: { value: 2 | 3 | 4 | 5 | 6; onChange: (v: 2 | 3 | 4 | 5 | 6) => void }) {
+function DaysStep({
+  value,
+  split,
+  onChange,
+  onSplitChange,
+}: {
+  value: 2 | 3 | 4 | 5 | 6;
+  split: WorkoutSplitId;
+  onChange: (v: 2 | 3 | 4 | 5 | 6) => void;
+  onSplitChange: (v: WorkoutSplitId) => void;
+}) {
   const options = [2, 3, 4, 5, 6] as const;
+  const suggestedSplits = WORKOUT_SPLIT_OPTIONS.filter(
+    (option) => option.id === "auto" || option.recommendedDays.includes(value),
+  );
   return (
     <div>
-      <StepHeader title="Days per week" sub="How often can you realistically train?" />
+      <StepHeader title="Build your weekly rhythm" sub="Choose a realistic schedule and split." />
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+        Training days
+      </p>
       <div className="grid grid-cols-5 gap-2">
         {options.map((n) => (
           <button
@@ -374,22 +629,67 @@ function DaysStep({ value, onChange }: { value: 2 | 3 | 4 | 5 | 6; onChange: (v:
               "aspect-square rounded-2xl border flex flex-col items-center justify-center transition",
               value === n
                 ? "border-neon bg-neon/10 text-neon"
-                : "border-white/[0.06] bg-white/[0.03]"
+                : "border-white/[0.06] bg-white/[0.03]",
             )}
           >
             <span className="text-2xl font-extrabold tabular-nums">{n}</span>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">days</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
+              days
+            </span>
           </button>
         ))}
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        We'll build a {value}-day split that fits your week.
-      </p>
+      <div className="mt-6 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+            Workout split
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Best matches for {value} days</p>
+        </div>
+        <span className="text-[9px] text-muted-foreground">You can change this later</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        {suggestedSplits.map((option) => {
+          const active = split === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onSplitChange(option.id)}
+              className={cn(
+                "min-h-[92px] rounded-2xl border p-3 text-left transition",
+                active ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[12px] font-bold leading-tight">{option.shortName}</span>
+                <span
+                  className={cn(
+                    "grid size-4 shrink-0 place-items-center rounded-full border",
+                    active ? "border-neon bg-neon text-neon-foreground" : "border-white/15",
+                  )}
+                >
+                  {active && <Check className="size-2.5" strokeWidth={3} />}
+                </span>
+              </div>
+              <p className="mt-2 line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
+                {option.description}
+              </p>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function SessionStep({ value, onChange }: { value: 20 | 30 | 45 | 60; onChange: (v: 20 | 30 | 45 | 60) => void }) {
+function SessionStep({
+  value,
+  onChange,
+}: {
+  value: 20 | 30 | 45 | 60;
+  onChange: (v: 20 | 30 | 45 | 60) => void;
+}) {
   const options = [20, 30, 45, 60] as const;
   return (
     <div>
@@ -401,11 +701,13 @@ function SessionStep({ value, onChange }: { value: 20 | 30 | 45 | 60; onChange: 
             onClick={() => onChange(n)}
             className={cn(
               "h-24 rounded-2xl border flex flex-col items-center justify-center transition",
-              value === n ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]"
+              value === n ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
             )}
           >
             <span className="text-3xl font-extrabold tabular-nums">{n}</span>
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">minutes</span>
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider mt-1">
+              minutes
+            </span>
           </button>
         ))}
       </div>
@@ -413,13 +715,24 @@ function SessionStep({ value, onChange }: { value: 20 | 30 | 45 | 60; onChange: 
   );
 }
 
-function FocusStep({ value, onChange }: { value: FocusArea[]; onChange: (v: FocusArea[]) => void }) {
+function FocusStep({
+  value,
+  onChange,
+}: {
+  value: FocusArea[];
+  onChange: (v: FocusArea[]) => void;
+}) {
   const areas = Object.keys(FOCUS_LABELS) as FocusArea[];
-  const toggle = (a: FocusArea) =>
+  const toggle = (a: FocusArea) => {
+    if (!value.includes(a) && value.length >= 5) return;
     onChange(value.includes(a) ? value.filter((x) => x !== a) : [...value, a]);
+  };
   return (
     <div>
-      <StepHeader title="What do you want to focus on?" sub="Pick at least one. You can change this anytime." />
+      <StepHeader
+        title="What do you want to focus on?"
+        sub="Pick one to five priorities. You can change these anytime."
+      />
       <div className="grid grid-cols-2 gap-2.5">
         {areas.map((a) => {
           const active = value.includes(a);
@@ -427,9 +740,11 @@ function FocusStep({ value, onChange }: { value: FocusArea[]; onChange: (v: Focu
             <button
               key={a}
               onClick={() => toggle(a)}
+              disabled={!active && value.length >= 5}
               className={cn(
                 "h-14 rounded-2xl border font-semibold transition flex items-center justify-center gap-2",
-                active ? "border-neon bg-neon/10 text-neon" : "border-white/[0.06] bg-white/[0.03]"
+                active ? "border-neon bg-neon/10 text-neon" : "border-white/[0.06] bg-white/[0.03]",
+                !active && value.length >= 5 && "opacity-40",
               )}
             >
               {FOCUS_LABELS[a]}
@@ -442,11 +757,20 @@ function FocusStep({ value, onChange }: { value: FocusArea[]; onChange: (v: Focu
   );
 }
 
-function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+function BodyStep({
+  d,
+  update,
+}: {
+  d: Draft;
+  update: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+}) {
   const imperial = d.units === "imperial";
   return (
     <div>
-      <StepHeader title="A bit about your body" sub="We use this to calibrate calorie and macro targets." />
+      <StepHeader
+        title="A bit about your body"
+        sub="We use this to calibrate calorie and macro targets."
+      />
 
       {/* Units toggle */}
       <div className="mb-4 inline-flex rounded-full bg-white/[0.04] border border-white/[0.06] p-1">
@@ -456,7 +780,7 @@ function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: 
             onClick={() => update("units", u)}
             className={cn(
               "px-4 h-9 rounded-full text-xs font-semibold uppercase tracking-wider transition",
-              d.units === u ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+              d.units === u ? "bg-neon text-neon-foreground" : "text-muted-foreground",
             )}
           >
             {u === "metric" ? "kg · cm" : "lb · in"}
@@ -465,30 +789,68 @@ function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: 
       </div>
 
       <div className="space-y-4">
-        <Slider label="Age" value={d.age} min={14} max={80} suffix="years" onChange={(v) => update("age", v)} />
+        <Slider
+          label="Age"
+          value={d.age}
+          min={14}
+          max={80}
+          suffix="years"
+          onChange={(v) => update("age", v)}
+        />
 
         {imperial ? (
           <HeightImperialSlider valueCm={d.heightCm} onChange={(cm) => update("heightCm", cm)} />
         ) : (
-          <Slider label="Height" value={d.heightCm} min={140} max={220} suffix="cm" onChange={(v) => update("heightCm", v)} />
+          <Slider
+            label="Height"
+            value={d.heightCm}
+            min={140}
+            max={220}
+            suffix="cm"
+            onChange={(v) => update("heightCm", v)}
+          />
         )}
 
         <div className="grid grid-cols-2 gap-3">
           {imperial ? (
             <>
-              <WeightImperialSlider label="Current weight" valueKg={d.currentWeightKg} onChange={(kg) => update("currentWeightKg", kg)} />
-              <WeightImperialSlider label="Goal weight" valueKg={d.goalWeightKg} onChange={(kg) => update("goalWeightKg", kg)} />
+              <WeightImperialSlider
+                label="Current weight"
+                valueKg={d.currentWeightKg}
+                onChange={(kg) => update("currentWeightKg", kg)}
+              />
+              <WeightImperialSlider
+                label="Goal weight"
+                valueKg={d.goalWeightKg}
+                onChange={(kg) => update("goalWeightKg", kg)}
+              />
             </>
           ) : (
             <>
-              <Slider label="Current weight" value={d.currentWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("currentWeightKg", v)} />
-              <Slider label="Goal weight" value={d.goalWeightKg} min={40} max={180} suffix="kg" onChange={(v) => update("goalWeightKg", v)} />
+              <Slider
+                label="Current weight"
+                value={d.currentWeightKg}
+                min={40}
+                max={180}
+                suffix="kg"
+                onChange={(v) => update("currentWeightKg", v)}
+              />
+              <Slider
+                label="Goal weight"
+                value={d.goalWeightKg}
+                min={40}
+                max={180}
+                suffix="kg"
+                onChange={(v) => update("goalWeightKg", v)}
+              />
             </>
           )}
         </div>
 
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Gender</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+            Gender
+          </div>
           <div className="grid grid-cols-3 gap-2">
             {(["female", "male", "other"] as Gender[]).map((g) => (
               <button
@@ -496,7 +858,9 @@ function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: 
                 onClick={() => update("gender", g)}
                 className={cn(
                   "h-12 rounded-2xl capitalize text-sm font-semibold border transition",
-                  d.gender === g ? "border-neon bg-neon/10 text-neon" : "border-white/[0.06] bg-white/[0.03]"
+                  d.gender === g
+                    ? "border-neon bg-neon/10 text-neon"
+                    : "border-white/[0.06] bg-white/[0.03]",
                 )}
               >
                 {g}
@@ -526,18 +890,34 @@ function BodyStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: 
 }
 
 function Slider({
-  label, value, min, max, suffix, onChange,
-}: { label: string; value: number; min: number; max: number; suffix: string; onChange: (v: number) => void }) {
+  label,
+  value,
+  min,
+  max,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  suffix: string;
+  onChange: (v: number) => void;
+}) {
   return (
     <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
       <div className="flex items-baseline justify-between mb-2">
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
         <span className="text-lg font-extrabold tabular-nums">
-          {value}<span className="text-xs text-muted-foreground ml-1">{suffix}</span>
+          {value}
+          <span className="text-xs text-muted-foreground ml-1">{suffix}</span>
         </span>
       </div>
       <input
-        type="range" min={min} max={max} value={value}
+        type="range"
+        min={min}
+        max={max}
+        value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-[var(--color-neon)]"
       />
@@ -545,7 +925,13 @@ function Slider({
   );
 }
 
-function HeightImperialSlider({ valueCm, onChange }: { valueCm: number; onChange: (cm: number) => void }) {
+function HeightImperialSlider({
+  valueCm,
+  onChange,
+}: {
+  valueCm: number;
+  onChange: (cm: number) => void;
+}) {
   const totalInches = Math.round(valueCm / 2.54);
   const ft = Math.floor(totalInches / 12);
   const inches = totalInches % 12;
@@ -558,7 +944,10 @@ function HeightImperialSlider({ valueCm, onChange }: { valueCm: number; onChange
         </span>
       </div>
       <input
-        type="range" min={55} max={87} value={totalInches}
+        type="range"
+        min={55}
+        max={87}
+        value={totalInches}
         onChange={(e) => onChange(Math.round(Number(e.target.value) * 2.54))}
         className="w-full accent-[var(--color-neon)]"
       />
@@ -566,18 +955,30 @@ function HeightImperialSlider({ valueCm, onChange }: { valueCm: number; onChange
   );
 }
 
-function WeightImperialSlider({ label, valueKg, onChange }: { label: string; valueKg: number; onChange: (kg: number) => void }) {
+function WeightImperialSlider({
+  label,
+  valueKg,
+  onChange,
+}: {
+  label: string;
+  valueKg: number;
+  onChange: (kg: number) => void;
+}) {
   const lb = Math.round(valueKg * 2.20462);
   return (
     <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
       <div className="flex items-baseline justify-between mb-2">
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
         <span className="text-lg font-extrabold tabular-nums">
-          {lb}<span className="text-xs text-muted-foreground ml-1">lb</span>
+          {lb}
+          <span className="text-xs text-muted-foreground ml-1">lb</span>
         </span>
       </div>
       <input
-        type="range" min={88} max={400} value={lb}
+        type="range"
+        min={88}
+        max={400}
+        value={lb}
         onChange={(e) => onChange(Number(e.target.value) / 2.20462)}
         className="w-full accent-[var(--color-neon)]"
       />
@@ -585,7 +986,13 @@ function WeightImperialSlider({ label, valueKg, onChange }: { label: string; val
   );
 }
 
-function ActivityStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+function ActivityStep({
+  d,
+  update,
+}: {
+  d: Draft;
+  update: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+}) {
   const items: { id: ActivityLevel; icon: typeof Flame }[] = [
     { id: "sedentary", icon: Heart },
     { id: "light", icon: Activity },
@@ -633,16 +1040,30 @@ function ActivityStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
   );
 }
 
-function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+function TimelineStep({
+  d,
+  update,
+}: {
+  d: Draft;
+  update: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+}) {
   const goalKind: "lose" | "gain" | "maintain" | "recomp" =
-    d.goal === "lose_weight" ? "lose" :
-    d.goal === "build_muscle" ? "gain" :
-    d.goal === "recomp" ? "recomp" :
-    d.goal === "maintain" ? "maintain" :
-    d.currentWeightKg > d.goalWeightKg ? "lose" :
-    d.currentWeightKg < d.goalWeightKg ? "gain" : "maintain";
+    d.goal === "lose_weight"
+      ? "lose"
+      : d.goal === "build_muscle"
+        ? "gain"
+        : d.goal === "recomp"
+          ? "recomp"
+          : d.goal === "maintain"
+            ? "maintain"
+            : d.currentWeightKg > d.goalWeightKg
+              ? "lose"
+              : d.currentWeightKg < d.goalWeightKg
+                ? "gain"
+                : "maintain";
 
-  const minDate = new Date(); minDate.setDate(minDate.getDate() + 14);
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 14);
   const minStr = minDate.toISOString().slice(0, 10);
   const cur = d.goalTargetDate ? d.goalTargetDate.slice(0, 10) : minStr;
   const splits: DeficitSplit[] = ["mostly_diet", "balanced", "mostly_exercise"];
@@ -655,7 +1076,9 @@ function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
       />
 
       <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">Target date</label>
+        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+          Target date
+        </label>
         <div className="mt-2 flex items-center gap-3">
           <Calendar className="size-5 text-neon shrink-0" />
           <input
@@ -688,9 +1111,11 @@ function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
                 icon={s === "mostly_diet" ? Salad : s === "mostly_exercise" ? Flame : Apple}
                 label={SPLIT_LABELS[s]}
                 sub={
-                  s === "mostly_diet" ? "90% from food cuts, 10% from workouts" :
-                  s === "balanced" ? "70% from food cuts, 30% from workouts" :
-                  "50% from food cuts, 50% from workouts"
+                  s === "mostly_diet"
+                    ? "90% from food cuts, 10% from workouts"
+                    : s === "balanced"
+                      ? "70% from food cuts, 30% from workouts"
+                      : "50% from food cuts, 50% from workouts"
                 }
               />
             ))}
@@ -700,7 +1125,9 @@ function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
 
       {goalKind === "gain" && (
         <div className="mt-5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Bulk pace</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+            Bulk pace
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {(["lean", "faster"] as BulkPace[]).map((b) => (
               <button
@@ -708,7 +1135,9 @@ function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
                 onClick={() => update("bulkPace", b)}
                 className={cn(
                   "h-20 rounded-2xl border flex flex-col items-center justify-center transition",
-                  d.bulkPace === b ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
+                  d.bulkPace === b
+                    ? "border-neon bg-neon/10"
+                    : "border-white/[0.06] bg-white/[0.03]",
                 )}
               >
                 <span className="text-base font-bold capitalize">{b} bulk</span>
@@ -724,8 +1153,13 @@ function TimelineStep({ d, update }: { d: Draft; update: <K extends keyof Draft>
   );
 }
 
-
-function NutritionStep({ value, onChange }: { value: NutritionPlan; onChange: (v: NutritionPlan) => void }) {
+function NutritionStep({
+  value,
+  onChange,
+}: {
+  value: NutritionPlan;
+  onChange: (v: NutritionPlan) => void;
+}) {
   const items: { id: NutritionPlan; sub: string; icon: typeof Flame }[] = [
     { id: "fat_loss", icon: Flame, sub: "Calorie deficit, high protein" },
     { id: "muscle_gain", icon: Dumbbell, sub: "Calorie surplus, high protein" },
@@ -737,7 +1171,14 @@ function NutritionStep({ value, onChange }: { value: NutritionPlan; onChange: (v
       <StepHeader title="Nutrition approach" sub="We'll generate your calorie and macro targets." />
       <div className="space-y-2.5">
         {items.map(({ id, sub, icon }) => (
-          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} icon={icon} label={NUTRITION_LABELS[id]} sub={sub} />
+          <ChoiceCard
+            key={id}
+            active={value === id}
+            onClick={() => onChange(id)}
+            icon={icon}
+            label={NUTRITION_LABELS[id]}
+            sub={sub}
+          />
         ))}
       </div>
     </div>
@@ -745,18 +1186,28 @@ function NutritionStep({ value, onChange }: { value: NutritionPlan; onChange: (v
 }
 
 function ReviewStep({ d }: { d: Draft }) {
-  const profile: Profile = { ...d, name: d.name || "Athlete", completedAt: new Date().toISOString() };
+  const profile: Profile = {
+    ...d,
+    name: d.name || "Athlete",
+    completedAt: new Date().toISOString(),
+  };
   const nutrition = suggestNutrition(profile);
-  const plan = workoutRecommendationService.weeklyPlan(profile);
+  const plan = weeklyScheduleService.generateSchedule(profile);
+  const selectedSplit = getWorkoutSplitOption(d.workoutSplit);
   return (
     <div>
-      <StepHeader title={`You're ready, ${d.name || "athlete"}`} sub="Here's the plan we've tailored to your answers." />
+      <StepHeader
+        title={`You're ready, ${d.name || "athlete"}`}
+        sub="Here's the plan we've tailored to your answers."
+      />
 
       <div className="rounded-3xl border border-neon/30 bg-gradient-to-br from-neon/10 to-transparent p-5">
-        <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">Your goal</div>
+        <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">
+          Your goal
+        </div>
         <div className="text-xl font-extrabold mt-1">{GOAL_LABELS[d.goal]}</div>
         <div className="text-xs text-muted-foreground mt-1">
-          {EXPERIENCE_LABELS[d.experience]} · {EQUIPMENT_LABELS[d.equipment]}
+          {EXPERIENCE_LABELS[d.experience]} · {EQUIPMENT_LABELS[d.equipment]} · {selectedSplit.name}
         </div>
       </div>
 
@@ -766,8 +1217,21 @@ function ReviewStep({ d }: { d: Draft }) {
         <Stat label="Focus" value={String(d.focusAreas.length)} />
       </div>
 
+      <div className="mt-5 rounded-3xl border border-neon/15 bg-neon/[0.045] p-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+          Synced across Ascendr
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <ConnectedFeature icon={Dumbbell} label="AI workouts" />
+          <ConnectedFeature icon={Apple} label="Macro targets" />
+          <ConnectedFeature icon={Sparkles} label="Coach context" />
+        </div>
+      </div>
+
       <div className="mt-5 rounded-3xl bg-white/[0.03] border border-white/[0.05] p-5">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Daily nutrition</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Daily nutrition · {NUTRITION_LABELS[d.nutritionPlan]}
+        </div>
         <div className="mt-2 grid grid-cols-4 gap-2 text-center">
           <Macro label="kcal" value={nutrition.kcal} highlight />
           <Macro label="P (g)" value={nutrition.protein} />
@@ -777,13 +1241,20 @@ function ReviewStep({ d }: { d: Draft }) {
       </div>
 
       <div className="mt-5 rounded-3xl bg-white/[0.03] border border-white/[0.05] p-5">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Weekly split</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Weekly split
+        </div>
         <ul className="mt-3 space-y-1.5">
           {plan.map((day) => (
-            <li key={day.day} className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground w-10">{day.day}</span>
-              <span className={cn("font-medium", day.label === "Rest" ? "text-muted-foreground" : "text-foreground")}>
-                {day.label}
+            <li key={day.id} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground w-10">{day.dayName.slice(0, 3)}</span>
+              <span
+                className={cn(
+                  "font-medium",
+                  day.isRestDay ? "text-muted-foreground" : "text-foreground",
+                )}
+              >
+                {day.splitLabel}
               </span>
             </li>
           ))}
@@ -797,14 +1268,28 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-3 text-center">
       <div className="text-lg font-extrabold tabular-nums">{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+        {label}
+      </div>
     </div>
   );
 }
+
+function ConnectedFeature({ icon: Icon, label }: { icon: typeof Dumbbell; label: string }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.05] bg-black/15 px-2 py-3 text-center">
+      <Icon className="mx-auto size-4 text-neon" />
+      <p className="mt-2 text-[9px] font-semibold leading-tight text-white/70">{label}</p>
+    </div>
+  );
+}
+
 function Macro({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div>
-      <div className={cn("text-xl font-extrabold tabular-nums", highlight && "text-neon")}>{value}</div>
+      <div className={cn("text-xl font-extrabold tabular-nums", highlight && "text-neon")}>
+        {value}
+      </div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
     </div>
   );
@@ -822,13 +1307,28 @@ const REFERRAL_SOURCES: { id: ReferralSource; label: string; icon: typeof Flame 
   { id: "other", label: "Somewhere else", icon: MoreHorizontal },
 ];
 
-function ReferralSourceStep({ value, onChange }: { value: ReferralSource | undefined; onChange: (v: ReferralSource) => void }) {
+function ReferralSourceStep({
+  value,
+  onChange,
+}: {
+  value: ReferralSource | undefined;
+  onChange: (v: ReferralSource) => void;
+}) {
   return (
     <div>
-      <StepHeader title="How did you hear about us?" sub="This helps us improve — totally optional." />
+      <StepHeader
+        title="How did you hear about us?"
+        sub="This helps us improve — totally optional."
+      />
       <div className="space-y-2.5">
         {REFERRAL_SOURCES.map(({ id, label, icon }) => (
-          <ChoiceCard key={id} active={value === id} onClick={() => onChange(id)} icon={icon} label={label} />
+          <ChoiceCard
+            key={id}
+            active={value === id}
+            onClick={() => onChange(id)}
+            icon={icon}
+            label={label}
+          />
         ))}
       </div>
     </div>
@@ -839,13 +1339,21 @@ function ReferralCodeStep({ value, onChange }: { value: string; onChange: (v: st
   const [applied, setApplied] = useState(false);
   return (
     <div>
-      <StepHeader title="Have a referral code?" sub="Add it now or skip — you can apply one later on the paywall." />
+      <StepHeader
+        title="Have a referral code?"
+        sub="Add it now or skip — you can apply one later on the paywall."
+      />
       <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">Referral code</label>
+        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+          Referral code
+        </label>
         <div className="mt-2 flex items-center gap-2">
           <input
             value={value}
-            onChange={(e) => { onChange(e.target.value.toUpperCase()); setApplied(false); }}
+            onChange={(e) => {
+              onChange(e.target.value.toUpperCase());
+              setApplied(false);
+            }}
             placeholder="e.g. PULSE2026"
             maxLength={24}
             className="flex-1 h-12 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tracking-widest uppercase outline-none focus:border-neon/40"
@@ -855,7 +1363,9 @@ function ReferralCodeStep({ value, onChange }: { value: string; onChange: (v: st
             disabled={!value.trim()}
             className={cn(
               "h-12 px-4 rounded-xl text-sm font-semibold transition",
-              value.trim() ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-muted-foreground"
+              value.trim()
+                ? "bg-neon text-neon-foreground"
+                : "bg-white/[0.05] text-muted-foreground",
             )}
           >
             Apply
@@ -882,14 +1392,19 @@ function BodyScanTeaserStep() {
   ];
   return (
     <div>
-      <StepHeader title="Get your physique analysis" sub="Unlock smarter coaching by adding a body scan after you start." />
+      <StepHeader
+        title="Get your physique analysis"
+        sub="Unlock smarter coaching by adding a body scan after you start."
+      />
       <div className="rounded-3xl border border-neon/30 bg-gradient-to-br from-neon/10 via-transparent to-transparent p-5">
         <div className="flex items-center gap-3">
           <div className="size-12 rounded-2xl bg-neon text-neon-foreground grid place-items-center">
             <Scan className="size-6" />
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">Pulse Body Scan</div>
+            <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">
+              Ascendr Body Scan
+            </div>
             <div className="text-lg font-extrabold">AI physique tracking</div>
           </div>
         </div>
@@ -905,7 +1420,7 @@ function BodyScanTeaserStep() {
         </div>
       </div>
       <p className="mt-4 text-xs text-muted-foreground text-center">
-        You can start your first scan anytime from the Profile or Progress tab.
+        You can start your first face or body scan anytime from the Scans tab.
       </p>
     </div>
   );
@@ -922,26 +1437,36 @@ const PLAN_STEPS = [
   "Preparing your dashboard",
 ];
 
-function CustomizingPlan({ onDone }: { onDone: () => void }) {
+function CustomizingPlan({
+  ready,
+  plan,
+  onDone,
+}: {
+  ready: boolean;
+  plan: SavedWorkoutPlan | null;
+  onDone: () => void;
+}) {
   const [progress, setProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    const total = 3200; // ms
-    const tick = 40;
-    let elapsed = 0;
     const id = setInterval(() => {
-      elapsed += tick;
-      const p = Math.min(1, elapsed / total);
-      setProgress(p);
-      setCurrentStep(Math.min(PLAN_STEPS.length, Math.floor(p * PLAN_STEPS.length) + 1));
-      if (p >= 1) {
-        clearInterval(id);
-        setTimeout(onDone, 350);
-      }
-    }, tick);
+      setProgress((current) => {
+        const cap = ready ? 1 : 0.92;
+        const increment = current < 0.7 ? 0.018 : 0.007;
+        return Math.min(cap, current + increment);
+      });
+    }, 50);
     return () => clearInterval(id);
-  }, [onDone]);
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready || progress < 1) return;
+    const id = setTimeout(onDone, 1100);
+    return () => clearTimeout(id);
+  }, [ready, progress, onDone]);
+
+  const currentStep = Math.min(PLAN_STEPS.length, Math.floor(progress * PLAN_STEPS.length) + 1);
+  const complete = ready && progress >= 1;
 
   return (
     <div className="min-h-dvh bg-background flex flex-col px-6 pt-safe pb-safe">
@@ -949,11 +1474,32 @@ function CustomizingPlan({ onDone }: { onDone: () => void }) {
         <div className="text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neon/10 border border-neon/30">
             <Sparkles className="size-3.5 text-neon" />
-            <span className="text-[10px] font-bold tracking-[0.2em] text-neon uppercase">Customizing your plan</span>
+            <span className="text-[10px] font-bold tracking-[0.2em] text-neon uppercase">
+              {complete ? "Your plan is ready" : "Customizing your plan"}
+            </span>
           </div>
           <h2 className="mt-5 text-3xl font-extrabold leading-tight">
-            Building something<br /><span className="text-neon">just for you</span>
+            {complete ? "Built around" : "Building something"}
+            <br />
+            <span className="text-neon">{complete ? "your real routine" : "just for you"}</span>
           </h2>
+          {complete && plan && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-5 rounded-2xl border border-neon/20 bg-neon/[0.07] px-4 py-3 text-left"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-extrabold">{plan.name}</p>
+                <span className="shrink-0 rounded-full bg-neon/10 px-2 py-1 text-[8px] font-bold uppercase text-neon">
+                  {plan.source === "ai" ? "AI built" : "Smart matched"}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+                {plan.summary}
+              </p>
+            </motion.div>
+          )}
           <div className="mt-6 h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
             <motion.div
               className="h-full bg-neon"
@@ -969,8 +1515,8 @@ function CustomizingPlan({ onDone }: { onDone: () => void }) {
 
         <ul className="mt-10 space-y-3">
           {PLAN_STEPS.map((label, i) => {
-            const done = i < currentStep - 1;
-            const active = i === currentStep - 1;
+            const done = complete || i < currentStep - 1;
+            const active = !complete && i === currentStep - 1;
             return (
               <motion.li
                 key={label}
@@ -979,21 +1525,37 @@ function CustomizingPlan({ onDone }: { onDone: () => void }) {
                 transition={{ duration: 0.25 }}
                 className="flex items-center gap-3"
               >
-                <div className={cn(
-                  "size-7 rounded-full grid place-items-center shrink-0 border transition",
-                  done ? "bg-neon border-neon text-neon-foreground"
-                    : active ? "border-neon text-neon"
-                    : "border-white/15 text-muted-foreground"
-                )}>
-                  {done
-                    ? <Check className="size-4" strokeWidth={3} />
-                    : active
-                      ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-                          <Sparkles className="size-3.5" />
-                        </motion.div>
-                      : <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>}
+                <div
+                  className={cn(
+                    "size-7 rounded-full grid place-items-center shrink-0 border transition",
+                    done
+                      ? "bg-neon border-neon text-neon-foreground"
+                      : active
+                        ? "border-neon text-neon"
+                        : "border-white/15 text-muted-foreground",
+                  )}
+                >
+                  {done ? (
+                    <Check className="size-4" strokeWidth={3} />
+                  ) : active ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    >
+                      <Sparkles className="size-3.5" />
+                    </motion.div>
+                  ) : (
+                    <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>
+                  )}
                 </div>
-                <span className={cn("text-sm font-medium", done && "text-foreground", active && "text-neon", !done && !active && "text-muted-foreground")}>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    done && "text-foreground",
+                    active && "text-neon",
+                    !done && !active && "text-muted-foreground",
+                  )}
+                >
                   {label}
                 </span>
               </motion.li>
@@ -1004,4 +1566,3 @@ function CustomizingPlan({ onDone }: { onDone: () => void }) {
     </div>
   );
 }
-

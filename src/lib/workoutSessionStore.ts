@@ -63,18 +63,49 @@ const HIST_EVT = "fitness:history-change";
 /* -------- helpers -------- */
 
 const BW_KEYWORDS = [
-  "push-up", "pushup", "push up",
-  "pull-up", "pullup", "pull up", "chin-up", "chinup",
-  "dip", "sit-up", "situp", "crunch",
-  "plank", "burpee", "mountain climber", "jumping jack",
-  "lunge", "wall sit", "wall-sit", "hold", "bridge",
-  "knee raise", "leg raise", "v-up", "vup",
-  "high knee", "skater", "bear crawl", "inchworm",
-  "superman", "donkey kick", "bird dog",
+  "push-up",
+  "pushup",
+  "push up",
+  "pull-up",
+  "pullup",
+  "pull up",
+  "chin-up",
+  "chinup",
+  "dip",
+  "sit-up",
+  "situp",
+  "crunch",
+  "plank",
+  "burpee",
+  "mountain climber",
+  "jumping jack",
+  "lunge",
+  "wall sit",
+  "wall-sit",
+  "hold",
+  "bridge",
+  "knee raise",
+  "leg raise",
+  "v-up",
+  "vup",
+  "high knee",
+  "skater",
+  "bear crawl",
+  "inchworm",
+  "superman",
+  "donkey kick",
+  "bird dog",
 ];
 const WEIGHTED_KEYWORDS = [
-  "dumbbell", "barbell", "kettlebell", "cable", "machine",
-  "smith", "ez bar", "trap bar", "goblet",
+  "dumbbell",
+  "barbell",
+  "kettlebell",
+  "cable",
+  "machine",
+  "smith",
+  "ez bar",
+  "trap bar",
+  "goblet",
 ];
 
 export function isBodyweightExercise(name: string): boolean {
@@ -160,7 +191,7 @@ export function useActiveSession(): WorkoutSession | null {
   return useSyncExternalStore(subscribe, readSession, () => null);
 }
 
-interface SeedExercise {
+export interface SeedExercise {
   id: string;
   name: string;
   sets: number;
@@ -217,11 +248,24 @@ export function updateSession(patch: Partial<WorkoutSession>) {
   writeSession({ ...cur, ...patch });
 }
 
-export function updateSet(
-  exerciseLogId: string,
-  setNumber: number,
-  patch: Partial<SetLog>,
-) {
+export function addExerciseToSession(exercise: SeedExercise): ExerciseLog | null {
+  const cur = readSession();
+  if (!cur || cur.status !== "active") return null;
+  const exerciseLog: ExerciseLog = {
+    id: crypto.randomUUID(),
+    exerciseId: exercise.id,
+    exerciseName: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    isBodyweight: isBodyweightExercise(exercise.name),
+    sets: Array.from({ length: Math.max(1, exercise.sets) }).map((_, index) =>
+      makeEmptySet(index + 1, exercise.reps, cur.unit, false),
+    ),
+  };
+  writeSession({ ...cur, exercises: [...cur.exercises, exerciseLog] });
+  return exerciseLog;
+}
+
+export function updateSet(exerciseLogId: string, setNumber: number, patch: Partial<SetLog>) {
   const cur = readSession();
   if (!cur) return;
   writeSession({
@@ -252,12 +296,7 @@ export function addExtraSet(exerciseLogId: string) {
     exercises: cur.exercises.map((e) => {
       if (e.id !== exerciseLogId) return e;
       const lastSet = e.sets[e.sets.length - 1];
-      const newSet = makeEmptySet(
-        e.sets.length + 1,
-        lastSet?.plannedReps,
-        cur.unit,
-        true,
-      );
+      const newSet = makeEmptySet(e.sets.length + 1, lastSet?.plannedReps, cur.unit, true);
       // copy last weight as a starting point
       if (lastSet) newSet.weight = lastSet.weight;
       return { ...e, sets: [...e.sets, newSet] };
@@ -311,10 +350,7 @@ export function clearSession() {
 
 /* -------- summary computation -------- */
 
-export function computeSummary(s: {
-  exercises: ExerciseLog[];
-  unit: WeightUnit;
-}): {
+export function computeSummary(s: { exercises: ExerciseLog[]; unit: WeightUnit }): {
   totalSets: number;
   totalReps: number;
   totalVolume: number;
@@ -370,6 +406,11 @@ function writeCompleted(list: CompletedWorkout[]) {
 
 export function saveCompletedWorkout(c: CompletedWorkout) {
   const list = [c, ...readCompleted()];
+  writeCompleted(list);
+}
+
+// Bulk replace (used by cloud sync hydration).
+export function replaceCompletedWorkouts(list: CompletedWorkout[]) {
   writeCompleted(list);
 }
 

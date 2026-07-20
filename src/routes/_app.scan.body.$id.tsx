@@ -1,159 +1,83 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ArrowDown, ArrowUp, Trash2, Minus } from "lucide-react";
-import { BodyScoreCard } from "@/components/bodyscan/BodyScoreCard";
-import { BodyScoreBar } from "@/components/bodyscan/BodyScoreBar";
-import { deleteScan, getScan, previousScan } from "@/lib/bodyScanStore";
-import { SCORE_LABELS, type BodyScanScores } from "@/lib/bodyScan";
+import { useServerFn } from "@tanstack/react-start";
+import { ArrowLeft, Loader2, ScanLine } from "lucide-react";
+import { BodyScanReport } from "@/components/scans/BodyScanReport";
+import { parseBodyScanResult } from "@/lib/bodyScan.functions";
+import { getScanSubmission } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/scan/body/$id")({
-  head: () => ({ meta: [{ title: "Scan — Pulse" }] }),
-  component: ScanDetail,
-  notFoundComponent: () => (
-    <div className="px-5 pt-10 text-center">
-      <p className="text-muted-foreground">Scan not found.</p>
-      <Link to="/scan/body" className="text-neon underline text-sm mt-2 inline-block">
-        Back to history
-      </Link>
-    </div>
-  ),
+  head: () => ({ meta: [{ title: "Body Scan Report — Ascendr" }] }),
+  component: BodyScanDetail,
 });
 
-function delta(curr: number, prev: number) {
-  return Math.round(curr - prev);
-}
-
-function ScanDetail() {
+function BodyScanDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const scan = getScan(id);
-  const prev = previousScan(id);
+  const getSubmission = useServerFn(getScanSubmission);
+  const detailQuery = useQuery({
+    queryKey: ["scan-submission", "body", id],
+    queryFn: () => getSubmission({ data: { id, scanType: "body" } }),
+  });
 
-  if (!scan) {
-    return (
-      <div className="px-5 pt-10 text-center">
-        <p className="text-muted-foreground">Scan not found.</p>
-        <Link to="/scan/body" className="text-neon underline text-sm mt-2 inline-block">
-          Back to history
-        </Link>
-      </div>
-    );
+  if (detailQuery.isLoading) return <ReportLoading label="Loading your Body Scan" />;
+
+  const result = detailQuery.data ? parseBodyScanResult(detailQuery.data.analysis) : null;
+  if (detailQuery.isError || !detailQuery.data || !result || !detailQuery.data.photoUrl) {
+    return <ReportUnavailable label="Body Scan" />;
   }
 
-  const overallDelta = prev ? delta(scan.overallScore, prev.overallScore) : null;
-  const scoreEntries = Object.entries(scan.scores) as [keyof BodyScanScores, number][];
-
   return (
-    <div className="px-5 pt-5 pb-10 space-y-5 animate-slide-up">
-      <header className="flex items-center justify-between">
-        <Link
-          to="/scan/body"
-          className="size-10 rounded-full bg-surface grid place-items-center"
-          aria-label="Back"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">
-          {new Date(scan.createdAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
-        </p>
-        <button
-          onClick={() => {
-            if (confirm("Delete this scan?")) {
-              deleteScan(scan.id);
-              navigate({ to: "/scan/body" });
-            }
-          }}
-          aria-label="Delete"
-          className="size-10 rounded-full bg-surface grid place-items-center text-muted-foreground"
-        >
-          <Trash2 className="size-4" />
-        </button>
-      </header>
+    <BodyScanReport
+      photo={detailQuery.data.photoUrl}
+      result={result}
+      createdAt={detailQuery.data.analyzedAt ?? detailQuery.data.createdAt}
+      onBack={() => navigate({ to: "/scan/body" })}
+      onReset={() => navigate({ to: "/scan/body/new" })}
+      onHistory={() => navigate({ to: "/scan/body" })}
+    />
+  );
+}
 
-      <BodyScoreCard scan={scan} image={scan.thumbnail} />
-
-      {prev && overallDelta !== null && (
-        <section className="rounded-3xl bg-surface border border-white/5 p-5">
-          <h3 className="text-[10px] uppercase tracking-[0.22em] text-neon font-bold mb-3">
-            Progress vs last scan
-          </h3>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Previous · {new Date(prev.createdAt).toLocaleDateString()}
-              </p>
-              <p className="text-3xl font-extrabold mt-1 tabular-nums">{prev.overallScore}</p>
-            </div>
-            <div
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-full font-bold text-sm ${
-                overallDelta > 0
-                  ? "bg-neon/15 text-neon"
-                  : overallDelta < 0
-                    ? "bg-destructive/15 text-destructive"
-                    : "bg-white/5 text-muted-foreground"
-              }`}
-            >
-              {overallDelta > 0 ? (
-                <ArrowUp className="size-4" />
-              ) : overallDelta < 0 ? (
-                <ArrowDown className="size-4" />
-              ) : (
-                <Minus className="size-4" />
-              )}
-              {overallDelta > 0 ? "+" : ""}
-              {overallDelta}
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Current</p>
-              <p className="text-3xl font-extrabold mt-1 tabular-nums text-neon">
-                {scan.overallScore}
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <p className="text-sm text-muted-foreground text-balance leading-relaxed">{scan.summary}</p>
-
-      <section className="rounded-3xl bg-surface border border-white/5 p-5">
-        <h3 className="text-[10px] uppercase tracking-[0.22em] text-neon font-bold mb-4">
-          Score Breakdown
-        </h3>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-          {scoreEntries.map(([k, v], i) => (
-            <BodyScoreBar key={k} label={SCORE_LABELS[k]} value={v} delay={i * 0.05} />
-          ))}
+function ReportLoading({ label }: { label: string }) {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-black px-5 text-center text-white">
+      <div>
+        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-neon/10 text-neon">
+          <Loader2 className="size-6 animate-spin" />
         </div>
-      </section>
+        <p className="mt-4 text-sm font-semibold">{label}</p>
+        <p className="mt-1 text-[11px] text-white/40">Opening your private report…</p>
+      </div>
+    </main>
+  );
+}
 
-      <section className="rounded-3xl bg-surface border border-white/5 p-5">
-        <h3 className="text-[10px] uppercase tracking-[0.22em] text-neon font-bold mb-3">
-          Strengths
-        </h3>
-        <ul className="space-y-2 text-sm">
-          {scan.strengths.map((s) => (
-            <li key={s}>· {s}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-3xl bg-surface border border-white/5 p-5">
-        <h3 className="text-[10px] uppercase tracking-[0.22em] text-amber-400 font-bold mb-3">
-          Areas to improve
-        </h3>
-        <ul className="space-y-2 text-sm">
-          {scan.improvements.map((s) => (
-            <li key={s}>· {s}</li>
-          ))}
-        </ul>
-      </section>
-
-      <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-        {scan.disclaimer}
-      </p>
-    </div>
+function ReportUnavailable({ label }: { label: string }) {
+  return (
+    <main className="mx-auto min-h-dvh max-w-md px-5 pt-5">
+      <Link
+        to="/scan/body"
+        className="grid size-10 place-items-center rounded-full bg-surface"
+        aria-label="Back"
+      >
+        <ArrowLeft className="size-5" />
+      </Link>
+      <div className="mt-20 rounded-[28px] border border-white/[0.07] bg-surface p-7 text-center">
+        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-white/[0.04] text-neon">
+          <ScanLine className="size-6" />
+        </div>
+        <h1 className="mt-5 text-xl font-bold">{label} unavailable</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          This report could not be opened. It may have been removed or saved in an older format.
+        </p>
+        <Link
+          to="/scan/body/new"
+          className="mt-6 flex h-12 items-center justify-center rounded-2xl bg-neon text-sm font-bold text-neon-foreground"
+        >
+          Start a new Body Scan
+        </Link>
+      </div>
+    </main>
   );
 }

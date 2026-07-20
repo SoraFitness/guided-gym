@@ -1,27 +1,68 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Camera, Search, Plus, X, ScanLine, Sparkles, Trash2, Check, ChevronLeft, ChevronRight,
-  Barcode, Image as ImageIcon, Pencil, Flame, Loader2, Upload, Minus,
-  Star, ArrowLeft, BadgeCheck, History, Heart, Utensils,
+  Camera,
+  Search,
+  Plus,
+  X,
+  ScanLine,
+  Sparkles,
+  Trash2,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Barcode,
+  Image as ImageIcon,
+  Pencil,
+  Flame,
+  Loader2,
+  Upload,
+  Minus,
+  Star,
+  ArrowLeft,
+  BadgeCheck,
+  History,
+  Heart,
+  Utensils,
 } from "lucide-react";
 import {
-  foods, meals, entriesOn, macrosFor, entryFood,
-  type Meal, type LogEntry, type Food,
+  foods,
+  meals,
+  entriesOn,
+  macrosFor,
+  entryFood,
+  type Meal,
+  type LogEntry,
+  type Food,
 } from "@/lib/foods";
 import {
-  useNutrition, addEntry as storeAdd, updateEntry as storeUpdate, removeEntry as storeRemove,
+  useNutrition,
+  addEntry as storeAdd,
+  updateEntry as storeUpdate,
+  removeEntry as storeRemove,
 } from "@/lib/nutritionStore";
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
-import { foodLookupService, resultToCustom, type LookupResult } from "@/lib/foodLookup";
+import { BrandLogo } from "@/components/BrandLogo";
+import { BarcodeScannerPanel } from "@/components/BarcodeScannerPanel";
+import { resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { analyzeFoodImage, type FoodScanItem, type FoodScanResult } from "@/lib/foodScan.functions";
 import { searchFoodDatabase, type FoodSearchResult } from "@/lib/foodSearch.functions";
 import {
-  brandedFoods, popularBrands, searchBrandedPresets, findPresetById,
-  type BrandedFood, type BrandCategory,
+  brandedFoods,
+  popularBrands,
+  searchBrandedPresets,
+  findPresetById,
+  type BrandedFood,
+  type BrandCategory,
 } from "@/lib/brandedFoods";
+import { getFoodImageUrl } from "@/lib/foodImages";
 import {
-  useRecentFoods, useFavoriteFoods, pushRecent, toggleFavorite, isFavorite, resultToStored,
+  useRecentFoods,
+  useFavoriteFoods,
+  pushRecent,
+  toggleFavorite,
+  isFavorite,
+  resultToStored,
   type StoredFood,
 } from "@/lib/foodHistoryStore";
 import { useServerFn } from "@tanstack/react-start";
@@ -29,7 +70,7 @@ import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/nutrition")({
-  head: () => ({ meta: [{ title: "Nutrition — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Nutrition — Ascendr" }] }),
   component: NutritionPage,
 });
 
@@ -54,26 +95,48 @@ function NutritionPage() {
     : day.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
   return (
-    <div className="px-5 pt-6 pb-8 animate-slide-up">
-      {/* Header + date stepper */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[28px] leading-tight font-bold tracking-tight">Nutrition</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-          </p>
-        </div>
-        <DayStepper day={day} setDay={setDay} label={dayLabel} />
+    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
+      <header className="px-1">
+        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Fuel</p>
+        <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
+          Eat with intention.
+        </h1>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Track calories and macros without slowing down your day.
+        </p>
       </header>
 
+      <div className="mt-5">
+        <DayStepper day={day} setDay={setDay} label={dayLabel} />
+      </div>
+
       {/* Summary card */}
-      <section className="mt-5 relative rounded-[28px] p-5 overflow-hidden border border-white/[0.06] bg-[linear-gradient(160deg,oklch(0.22_0_0)_0%,oklch(0.16_0_0)_100%)] shadow-[0_10px_40px_-20px_oklch(0_0_0/0.8)]">
+      <section className="relative mt-4 overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(160deg,oklch(0.22_0_0)_0%,oklch(0.16_0_0)_100%)] p-5 shadow-[0_10px_40px_-20px_oklch(0_0_0/0.8)]">
         <div className="absolute -top-16 -right-16 size-48 rounded-full bg-neon/10 blur-3xl pointer-events-none" />
+        <div className="relative mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+              {isToday ? "Today’s energy" : "Daily energy"}
+            </p>
+            <h2 className="mt-1 text-base font-extrabold">
+              {totals.kcal === 0
+                ? "Ready when you are"
+                : totals.kcal <= goals.kcal
+                  ? "You’re on track"
+                  : "Daily target reached"}
+            </h2>
+          </div>
+          <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold text-muted-foreground">
+            {today.length} item{today.length === 1 ? "" : "s"}
+          </span>
+        </div>
         <div className="relative flex items-center gap-5">
           <CalorieRing consumed={Math.round(totals.kcal)} goal={goals.kcal} />
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tabular-nums">{Math.round(totals.kcal)}</span>
+              <span className="text-2xl font-extrabold tabular-nums">
+                {Math.round(totals.kcal)}
+              </span>
               <span className="text-xs text-muted-foreground">/ {goals.kcal} kcal</span>
             </div>
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-0.5">
@@ -89,9 +152,25 @@ function NutritionPage() {
         </div>
 
         <div className="relative mt-5 grid grid-cols-3 gap-3">
-          <MacroChip label="Protein" value={totals.protein} goal={goals.protein} hue="oklch(0.92 0.21 130)" />
-          <MacroChip label="Carbs" value={totals.carbs} goal={goals.carbs} hue="oklch(0.82 0.17 65)" />
+          <MacroChip
+            label="Protein"
+            value={totals.protein}
+            goal={goals.protein}
+            hue="oklch(0.92 0.21 130)"
+          />
+          <MacroChip
+            label="Carbs"
+            value={totals.carbs}
+            goal={goals.carbs}
+            hue="oklch(0.82 0.17 65)"
+          />
           <MacroChip label="Fat" value={totals.fat} goal={goals.fat} hue="oklch(0.72 0.18 25)" />
+        </div>
+        <div className="relative mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4 text-[10px]">
+          <span className="text-muted-foreground">Protein remaining</span>
+          <span className="font-bold text-neon tabular-nums">
+            {Math.max(0, goals.protein - Math.round(totals.protein))}g
+          </span>
         </div>
       </section>
 
@@ -99,7 +178,7 @@ function NutritionPage() {
       <button
         onClick={() => setAddFor(currentMeal())}
         data-tour="tour-nutrition-log"
-        className="group mt-4 w-full rounded-[24px] relative overflow-hidden text-left active:scale-[0.99] transition"
+        className="group relative mt-4 w-full overflow-hidden rounded-[24px] text-left transition active:scale-[0.99]"
       >
         <div className="absolute inset-0 bg-[linear-gradient(120deg,oklch(0.92_0.21_130)_0%,oklch(0.85_0.2_150)_55%,oklch(0.78_0.16_180)_100%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,oklch(1_0_0/0.25),transparent_60%)]" />
@@ -108,19 +187,29 @@ function NutritionPage() {
             <ScanLine className="size-6" />
           </div>
           <div className="flex-1">
-            <div className="font-bold text-[15px] flex items-center gap-1.5">
-              Scan a meal <Sparkles className="size-4" />
+            <div className="flex items-center gap-1.5 text-[15px] font-bold">
+              Log food your way <Sparkles className="size-4" />
             </div>
-            <div className="text-[11px] opacity-80 leading-snug">
-              Use barcode or photo to estimate calories and macros
+            <div className="text-[11px] leading-snug opacity-80">
+              Search, scan a barcode, take a photo, or enter it manually
             </div>
           </div>
           <Camera className="size-5 opacity-80" />
         </div>
       </button>
 
+      <div className="mb-3 mt-6 flex items-end justify-between px-1">
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">Daily log</p>
+          <h2 className="mt-0.5 text-lg font-extrabold">Meals</h2>
+        </div>
+        <span className="text-[9px] text-muted-foreground">
+          {Math.round(totals.kcal)} of {goals.kcal} kcal
+        </span>
+      </div>
+
       {/* Meal sections */}
-      <div className="mt-5 space-y-3">
+      <div className="space-y-3">
         {meals.map((m) => {
           const items = today.filter((e) => e.meal === m);
           const mTotals = macrosFor(items);
@@ -133,7 +222,9 @@ function NutritionPage() {
               onAdd={() => setAddFor(m)}
               onEdit={(e) => setEditing(e)}
               onRemove={remove}
-              onServings={(id, s) => update(id, { servings: Math.max(0.25, Math.round(s * 4) / 4) })}
+              onServings={(id, s) =>
+                update(id, { servings: Math.max(0.25, Math.round(s * 4) / 4) })
+              }
             />
           );
         })}
@@ -143,7 +234,10 @@ function NutritionPage() {
         <AddFoodModal
           meal={addFor}
           onClose={() => setAddFor(null)}
-          onAdd={(entry) => { add(entry); setAddFor(null); }}
+          onAdd={(entry) => {
+            add(entry);
+            setAddFor(null);
+          }}
         />
       )}
       {editing && (
@@ -151,7 +245,10 @@ function NutritionPage() {
           meal={editing.meal}
           editEntry={editing}
           onClose={() => setEditing(null)}
-          onAdd={(entry) => { update(editing.id, entry); setEditing(null); }}
+          onAdd={(entry) => {
+            update(editing.id, entry);
+            setEditing(null);
+          }}
         />
       )}
     </div>
@@ -166,7 +263,15 @@ function currentMeal(): Meal {
   return "Snack";
 }
 
-function DayStepper({ day, setDay, label }: { day: Date; setDay: (d: Date) => void; label: string }) {
+function DayStepper({
+  day,
+  setDay,
+  label,
+}: {
+  day: Date;
+  setDay: (d: Date) => void;
+  label: string;
+}) {
   const shift = (delta: number) => {
     const d = new Date(day);
     d.setDate(d.getDate() + delta);
@@ -174,20 +279,29 @@ function DayStepper({ day, setDay, label }: { day: Date; setDay: (d: Date) => vo
   };
   const isToday = day.toDateString() === new Date().toDateString();
   return (
-    <div className="flex items-center gap-1 rounded-full bg-surface/80 border border-white/[0.06] p-1">
-      <button onClick={() => shift(-1)} className="size-8 grid place-items-center rounded-full active:bg-surface-2" aria-label="Previous day">
+    <div className="flex w-full items-center gap-1 rounded-2xl border border-white/[0.06] bg-surface/80 p-1">
+      <button
+        onClick={() => shift(-1)}
+        className="size-8 grid place-items-center rounded-full active:bg-surface-2"
+        aria-label="Previous day"
+      >
         <ChevronLeft className="size-4" />
       </button>
       <button
         onClick={() => setDay(new Date())}
         className={cn(
-          "h-8 px-3 rounded-full text-xs font-semibold tabular-nums",
-          isToday ? "text-neon" : "text-foreground"
+          "h-8 flex-1 rounded-xl px-3 text-xs font-semibold tabular-nums",
+          isToday ? "text-neon" : "text-foreground",
         )}
       >
         {label}
       </button>
-      <button onClick={() => shift(1)} disabled={isToday} className="size-8 grid place-items-center rounded-full active:bg-surface-2 disabled:opacity-30" aria-label="Next day">
+      <button
+        onClick={() => shift(1)}
+        disabled={isToday}
+        className="size-8 grid place-items-center rounded-full active:bg-surface-2 disabled:opacity-30"
+        aria-label="Next day"
+      >
         <ChevronRight className="size-4" />
       </button>
     </div>
@@ -202,8 +316,13 @@ function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
       <svg viewBox="0 0 100 100" className="-rotate-90 size-full">
         <circle cx="50" cy="50" r="42" fill="none" stroke="oklch(1 0 0 / 0.07)" strokeWidth="8" />
         <circle
-          cx="50" cy="50" r="42" fill="none"
-          stroke="url(#calGrad)" strokeWidth="8" strokeLinecap="round"
+          cx="50"
+          cy="50"
+          r="42"
+          fill="none"
+          stroke="url(#calGrad)"
+          strokeWidth="8"
+          strokeLinecap="round"
           strokeDasharray={`${(pct / 100) * C} ${C}`}
           style={{ transition: "stroke-dasharray 0.6s ease" }}
         />
@@ -225,7 +344,17 @@ function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
   );
 }
 
-function MacroChip({ label, value, goal, hue }: { label: string; value: number; goal: number; hue: string }) {
+function MacroChip({
+  label,
+  value,
+  goal,
+  hue,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  hue: string;
+}) {
   const pct = Math.min(100, (value / goal) * 100);
   return (
     <div className="rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3">
@@ -233,16 +362,28 @@ function MacroChip({ label, value, goal, hue }: { label: string; value: number; 
         <span className="text-[11px] text-muted-foreground">{label}</span>
         <span className="text-[10px] text-muted-foreground tabular-nums">{goal}g</span>
       </div>
-      <div className="mt-1 text-base font-bold tabular-nums">{Math.round(value)}<span className="text-xs text-muted-foreground font-medium">g</span></div>
+      <div className="mt-1 text-base font-bold tabular-nums">
+        {Math.round(value)}
+        <span className="text-xs text-muted-foreground font-medium">g</span>
+      </div>
       <div className="mt-1.5 h-1.5 rounded-full bg-white/5 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: hue }} />
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: hue }}
+        />
       </div>
     </div>
   );
 }
 
 function MealSection({
-  meal, items, totals, onAdd, onEdit, onRemove, onServings,
+  meal,
+  items,
+  totals,
+  onAdd,
+  onEdit,
+  onRemove,
+  onServings,
 }: {
   meal: Meal;
   items: LogEntry[];
@@ -288,42 +429,60 @@ function MealSection({
                   className="w-full flex items-center gap-3 py-2.5 px-2 text-left rounded-xl active:bg-white/[0.02] transition"
                   aria-expanded={open}
                 >
-                  <FoodThumbnail food={{ id: e.foodId, name: f.name }} size="sm" />
+                  <FoodThumbnail
+                    food={{ id: e.foodId, name: f.name, brand: f.brand, imageUrl: f.imageUrl }}
+                    size="sm"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
                       {f.name}
-                      {f.brand ? <span className="text-muted-foreground font-normal"> · {f.brand}</span> : null}
+                      {f.brand ? (
+                        <span className="text-muted-foreground font-normal"> · {f.brand}</span>
+                      ) : null}
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate tabular-nums">
-                      {e.servings}× · P{Math.round(f.protein * e.servings)} · C{Math.round(f.carbs * e.servings)} · F{Math.round(f.fat * e.servings)}
+                      {e.servings}× · P{Math.round(f.protein * e.servings)} · C
+                      {Math.round(f.carbs * e.servings)} · F{Math.round(f.fat * e.servings)}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-sm font-bold text-neon tabular-nums leading-none">{kcal}</div>
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">kcal</div>
+                    <div className="text-sm font-bold text-neon tabular-nums leading-none">
+                      {kcal}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                      kcal
+                    </div>
                   </div>
                 </button>
 
                 <div
                   className={cn(
                     "grid transition-all duration-200",
-                    open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
                   )}
                 >
                   <div className="overflow-hidden">
                     <div className="px-2 pb-2.5 pt-1 flex items-center gap-2">
                       <div className="flex items-center gap-1 rounded-full bg-white/[0.05] border border-white/[0.05] p-1">
                         <button
-                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings - 0.5); }}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            onServings(e.id, e.servings - 0.5);
+                          }}
                           disabled={e.servings <= 0.5}
                           className="size-7 rounded-full grid place-items-center disabled:opacity-30 active:bg-white/10"
                           aria-label="Decrease servings"
                         >
                           <Minus className="size-3.5" />
                         </button>
-                        <span className="min-w-9 text-center text-xs font-semibold tabular-nums">{e.servings}×</span>
+                        <span className="min-w-9 text-center text-xs font-semibold tabular-nums">
+                          {e.servings}×
+                        </span>
                         <button
-                          onClick={(ev) => { ev.stopPropagation(); onServings(e.id, e.servings + 0.5); }}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            onServings(e.id, e.servings + 0.5);
+                          }}
                           className="size-7 rounded-full grid place-items-center active:bg-white/10"
                           aria-label="Increase servings"
                         >
@@ -331,13 +490,20 @@ function MealSection({
                         </button>
                       </div>
                       <button
-                        onClick={(ev) => { ev.stopPropagation(); setOpenId(null); onEdit(e); }}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setOpenId(null);
+                          onEdit(e);
+                        }}
                         className="ml-auto h-8 px-3 rounded-full bg-white/[0.05] border border-white/[0.05] text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
                       >
                         <Pencil className="size-3.5" /> Edit
                       </button>
                       <button
-                        onClick={(ev) => { ev.stopPropagation(); onRemove(e.id); }}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          onRemove(e.id);
+                        }}
                         className="h-8 px-3 rounded-full bg-destructive/15 text-destructive text-[11px] font-semibold flex items-center gap-1.5 active:scale-95"
                       >
                         <Trash2 className="size-3.5" /> Delete
@@ -361,7 +527,10 @@ type Tab = "search" | "barcode" | "photo" | "manual";
 type AddEntryArg = Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string };
 
 function AddFoodModal({
-  meal, editEntry, onClose, onAdd,
+  meal,
+  editEntry,
+  onClose,
+  onAdd,
 }: {
   meal: Meal;
   editEntry?: LogEntry;
@@ -372,7 +541,16 @@ function AddFoodModal({
   const initialPrefill: LookupResult | null = editEntry
     ? (() => {
         const f = entryFood(editEntry);
-        return { name: f.name, brand: f.brand, serving: f.serving, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat };
+        return {
+          name: f.name,
+          brand: f.brand,
+          imageUrl: f.imageUrl,
+          serving: f.serving,
+          kcal: f.kcal,
+          protein: f.protein,
+          carbs: f.carbs,
+          fat: f.fat,
+        };
       })()
     : null;
   const [tab, setTab] = useState<Tab>(editEntry ? "manual" : "search");
@@ -385,9 +563,10 @@ function AddFoodModal({
     (window as { __scanSource?: string }).__scanSource = source;
   };
 
-  const editSource = editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
-    ? editEntry.custom.source
-    : "manual";
+  const editSource =
+    editEntry?.custom?.source === "barcode" || editEntry?.custom?.source === "image"
+      ? editEntry.custom.source
+      : "manual";
 
   // Confirmation screen takes over the whole sheet when a search result is selected.
   if (confirming) {
@@ -397,7 +576,10 @@ function AddFoodModal({
           food={confirming}
           defaultMeal={meal}
           onBack={() => setConfirming(null)}
-          onSave={(entry) => { onAdd(entry); onClose(); }}
+          onSave={(entry) => {
+            onAdd(entry);
+            onClose();
+          }}
         />
       </Sheet>
     );
@@ -407,18 +589,20 @@ function AddFoodModal({
     <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
       {!editEntry && (
         <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
-          {([
-            { id: "search", label: "Search", Icon: Search },
-            { id: "barcode", label: "Barcode", Icon: Barcode },
-            { id: "photo", label: "Photo", Icon: ImageIcon },
-            { id: "manual", label: "Manual", Icon: Pencil },
-          ] as { id: Tab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+          {(
+            [
+              { id: "search", label: "Search", Icon: Search },
+              { id: "barcode", label: "Barcode", Icon: Barcode },
+              { id: "photo", label: "Photo", Icon: ImageIcon },
+              { id: "manual", label: "Manual", Icon: Pencil },
+            ] as { id: Tab; label: string; Icon: typeof Search }[]
+          ).map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               className={cn(
                 "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
-                tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground"
+                tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground",
               )}
             >
               <Icon className="size-3.5" /> {label}
@@ -429,7 +613,7 @@ function AddFoodModal({
 
       <div className="mt-4 pb-6">
         {tab === "search" && <SearchPanel meal={meal} onPick={setConfirming} />}
-        {tab === "barcode" && <BarcodePanel onResult={(r) => handleResult(r, "barcode")} />}
+        {tab === "barcode" && <BarcodeScannerPanel onResult={(r) => handleResult(r, "barcode")} />}
         {tab === "photo" && (
           <PhotoPanel
             meal={meal}
@@ -443,7 +627,11 @@ function AddFoodModal({
             meal={meal}
             prefill={prefill}
             servings={editEntry?.servings ?? 1}
-            source={editEntry ? editSource : ((window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual")}
+            source={
+              editEntry
+                ? editSource
+                : ((window as { __scanSource?: "barcode" | "image" }).__scanSource ?? "manual")
+            }
             submitLabel={editEntry ? "Save changes" : `Save to ${meal}`}
             onAdd={onAdd}
           />
@@ -459,15 +647,35 @@ type SearchTab = "all" | "restaurant" | "grocery" | "protein" | "recent" | "favo
 
 function brandedToStored(b: BrandedFood): StoredFood {
   return {
-    id: b.id, source: "preset", brand: b.brand, name: b.name, serving: b.serving,
-    kcal: b.kcal, protein: b.protein, carbs: b.carbs, fat: b.fat, verified: true, category: b.category,
+    id: b.id,
+    source: "preset",
+    brand: b.brand,
+    name: b.name,
+    serving: b.serving,
+    kcal: b.kcal,
+    protein: b.protein,
+    carbs: b.carbs,
+    fat: b.fat,
+    verified: true,
+    category: b.category,
+    imageUrl: getFoodImageUrl(b),
   };
 }
 
 function legacyFoodToStored(f: Food): StoredFood {
   return {
-    id: `legacy:${f.id}`, source: "preset", brand: f.brand, name: f.name, serving: f.serving,
-    kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat, verified: false, category: "generic",
+    id: `legacy:${f.id}`,
+    source: "preset",
+    brand: f.brand,
+    name: f.name,
+    serving: f.serving,
+    kcal: f.kcal,
+    protein: f.protein,
+    carbs: f.carbs,
+    fat: f.fat,
+    verified: false,
+    category: "generic",
+    imageUrl: getFoodImageUrl({ ...f, id: `legacy:${f.id}` }),
   };
 }
 
@@ -485,23 +693,37 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
   // Debounced server search
   useEffect(() => {
     const trimmed = q.trim();
-    if (trimmed.length < 2) { setServerResults([]); setServerErr(false); return; }
+    if (trimmed.length < 2) {
+      setServerResults([]);
+      setServerErr(false);
+      return;
+    }
     let cancelled = false;
     const t = setTimeout(async () => {
-      setLoading(true); setServerErr(false);
+      setLoading(true);
+      setServerErr(false);
       try {
         const r = await search({ data: { query: trimmed } });
         if (cancelled) return;
         if (r.ok) setServerResults(r.results);
-        else { setServerResults([]); setServerErr(true); }
+        else {
+          setServerResults([]);
+          setServerErr(true);
+        }
       } catch (e) {
         console.error("[searchFoodDatabase]", e);
-        if (!cancelled) { setServerResults([]); setServerErr(true); }
+        if (!cancelled) {
+          setServerResults([]);
+          setServerErr(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }, 350);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [q, search]);
 
   // Local preset matches (instant)
@@ -555,7 +777,11 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
         />
         {loading && <Loader2 className="size-4 text-muted-foreground animate-spin" />}
         {q && !loading && (
-          <button onClick={() => setQ("")} aria-label="Clear" className="size-6 grid place-items-center rounded-full hover:bg-white/[0.06]">
+          <button
+            onClick={() => setQ("")}
+            aria-label="Clear"
+            className="size-6 grid place-items-center rounded-full hover:bg-white/[0.06]"
+          >
             <X className="size-3.5 text-muted-foreground" />
           </button>
         )}
@@ -563,14 +789,16 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
 
       {/* Category tabs */}
       <div className="mt-3 -mx-1 px-1 flex gap-1.5 overflow-x-auto scrollbar-none">
-        {([
-          { id: "all",         label: "All",         Icon: Utensils },
-          { id: "restaurant",  label: "Restaurants", Icon: Utensils },
-          { id: "grocery",     label: "Grocery",     Icon: Utensils },
-          { id: "protein",     label: "Protein",     Icon: Utensils },
-          { id: "recent",      label: "Recent",      Icon: History  },
-          { id: "favorites",   label: "Favorites",   Icon: Heart    },
-        ] as { id: SearchTab; label: string; Icon: typeof Search }[]).map(({ id, label, Icon }) => (
+        {(
+          [
+            { id: "all", label: "All", Icon: Utensils },
+            { id: "restaurant", label: "Restaurants", Icon: Utensils },
+            { id: "grocery", label: "Grocery", Icon: Utensils },
+            { id: "protein", label: "Protein", Icon: Utensils },
+            { id: "recent", label: "Recent", Icon: History },
+            { id: "favorites", label: "Favorites", Icon: Heart },
+          ] as { id: SearchTab; label: string; Icon: typeof Search }[]
+        ).map(({ id, label, Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -578,12 +806,16 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
               "shrink-0 h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1 transition border",
               tab === id
                 ? "bg-neon text-neon-foreground border-transparent"
-                : "bg-white/[0.04] text-muted-foreground border-white/[0.05]"
+                : "bg-white/[0.04] text-muted-foreground border-white/[0.05]",
             )}
           >
             <Icon className="size-3" /> {label}
-            {id === "recent" && recents.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{recents.length}</span>}
-            {id === "favorites" && favorites.length > 0 && <span className="ml-0.5 opacity-70 tabular-nums">{favorites.length}</span>}
+            {id === "recent" && recents.length > 0 && (
+              <span className="ml-0.5 opacity-70 tabular-nums">{recents.length}</span>
+            )}
+            {id === "favorites" && favorites.length > 0 && (
+              <span className="ml-0.5 opacity-70 tabular-nums">{favorites.length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -591,7 +823,9 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
       {/* Popular brands carousel (only when no query and on "all" / category tabs) */}
       {!q && tab !== "recent" && tab !== "favorites" && (
         <>
-          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Popular brands</h3>
+          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+            Popular brands
+          </h3>
           <div className="-mx-1 px-1 flex gap-2 overflow-x-auto scrollbar-none pb-1">
             {popularBrands
               .filter((b) => tab === "all" || b.category === tab)
@@ -601,7 +835,7 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
                   onClick={() => setQ(b.name)}
                   className="shrink-0 h-10 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
                 >
-                  <span className="text-base leading-none">{b.emoji}</span>
+                  <BrandLogo brand={b.name} />
                   <span className="font-medium">{b.name}</span>
                 </button>
               ))}
@@ -619,13 +853,18 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
 
       <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
         <span>
-          {tab === "recent" ? "Recently logged"
-            : tab === "favorites" ? "Saved favorites"
-            : q ? "Results"
-            : "Suggested"}
+          {tab === "recent"
+            ? "Recently logged"
+            : tab === "favorites"
+              ? "Saved favorites"
+              : q
+                ? "Results"
+                : "Suggested"}
         </span>
         {visible.length > 0 && (
-          <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">{visible.length} items</span>
+          <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">
+            {visible.length} items
+          </span>
         )}
       </h3>
 
@@ -637,11 +876,15 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
         ))}
         {visible.length === 0 && (
           <p className="text-center text-muted-foreground py-8 text-sm">
-            {tab === "recent" ? "No recent foods yet — start logging!"
-              : tab === "favorites" ? "Tap the star on a food to save it here."
-              : loading ? "Searching…"
-              : q ? "No matches. Try a different search or add manually."
-              : "No items."}
+            {tab === "recent"
+              ? "No recent foods yet — start logging!"
+              : tab === "favorites"
+                ? "Tap the star on a food to save it here."
+                : loading
+                  ? "Searching…"
+                  : q
+                    ? "No matches. Try a different search or add manually."
+                    : "No items."}
           </p>
         )}
       </ul>
@@ -658,22 +901,21 @@ function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void 
         onClick={onPick}
         className="flex items-center gap-3 flex-1 min-w-0 text-left active:scale-[0.99]"
       >
-        <div className="size-10 rounded-xl bg-white/[0.05] grid place-items-center text-lg shrink-0">
-          {food.imageUrl ? (
-            <img src={food.imageUrl} alt="" className="size-10 rounded-xl object-cover" loading="lazy" />
-          ) : (
-            <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>
-          )}
-        </div>
+        <FoodThumbnail food={food} size="md" className="!size-10 !rounded-xl" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
+            <BrandLogo brand={food.brand} className="size-4 p-0.5" />
             {food.brand && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">{food.brand}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">
+                {food.brand}
+              </span>
             )}
             {food.verified && <BadgeCheck className="size-3 text-neon shrink-0" />}
           </div>
           <div className="font-medium text-sm truncate">{food.name}</div>
-          <div className="text-[11px] text-muted-foreground truncate">{food.serving} · {macroLine}</div>
+          <div className="text-[11px] text-muted-foreground truncate">
+            {food.serving} · {macroLine}
+          </div>
         </div>
         <div className="text-right shrink-0">
           <div className="font-bold text-neon tabular-nums text-sm">{Math.round(food.kcal)}</div>
@@ -681,97 +923,15 @@ function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void 
         </div>
       </button>
       <button
-        onClick={(e) => { e.stopPropagation(); setFav(toggleFavorite(food)); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setFav(toggleFavorite(food));
+        }}
         aria-label={fav ? "Unfavorite" : "Favorite"}
         className="size-8 grid place-items-center rounded-full hover:bg-white/[0.06] shrink-0"
       >
         <Star className={cn("size-4", fav ? "fill-neon text-neon" : "text-muted-foreground")} />
       </button>
-    </div>
-  );
-}
-
-function BarcodePanel({ onResult }: { onResult: (r: LookupResult) => void }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [status, setStatus] = useState<"idle" | "scanning" | "error">("idle");
-  const [err, setErr] = useState<string>("");
-
-  useEffect(() => {
-    let stopped = false;
-    let controls: { stop: () => void } | null = null;
-    setStatus("scanning");
-
-    (async () => {
-      try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const reader = new BrowserMultiFormatReader();
-        if (!videoRef.current) return;
-        controls = await reader.decodeFromVideoDevice(
-          undefined,
-          videoRef.current,
-          async (result) => {
-            if (stopped || !result) return;
-            stopped = true;
-            controls?.stop();
-            const text = result.getText();
-            const r = await foodLookupService.lookupBarcode(text);
-            onResult(r);
-          }
-        );
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Camera unavailable";
-        setErr(msg);
-        setStatus("error");
-      }
-    })();
-
-    return () => {
-      stopped = true;
-      controls?.stop();
-    };
-  }, [onResult]);
-
-  const useDemo = async () => {
-    const r = await foodLookupService.lookupBarcode("0049000028911");
-    onResult(r);
-  };
-
-  return (
-    <div>
-      <div className="aspect-[4/5] rounded-3xl bg-black/40 border border-white/[0.06] relative overflow-hidden">
-        <video ref={videoRef} className="absolute inset-0 size-full object-cover" muted playsInline />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,oklch(0_0_0/0.7)_100%)] pointer-events-none" />
-        {[
-          "top-5 left-5 border-t-2 border-l-2",
-          "top-5 right-5 border-t-2 border-r-2",
-          "bottom-5 left-5 border-b-2 border-l-2",
-          "bottom-5 right-5 border-b-2 border-r-2",
-        ].map((c) => (
-          <span key={c} className={`absolute w-10 h-10 border-neon rounded-md ${c}`} />
-        ))}
-        {status === "scanning" && (
-          <>
-            <div className="absolute inset-x-10 top-1/2 h-px bg-neon shadow-[0_0_20px_var(--color-neon)] animate-[scan_2s_ease-in-out_infinite]" />
-            <div className="absolute inset-x-0 bottom-6 text-center text-xs text-neon font-medium">
-              Point at a barcode
-            </div>
-          </>
-        )}
-        {status === "error" && (
-          <div className="absolute inset-0 grid place-items-center p-6 text-center">
-            <div>
-              <p className="text-sm text-muted-foreground mb-3">{err || "Camera unavailable"}</p>
-              <button onClick={useDemo} className="h-10 px-4 rounded-full bg-neon text-neon-foreground text-xs font-semibold">
-                Try a demo barcode
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-      <p className="mt-3 text-[11px] text-muted-foreground text-center">
-        Held steady, your camera will detect any standard product barcode.
-      </p>
-      <style>{`@keyframes scan { 0%,100% { transform: translateY(-100px); } 50% { transform: translateY(100px); } }`}</style>
     </div>
   );
 }
@@ -861,7 +1021,10 @@ function PhotoPanel({
           const t = result.total;
           onEditManually({
             name: result.meal_name,
-            serving: result.items.map((i) => `${i.name} ${i.estimated_amount}`).join(", ").slice(0, 60),
+            serving: result.items
+              .map((i) => `${i.name} ${i.estimated_amount}`)
+              .join(", ")
+              .slice(0, 60),
             kcal: t.calories,
             protein: t.protein,
             carbs: t.carbs,
@@ -961,7 +1124,14 @@ function PhotoPanel({
             )}
             <button
               onClick={() =>
-                onEditManually({ name: "", serving: "1 serving", kcal: 0, protein: 0, carbs: 0, fat: 0 })
+                onEditManually({
+                  name: "",
+                  serving: "1 serving",
+                  kcal: 0,
+                  protein: 0,
+                  carbs: 0,
+                  fat: 0,
+                })
               }
               className="flex-1 h-10 rounded-full bg-neon text-neon-foreground text-xs font-semibold"
             >
@@ -1010,7 +1180,15 @@ function PhotoConfirm({
   const addItem = () =>
     setItems((prev) => [
       ...prev,
-      { name: "", estimated_amount: "1 serving", confidence: 1, calories: 0, protein: 0, carbs: 0, fat: 0 },
+      {
+        name: "",
+        estimated_amount: "1 serving",
+        confidence: 1,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      },
     ]);
 
   const total = items.reduce(
@@ -1028,8 +1206,8 @@ function PhotoConfirm({
     result.confidence >= 0.85
       ? "bg-emerald-400/15 text-emerald-300 border-emerald-400/30"
       : result.confidence >= 0.7
-      ? "bg-neon/15 text-neon border-neon/30"
-      : "bg-amber-400/15 text-amber-300 border-amber-400/30";
+        ? "bg-neon/15 text-neon border-neon/30"
+        : "bg-amber-400/15 text-amber-300 border-amber-400/30";
 
   const canSave = items.length > 0 && items.every((i) => i.name.trim().length > 0);
 
@@ -1037,10 +1215,16 @@ function PhotoConfirm({
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         {preview && (
-          <img src={preview} alt="meal" className="size-16 rounded-2xl object-cover border border-white/10" />
+          <img
+            src={preview}
+            alt="meal"
+            className="size-16 rounded-2xl object-cover border border-white/10"
+          />
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Confirm your meal</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Confirm your meal
+          </p>
           <h3 className="font-bold text-base truncate">{result.meal_name}</h3>
           <span
             className={cn(
@@ -1062,7 +1246,10 @@ function PhotoConfirm({
 
       <div className="space-y-3">
         {items.map((it, idx) => (
-          <div key={idx} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
+          <div
+            key={idx}
+            className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2"
+          >
             <div className="flex items-start gap-2">
               <input
                 value={it.name}
@@ -1129,9 +1316,15 @@ function PhotoConfirm({
           <span className="text-base font-bold tabular-nums">{total.calories} kcal</span>
         </div>
         <div className="mt-1 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
-          <span>P <span className="text-foreground font-semibold tabular-nums">{total.protein}g</span></span>
-          <span>C <span className="text-foreground font-semibold tabular-nums">{total.carbs}g</span></span>
-          <span>F <span className="text-foreground font-semibold tabular-nums">{total.fat}g</span></span>
+          <span>
+            P <span className="text-foreground font-semibold tabular-nums">{total.protein}g</span>
+          </span>
+          <span>
+            C <span className="text-foreground font-semibold tabular-nums">{total.carbs}g</span>
+          </span>
+          <span>
+            F <span className="text-foreground font-semibold tabular-nums">{total.fat}g</span>
+          </span>
         </div>
       </div>
 
@@ -1161,7 +1354,12 @@ function PhotoConfirm({
 }
 
 function ManualPanel({
-  meal, prefill, servings = 1, source, submitLabel, onAdd,
+  meal,
+  prefill,
+  servings = 1,
+  source,
+  submitLabel,
+  onAdd,
 }: {
   meal: Meal;
   prefill: LookupResult | null;
@@ -1173,10 +1371,18 @@ function ManualPanel({
   const [name, setName] = useState(prefill?.name ?? "");
   const [brand, setBrand] = useState(prefill?.brand ?? "");
   const [serving, setServing] = useState(prefill?.serving ?? "1 serving");
-  const [kcal, setKcal] = useState<string>(prefill?.kcal != null ? String(Math.round(prefill.kcal)) : "");
-  const [protein, setProtein] = useState<string>(prefill?.protein != null ? String(Math.round(prefill.protein)) : "");
-  const [carbs, setCarbs] = useState<string>(prefill?.carbs != null ? String(Math.round(prefill.carbs)) : "");
-  const [fat, setFat] = useState<string>(prefill?.fat != null ? String(Math.round(prefill.fat)) : "");
+  const [kcal, setKcal] = useState<string>(
+    prefill?.kcal != null ? String(Math.round(prefill.kcal)) : "",
+  );
+  const [protein, setProtein] = useState<string>(
+    prefill?.protein != null ? String(Math.round(prefill.protein)) : "",
+  );
+  const [carbs, setCarbs] = useState<string>(
+    prefill?.carbs != null ? String(Math.round(prefill.carbs)) : "",
+  );
+  const [fat, setFat] = useState<string>(
+    prefill?.fat != null ? String(Math.round(prefill.fat)) : "",
+  );
 
   const canSave = name.trim().length > 0 && Number(kcal) >= 0;
 
@@ -1188,6 +1394,7 @@ function ManualPanel({
       custom: {
         name: name.trim(),
         brand: brand.trim() || undefined,
+        imageUrl: prefill?.imageUrl,
         serving: serving.trim() || "1 serving",
         kcal: Number(kcal) || 0,
         protein: Number(protein) || 0,
@@ -1202,35 +1409,85 @@ function ManualPanel({
     <div className="space-y-3">
       {prefill && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neon/10 border border-neon/20 text-[11px] text-neon">
-          <Sparkles className="size-3.5" />
-          {source === "barcode" ? "Detected from barcode" : "AI-estimated from photo"}
-          {prefill.confidence ? ` · ${Math.round(prefill.confidence * 100)}% confidence` : ""}
+          {prefill.imageUrl ? (
+            <FoodThumbnail
+              food={{
+                name: prefill.name,
+                brand: prefill.brand,
+                imageUrl: prefill.imageUrl,
+              }}
+              size="sm"
+            />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          <span>
+            {source === "barcode" ? "Detected from barcode" : "AI-estimated from photo"}
+            {prefill.confidence ? ` · ${Math.round(prefill.confidence * 100)}% confidence` : ""}
+          </span>
         </div>
       )}
 
       <Field label="Food name">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Chicken rice bowl" className={inp} maxLength={60} />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Chicken rice bowl"
+          className={inp}
+          maxLength={60}
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Brand (optional)">
-          <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inp} maxLength={40} />
+          <input
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            className={inp}
+            maxLength={40}
+          />
         </Field>
         <Field label="Serving size">
-          <input value={serving} onChange={(e) => setServing(e.target.value)} placeholder="1 cup, 100g…" className={inp} maxLength={30} />
+          <input
+            value={serving}
+            onChange={(e) => setServing(e.target.value)}
+            placeholder="1 cup, 100g…"
+            className={inp}
+            maxLength={30}
+          />
         </Field>
       </div>
       <Field label="Calories (kcal)">
-        <input inputMode="numeric" value={kcal} onChange={(e) => setKcal(e.target.value.replace(/[^0-9]/g, ""))} className={inp} />
+        <input
+          inputMode="numeric"
+          value={kcal}
+          onChange={(e) => setKcal(e.target.value.replace(/[^0-9]/g, ""))}
+          className={inp}
+        />
       </Field>
       <div className="grid grid-cols-3 gap-3">
         <Field label="Protein (g)">
-          <input inputMode="numeric" value={protein} onChange={(e) => setProtein(e.target.value.replace(/[^0-9]/g, ""))} className={inp} />
+          <input
+            inputMode="numeric"
+            value={protein}
+            onChange={(e) => setProtein(e.target.value.replace(/[^0-9]/g, ""))}
+            className={inp}
+          />
         </Field>
         <Field label="Carbs (g)">
-          <input inputMode="numeric" value={carbs} onChange={(e) => setCarbs(e.target.value.replace(/[^0-9]/g, ""))} className={inp} />
+          <input
+            inputMode="numeric"
+            value={carbs}
+            onChange={(e) => setCarbs(e.target.value.replace(/[^0-9]/g, ""))}
+            className={inp}
+          />
         </Field>
         <Field label="Fat (g)">
-          <input inputMode="numeric" value={fat} onChange={(e) => setFat(e.target.value.replace(/[^0-9]/g, ""))} className={inp} />
+          <input
+            inputMode="numeric"
+            value={fat}
+            onChange={(e) => setFat(e.target.value.replace(/[^0-9]/g, ""))}
+            className={inp}
+          />
         </Field>
       </div>
 
@@ -1257,7 +1514,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Sheet({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+function Sheet({
+  children,
+  onClose,
+  title,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
   // ensure resultToCustom isn't tree-shaken (used elsewhere via panels)
   void resultToCustom;
   return (
@@ -1271,7 +1536,11 @@ function Sheet({ children, onClose, title }: { children: React.ReactNode; onClos
         <div className="sticky top-0 bg-[oklch(0.16_0_0)]/95 backdrop-blur z-10 px-5 pt-3 pb-3 flex items-center justify-between border-b border-white/[0.05]">
           <div className="absolute left-1/2 -translate-x-1/2 top-1.5 h-1 w-10 rounded-full bg-white/15" />
           <h2 className="font-bold text-base mt-2">{title}</h2>
-          <button onClick={onClose} className="size-9 rounded-full bg-white/[0.05] grid place-items-center mt-1" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="size-9 rounded-full bg-white/[0.05] grid place-items-center mt-1"
+            aria-label="Close"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -1316,13 +1585,14 @@ function FoodConfirmSheet({
   const [when, setWhen] = useState(() => toLocalDatetimeValue(new Date().toISOString()));
 
   const totals = {
-    kcal:    Math.round(food.kcal    * servings),
+    kcal: Math.round(food.kcal * servings),
     protein: Math.round(food.protein * servings * 10) / 10,
-    carbs:   Math.round(food.carbs   * servings * 10) / 10,
-    fat:     Math.round(food.fat     * servings * 10) / 10,
+    carbs: Math.round(food.carbs * servings * 10) / 10,
+    fat: Math.round(food.fat * servings * 10) / 10,
   };
 
-  const bumpServings = (delta: number) => setServings((s) => Math.max(0.25, Math.round((s + delta) * 4) / 4));
+  const bumpServings = (delta: number) =>
+    setServings((s) => Math.max(0.25, Math.round((s + delta) * 4) / 4));
 
   const submit = () => {
     const loggedAt = fromLocalDatetimeValue(when);
@@ -1330,7 +1600,13 @@ function FoodConfirmSheet({
     if (food.id.startsWith("legacy:")) {
       const foodId = food.id.slice("legacy:".length);
       onSave({ meal, servings, foodId, loggedAt });
-      pushRecent({ ...food, kcal: food.kcal, protein: food.protein, carbs: food.carbs, fat: food.fat });
+      pushRecent({
+        ...food,
+        kcal: food.kcal,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+      });
       return;
     }
     // Everything else (curated preset, Nutritionix, USDA, OpenFoodFacts) → store as inline custom
@@ -1341,6 +1617,7 @@ function FoodConfirmSheet({
       custom: {
         name: food.name,
         brand: food.brand,
+        imageUrl: food.imageUrl ?? getFoodImageUrl(food),
         serving: serving.trim() || food.serving,
         kcal: food.kcal,
         protein: food.protein,
@@ -1354,22 +1631,24 @@ function FoodConfirmSheet({
 
   return (
     <div className="pb-6">
-      <button onClick={onBack} className="mt-2 -ml-1 flex items-center gap-1 text-xs text-muted-foreground active:text-foreground">
+      <button
+        onClick={onBack}
+        className="mt-2 -ml-1 flex items-center gap-1 text-xs text-muted-foreground active:text-foreground"
+      >
         <ArrowLeft className="size-3.5" /> Back to search
       </button>
 
       {/* Food header card */}
       <div className="mt-3 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
         <div className="flex items-start gap-3">
-          <div className="size-14 rounded-2xl bg-white/[0.05] grid place-items-center text-2xl shrink-0">
-            {food.imageUrl
-              ? <img src={food.imageUrl} alt="" className="size-14 rounded-2xl object-cover" />
-              : <span>{food.category === "restaurant" ? "🍽️" : food.category === "protein" ? "💪" : food.category === "grocery" ? "🛒" : "🥗"}</span>}
-          </div>
+          <FoodThumbnail food={food} size="lg" />
           <div className="flex-1 min-w-0">
             {food.brand && (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate">{food.brand}</span>
+                <BrandLogo brand={food.brand} className="size-4 p-0.5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate">
+                  {food.brand}
+                </span>
                 {food.verified && (
                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon/15 border border-neon/30 text-[9px] font-bold text-neon">
                     <BadgeCheck className="size-2.5" /> VERIFIED
@@ -1379,11 +1658,16 @@ function FoodConfirmSheet({
             )}
             <h3 className="font-bold text-base leading-tight mt-0.5">{food.name}</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
-              Source: {food.source === "preset" ? "curated database"
-                : food.source === "nutritionix" ? "Nutritionix"
-                : food.source === "usda" ? "USDA FoodData Central"
-                : food.source === "openfoodfacts" ? "Open Food Facts"
-                : "custom"}
+              Source:{" "}
+              {food.source === "preset"
+                ? "curated database"
+                : food.source === "nutritionix"
+                  ? "Nutritionix"
+                  : food.source === "usda"
+                    ? "USDA FoodData Central"
+                    : food.source === "openfoodfacts"
+                      ? "Open Food Facts"
+                      : "custom"}
             </p>
           </div>
         </div>
@@ -1394,9 +1678,14 @@ function FoodConfirmSheet({
             { label: "C", value: totals.carbs },
             { label: "F", value: totals.fat },
           ].map((m) => (
-            <div key={m.label} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2">
+            <div
+              key={m.label}
+              className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2"
+            >
               <div className="text-base font-bold tabular-nums">{m.value}</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {m.label}
+              </div>
             </div>
           ))}
         </div>
@@ -1440,7 +1729,7 @@ function FoodConfirmSheet({
                 "flex-1 h-8 rounded-full text-[11px] font-semibold border",
                 servings === n
                   ? "bg-neon text-neon-foreground border-transparent"
-                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
               )}
             >
               ×{n}
@@ -1468,7 +1757,7 @@ function FoodConfirmSheet({
                 "h-10 rounded-xl text-[11px] font-semibold border",
                 meal === m
                   ? "bg-neon text-neon-foreground border-transparent"
-                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground"
+                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
               )}
             >
               {m}

@@ -3,6 +3,12 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Trash2, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuthSession } from "@/lib/authSession";
+import {
+  deleteLocalProgressPhoto,
+  getLocalProgressPhoto,
+  updateLocalProgressPhoto,
+} from "@/lib/progressPhotos.local";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,11 +29,7 @@ import {
   type PhotoType,
   type ProgressPhotoRow,
 } from "@/lib/progressPhotos.functions";
-import {
-  PHOTO_TYPES,
-  formatPhotoDate,
-  typeLabel,
-} from "@/components/photos/photoUtils";
+import { PHOTO_TYPES, formatPhotoDate, typeLabel } from "@/components/photos/photoUtils";
 
 export const Route = createFileRoute("/_app/photos/$photoId")({
   component: PhotoDetail,
@@ -36,12 +38,19 @@ export const Route = createFileRoute("/_app/photos/$photoId")({
 function PhotoDetail() {
   const { photoId } = Route.useParams();
   const navigate = useNavigate();
+  const session = useAuthSession();
   const [photo, setPhoto] = useState<ProgressPhotoRow | null | "loading">("loading");
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
+    if (session === "loading") return;
+    if (!session || photoId.startsWith("guest-")) {
+      setPhoto(getLocalProgressPhoto(photoId));
+      return;
+    }
+
     getProgressPhoto({ data: { id: photoId } })
       .then((p) => setPhoto(p ?? null))
       .catch((e) => {
@@ -49,11 +58,15 @@ function PhotoDetail() {
         toast.error("Couldn't load photo");
         setPhoto(null);
       });
-  }, [photoId]);
+  }, [photoId, session]);
 
   async function handleDelete() {
     try {
-      await deleteProgressPhoto({ data: { id: photoId } });
+      if (!session || photoId.startsWith("guest-")) {
+        deleteLocalProgressPhoto(photoId);
+      } else {
+        await deleteProgressPhoto({ data: { id: photoId } });
+      }
       toast.success("Photo deleted");
       navigate({ to: "/photos" });
     } catch (e) {
@@ -113,6 +126,7 @@ function PhotoDetail() {
       ) : (
         <EditView
           photo={photo}
+          cloud={!!session && !photo.id.startsWith("guest-")}
           onCancel={() => setEditing(false)}
           onSaved={(updated) => {
             setPhoto({ ...photo, ...updated });
@@ -181,7 +195,11 @@ function ReadView({ photo, onEdit }: { photo: ProgressPhotoRow; onEdit: () => vo
       <div>
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Notes</div>
         <p className="mt-1 text-sm whitespace-pre-wrap">
-          {photo.notes?.trim() ? photo.notes : <span className="text-muted-foreground">No notes.</span>}
+          {photo.notes?.trim() ? (
+            photo.notes
+          ) : (
+            <span className="text-muted-foreground">No notes.</span>
+          )}
         </p>
       </div>
     </div>
@@ -199,10 +217,12 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function EditView({
   photo,
+  cloud,
   onCancel,
   onSaved,
 }: {
   photo: ProgressPhotoRow;
+  cloud: boolean;
   onCancel: () => void;
   onSaved: (p: Partial<ProgressPhotoRow>) => void;
 }) {
@@ -219,21 +239,26 @@ function EditView({
     try {
       const weightNum = weight.trim() ? Number(weight.replace(",", ".")) : null;
       const weight_kg = Number.isFinite(weightNum) ? (weightNum as number) : null;
-      await updateProgressPhoto({
-        data: {
-          id: photo.id,
-          photo_type: photoType,
-          taken_on: date,
-          weight_kg,
-          notes: notes.trim() ? notes.trim() : null,
-        },
-      });
-      onSaved({
+      const patch = {
         photo_type: photoType,
         taken_on: date,
         weight_kg,
         notes: notes.trim() ? notes.trim() : null,
-      });
+      };
+      if (cloud) {
+        await updateProgressPhoto({
+          data: {
+            id: photo.id,
+            ...patch,
+          },
+        });
+      } else {
+        updateLocalProgressPhoto({
+          id: photo.id,
+          ...patch,
+        });
+      }
+      onSaved(patch);
       toast.success("Updated");
     } catch (e) {
       console.error(e);
@@ -310,7 +335,13 @@ function EditView({
           disabled={busy}
           className="flex-1 h-12 rounded-full bg-neon text-neon-foreground hover:bg-neon/90"
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <><Check className="size-4 mr-1" /> Save</>}
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <>
+              <Check className="size-4 mr-1" /> Save
+            </>
+          )}
         </Button>
       </div>
     </div>

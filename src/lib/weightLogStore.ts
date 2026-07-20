@@ -67,6 +67,16 @@ export function removeWeightEntry(id: string) {
   emit();
 }
 
+// Bulk replace (used by cloud sync hydration).
+export function replaceWeightLog(list: WeightEntry[]) {
+  write(list);
+  emit();
+}
+
+export function getWeightLogEntries(): WeightEntry[] {
+  return read();
+}
+
 export function getLatestWeight(): WeightEntry | null {
   const list = read().sort((a, b) => a.date.localeCompare(b.date));
   return list[list.length - 1] ?? null;

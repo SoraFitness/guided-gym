@@ -4,6 +4,12 @@ import { Camera, Plus, GitCompareArrows, ImageIcon, Loader2, Lock } from "lucide
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { listProgressPhotos, type ProgressPhotoRow } from "@/lib/progressPhotos.functions";
+import {
+  listLocalProgressPhotos,
+  syncLocalProgressPhotosToCloud,
+} from "@/lib/progressPhotos.local";
+import { useAuthSession } from "@/lib/authSession";
+import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { PhotoCard } from "@/components/photos/PhotoCard";
 import { formatPhotoDate } from "@/components/photos/photoUtils";
 
@@ -15,19 +21,30 @@ type View = "gallery" | "timeline";
 type Group = "Week" | "Month" | "Year";
 
 function PhotosIndex() {
+  const session = useAuthSession();
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
   const [view, setView] = useState<View>("gallery");
   const [group, setGroup] = useState<Group>("Month");
 
   useEffect(() => {
-    listProgressPhotos()
+    if (session === "loading") return;
+    if (!session) {
+      setPhotos(listLocalProgressPhotos());
+      return;
+    }
+
+    syncLocalProgressPhotosToCloud(session.userId)
+      .then((result) => {
+        if (result.synced > 0) toast.success("Progress photos synced");
+      })
+      .then(() => listProgressPhotos())
       .then(setPhotos)
       .catch((e) => {
         console.error(e);
         toast.error("Couldn't load photos");
         setPhotos([]);
       });
-  }, []);
+  }, [session]);
 
   const isEmpty = photos !== null && photos.length === 0;
 
@@ -35,10 +52,13 @@ function PhotosIndex() {
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-start justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">Private</p>
+          <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">
+            {session ? "Private cloud" : "Private device"}
+          </p>
           <h1 className="text-3xl font-bold mt-1">Progress Pictures</h1>
           <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-            <Lock className="size-3" /> Visible only to you
+            <Lock className="size-3" />{" "}
+            {session ? "Visible only to you" : "Saved locally until you sync"}
           </p>
         </div>
         <Link
@@ -49,6 +69,17 @@ function PhotosIndex() {
           <Plus className="size-5" />
         </Link>
       </header>
+
+      {!session && (
+        <div className="mt-5">
+          <SoftAccountPrompt
+            title="Save photos to your account"
+            description="Progress photos work now on this device. Create an account when you want cloud backup, restore, and cross-device sync."
+            redirectPath="/photos"
+            storageKey="fitness:dismiss-photo-account-prompt"
+          />
+        </div>
+      )}
 
       {photos === null ? (
         <div className="mt-12 flex justify-center">
@@ -74,9 +105,7 @@ function PhotosIndex() {
           </div>
 
           {view === "gallery" && <Gallery photos={photos!} />}
-          {view === "timeline" && (
-            <Timeline photos={photos!} group={group} onGroup={setGroup} />
-          )}
+          {view === "timeline" && <Timeline photos={photos!} group={group} onGroup={setGroup} />}
         </>
       )}
     </div>
@@ -206,10 +235,7 @@ function Timeline({
   );
 }
 
-function buildGroups(
-  photos: ProgressPhotoRow[],
-  group: Group,
-): [string, ProgressPhotoRow[]][] {
+function buildGroups(photos: ProgressPhotoRow[], group: Group): [string, ProgressPhotoRow[]][] {
   const map = new Map<string, ProgressPhotoRow[]>();
   for (const p of photos) {
     const key = groupKey(p.taken_on, group);

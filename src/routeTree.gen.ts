@@ -34,9 +34,11 @@ import { Route as AppReportWeekStartRouteImport } from './routes/_app.report.$we
 import { Route as AppPhotosNewRouteImport } from './routes/_app.photos.new'
 import { Route as AppPhotosCompareRouteImport } from './routes/_app.photos.compare'
 import { Route as AppPhotosPhotoIdRouteImport } from './routes/_app.photos.$photoId'
+import { Route as AppScanFaceIndexRouteImport } from './routes/_app.scan.face.index'
 import { Route as AppScanBodyIndexRouteImport } from './routes/_app.scan.body.index'
 import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$id.demo.$exerciseId'
 import { Route as ApiPublicHooksFinalizeWeeklyReportsRouteImport } from './routes/api/public/hooks/finalize-weekly-reports'
+import { Route as AppScanFaceIdRouteImport } from './routes/_app.scan.face.$id'
 import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
 
@@ -164,6 +166,11 @@ const AppPhotosPhotoIdRoute = AppPhotosPhotoIdRouteImport.update({
   path: '/$photoId',
   getParentRoute: () => AppPhotosRoute,
 } as any)
+const AppScanFaceIndexRoute = AppScanFaceIndexRouteImport.update({
+  id: '/scan/face/',
+  path: '/scan/face/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppScanBodyIndexRoute = AppScanBodyIndexRouteImport.update({
   id: '/scan/body/',
   path: '/scan/body/',
@@ -180,6 +187,11 @@ const ApiPublicHooksFinalizeWeeklyReportsRoute =
     path: '/api/public/hooks/finalize-weekly-reports',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AppScanFaceIdRoute = AppScanFaceIdRouteImport.update({
+  id: '/scan/face/$id',
+  path: '/scan/face/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppScanBodyNewRoute = AppScanBodyNewRouteImport.update({
   id: '/scan/body/new',
   path: '/scan/body/new',
@@ -218,9 +230,11 @@ export interface FileRoutesByFullPath {
   '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
+  '/scan/face/$id': typeof AppScanFaceIdRoute
   '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/scan/body/': typeof AppScanBodyIndexRoute
+  '/scan/face/': typeof AppScanFaceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -248,9 +262,11 @@ export interface FileRoutesByTo {
   '/workout/history': typeof WorkoutHistoryIndexRoute
   '/scan/body/$id': typeof AppScanBodyIdRoute
   '/scan/body/new': typeof AppScanBodyNewRoute
+  '/scan/face/$id': typeof AppScanFaceIdRoute
   '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/scan/body': typeof AppScanBodyIndexRoute
+  '/scan/face': typeof AppScanFaceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -281,9 +297,11 @@ export interface FileRoutesById {
   '/workout/history/': typeof WorkoutHistoryIndexRoute
   '/_app/scan/body/$id': typeof AppScanBodyIdRoute
   '/_app/scan/body/new': typeof AppScanBodyNewRoute
+  '/_app/scan/face/$id': typeof AppScanFaceIdRoute
   '/api/public/hooks/finalize-weekly-reports': typeof ApiPublicHooksFinalizeWeeklyReportsRoute
   '/workout/$id/demo/$exerciseId': typeof WorkoutIdDemoExerciseIdRoute
   '/_app/scan/body/': typeof AppScanBodyIndexRoute
+  '/_app/scan/face/': typeof AppScanFaceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -314,9 +332,11 @@ export interface FileRouteTypes {
     | '/workout/history/'
     | '/scan/body/$id'
     | '/scan/body/new'
+    | '/scan/face/$id'
     | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/scan/body/'
+    | '/scan/face/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -344,9 +364,11 @@ export interface FileRouteTypes {
     | '/workout/history'
     | '/scan/body/$id'
     | '/scan/body/new'
+    | '/scan/face/$id'
     | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/scan/body'
+    | '/scan/face'
   id:
     | '__root__'
     | '/'
@@ -376,9 +398,11 @@ export interface FileRouteTypes {
     | '/workout/history/'
     | '/_app/scan/body/$id'
     | '/_app/scan/body/new'
+    | '/_app/scan/face/$id'
     | '/api/public/hooks/finalize-weekly-reports'
     | '/workout/$id/demo/$exerciseId'
     | '/_app/scan/body/'
+    | '/_app/scan/face/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -570,6 +594,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPhotosPhotoIdRouteImport
       parentRoute: typeof AppPhotosRoute
     }
+    '/_app/scan/face/': {
+      id: '/_app/scan/face/'
+      path: '/scan/face'
+      fullPath: '/scan/face/'
+      preLoaderRoute: typeof AppScanFaceIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/scan/body/': {
       id: '/_app/scan/body/'
       path: '/scan/body'
@@ -590,6 +621,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/public/hooks/finalize-weekly-reports'
       preLoaderRoute: typeof ApiPublicHooksFinalizeWeeklyReportsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/scan/face/$id': {
+      id: '/_app/scan/face/$id'
+      path: '/scan/face/$id'
+      fullPath: '/scan/face/$id'
+      preLoaderRoute: typeof AppScanFaceIdRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/scan/body/new': {
       id: '/_app/scan/body/new'
@@ -641,7 +679,9 @@ interface AppRouteChildren {
   AppScanIndexRoute: typeof AppScanIndexRoute
   AppScanBodyIdRoute: typeof AppScanBodyIdRoute
   AppScanBodyNewRoute: typeof AppScanBodyNewRoute
+  AppScanFaceIdRoute: typeof AppScanFaceIdRoute
   AppScanBodyIndexRoute: typeof AppScanBodyIndexRoute
+  AppScanFaceIndexRoute: typeof AppScanFaceIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -659,7 +699,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppScanIndexRoute: AppScanIndexRoute,
   AppScanBodyIdRoute: AppScanBodyIdRoute,
   AppScanBodyNewRoute: AppScanBodyNewRoute,
+  AppScanFaceIdRoute: AppScanFaceIdRoute,
   AppScanBodyIndexRoute: AppScanBodyIndexRoute,
+  AppScanFaceIndexRoute: AppScanFaceIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

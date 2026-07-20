@@ -7,9 +7,8 @@ import { GoalPanel } from "@/components/GoalPanel";
 import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 
-
 export const Route = createFileRoute("/_app/progress")({
-  head: () => ({ meta: [{ title: "Progress — Pulse" }] }),
+  head: () => ({ meta: [{ title: "Progress — Ascendr" }] }),
   component: ProgressPage,
 });
 
@@ -83,7 +82,6 @@ function ProgressPage() {
         <ProgressPicturesCard />
       </div>
 
-
       <div className="mt-6 grid grid-cols-2 gap-3">
         <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
         <StatCard
@@ -120,10 +118,7 @@ function ProgressPage() {
         <h2 className="font-bold mb-3">Volume & sets</h2>
         <Record label="Total sets" value={`${prs.totalSets}`} />
         <Record label="Total reps" value={`${prs.totalReps}`} />
-        <Record
-          label="Total volume"
-          value={`${prs.totalVolume.toLocaleString()}`}
-        />
+        <Record label="Total volume" value={`${prs.totalVolume.toLocaleString()}`} />
         <Record
           label="Best workout volume"
           value={

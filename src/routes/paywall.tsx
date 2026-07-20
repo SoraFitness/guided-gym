@@ -2,7 +2,19 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Check, Dumbbell, Apple, Activity, Scan, LineChart, Sparkles, Box, Zap, Star, ArrowRight, X, Tag,
+  Check,
+  Dumbbell,
+  Apple,
+  Activity,
+  Scan,
+  LineChart,
+  Sparkles,
+  Box,
+  Zap,
+  Star,
+  ArrowRight,
+  X,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
@@ -11,14 +23,18 @@ import { useProfile } from "@/lib/profile";
 export const Route = createFileRoute("/paywall")({
   head: () => ({
     meta: [
-      { title: "Unlock Premium — Pulsefit Pro" },
-      { name: "description", content: "Personalized workouts, nutrition tools, and progress tracking — all in one premium fitness app." },
+      { title: "Unlock Premium — Ascendr Pro" },
+      {
+        name: "description",
+        content:
+          "Personalized workouts, nutrition tools, and progress tracking — all in one premium fitness app.",
+      },
     ],
   }),
   component: PaywallScreen,
 });
 
-const APP_NAME = "PULSEFIT PRO";
+const APP_NAME = "ASCENDR PRO";
 
 const FEATURES = [
   { icon: Dumbbell, text: "Personalized workout plans" },
@@ -103,7 +119,8 @@ function PaywallScreen() {
           Unlock Your <span className="text-neon">Best Body</span>
         </motion.h1>
         <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
-          Personalized workouts, nutrition tools, progress tracking, and premium fitness insights — your complete training system.
+          Personalized workouts, nutrition tools, progress tracking, and premium fitness insights —
+          your complete training system.
         </p>
 
         {/* Social proof */}
@@ -115,7 +132,13 @@ function PaywallScreen() {
               "from-rose-400 to-rose-700",
               "from-sky-400 to-sky-700",
             ].map((g, i) => (
-              <div key={i} className={cn("h-6 w-6 rounded-full border-2 border-background bg-gradient-to-br", g)} />
+              <div
+                key={i}
+                className={cn(
+                  "h-6 w-6 rounded-full border-2 border-background bg-gradient-to-br",
+                  g,
+                )}
+              />
             ))}
           </div>
           <div className="flex items-center gap-1.5">
@@ -187,7 +210,10 @@ function PaywallScreen() {
               <div className="flex items-center gap-2">
                 <input
                   value={referral}
-                  onChange={(e) => { setReferral(e.target.value.toUpperCase()); setReferralApplied(false); }}
+                  onChange={(e) => {
+                    setReferral(e.target.value.toUpperCase());
+                    setReferralApplied(false);
+                  }}
                   placeholder="ENTER CODE"
                   maxLength={24}
                   className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tracking-widest uppercase outline-none focus:border-neon/40"
@@ -197,7 +223,9 @@ function PaywallScreen() {
                   disabled={!referral.trim()}
                   className={cn(
                     "h-11 px-4 rounded-xl text-sm font-semibold transition",
-                    referral.trim() ? "bg-neon text-neon-foreground" : "bg-white/[0.05] text-muted-foreground"
+                    referral.trim()
+                      ? "bg-neon text-neon-foreground"
+                      : "bg-white/[0.05] text-muted-foreground",
                   )}
                 >
                   Apply
@@ -229,24 +257,34 @@ function PaywallScreen() {
               purchasing && "opacity-70",
             )}
           >
-            {purchasing ? "Processing…" : (
+            {purchasing ? (
+              "Processing…"
+            ) : (
               <>
                 Unlock Premium <ArrowRight className="h-5 w-5" />
               </>
             )}
           </button>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            Cancel anytime · {PLAN_PRICES[selected].price}{PLAN_PRICES[selected].per}
+            Cancel anytime · {PLAN_PRICES[selected].price}
+            {PLAN_PRICES[selected].per}
           </p>
           <div className="mt-2.5 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
-            <button onClick={handleRestore} className="hover:text-foreground">Restore Purchases</button>
+            <button onClick={handleRestore} className="hover:text-foreground">
+              Restore Purchases
+            </button>
             <span className="opacity-40">·</span>
-            <a href="#" className="hover:text-foreground">Terms</a>
+            <a href="#" className="hover:text-foreground">
+              Terms
+            </a>
             <span className="opacity-40">·</span>
-            <a href="#" className="hover:text-foreground">Privacy</a>
+            <a href="#" className="hover:text-foreground">
+              Privacy
+            </a>
           </div>
           <p className="mt-2 text-center text-[10px] leading-snug text-muted-foreground/70 px-4">
-            Subscription auto-renews until canceled at least 24 hours before the end of the current period. Manage in account settings.
+            Subscription auto-renews until canceled at least 24 hours before the end of the current
+            period. Manage in account settings.
           </p>
         </div>
       </div>
@@ -255,8 +293,16 @@ function PaywallScreen() {
 }
 
 function PlanCard({
-  plan, selected, onSelect, badge,
-}: { plan: Plan; selected: boolean; onSelect: () => void; badge?: string }) {
+  plan,
+  selected,
+  onSelect,
+  badge,
+}: {
+  plan: Plan;
+  selected: boolean;
+  onSelect: () => void;
+  badge?: string;
+}) {
   const p = PLAN_PRICES[plan];
   return (
     <button
@@ -286,7 +332,8 @@ function PlanCard({
           <div className="flex items-baseline justify-between">
             <span className="font-semibold">{p.label}</span>
             <span className="text-lg font-bold">
-              {p.price}<span className="text-xs font-medium text-muted-foreground">{p.per}</span>
+              {p.price}
+              <span className="text-xs font-medium text-muted-foreground">{p.per}</span>
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{p.subtitle}</p>
@@ -312,8 +359,12 @@ function ComparisonTable() {
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur overflow-hidden">
       {/* Header row */}
       <div className="grid grid-cols-[1.3fr_0.8fr_0.9fr] items-center px-4 py-3 border-b border-white/10 bg-white/[0.02]">
-        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground">FEATURE</span>
-        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground text-center">FREE</span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground">
+          FEATURE
+        </span>
+        <span className="text-[11px] font-bold tracking-[0.15em] text-muted-foreground text-center">
+          FREE
+        </span>
         <span className="text-[11px] font-bold tracking-[0.15em] text-neon text-center flex items-center justify-center gap-1">
           <Sparkles className="h-3 w-3" /> PREMIUM
         </span>
