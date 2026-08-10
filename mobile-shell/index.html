@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#090b0a" />
+    <title>Ascendr</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #090b0a;
+        color: #f7f8f7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+        background:
+          radial-gradient(circle at 50% 25%, rgb(166 255 64 / 12%), transparent 34%), #090b0a;
+      }
+
+      main {
+        width: min(100%, 380px);
+        text-align: center;
+      }
+
+      .mark {
+        width: 54px;
+        height: 54px;
+        margin: 0 auto 22px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: #a6ff40;
+        color: #090b0a;
+        font-weight: 900;
+        font-size: 25px;
+        box-shadow: 0 14px 50px rgb(166 255 64 / 24%);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 32px;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 12px auto 0;
+        max-width: 32ch;
+        color: #9ca19d;
+        line-height: 1.55;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">A</div>
+      <h1>Ascendr</h1>
+      <p>
+        The mobile service is not connected yet. Set ASCENDR_APP_URL in the Codemagic environment
+        before creating a release build.
+      </p>
+    </main>
+  </body>
+</html>

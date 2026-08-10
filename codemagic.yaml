@@ -1,0 +1,85 @@
+workflows:
+  ascendr-web-check:
+    name: Ascendr Web Build Check
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      node: 22.14.0
+      vars:
+        NODE_ENV: production
+    cache:
+      cache_paths:
+        - $CM_BUILD_DIR/node_modules
+        - $HOME/.npm
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install locked dependencies
+        script: npm ci
+      - name: Build Ascendr web application
+        script: npm run build
+    artifacts:
+      - dist/**
+      - /tmp/xcodebuild_logs/*.log
+
+  ascendr-ios-testflight:
+    name: Ascendr iOS / TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: ascendr-app-store
+    environment:
+      node: 22.14.0
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: org.ascendr.fitness
+      vars:
+        XCODE_PROJECT: App.xcodeproj
+        XCODE_SCHEME: App
+    cache:
+      cache_paths:
+        - $CM_BUILD_DIR/node_modules
+        - $HOME/.npm
+        - $HOME/Library/Developer/Xcode/DerivedData/**/SourcePackages
+    scripts:
+      - name: Verify mobile environment
+        script: |
+          if [ -z "$ASCENDR_APP_URL" ]; then
+            echo "ASCENDR_APP_URL is required and must be an HTTPS production URL."
+            exit 1
+          fi
+          case "$ASCENDR_APP_URL" in
+            https://*) ;;
+            *) echo "ASCENDR_APP_URL must begin with https://"; exit 1 ;;
+          esac
+      - name: Install locked dependencies
+        script: npm ci
+      - name: Sync Capacitor configuration and web shell
+        script: npx cap sync ios
+      - name: Apply App Store signing profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd ios/App
+          agvtool new-version -all "$CM_BUILD_NUMBER"
+      - name: Build signed IPA
+        script: |
+          cd ios/App
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
