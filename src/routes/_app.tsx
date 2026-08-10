@@ -60,20 +60,31 @@ function AppShell() {
     pathname.startsWith("/scan/face");
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col">
+    <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background">
       <CloudSyncGate />
       <div
-        className="flex-1"
-        style={{ paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 6rem)" }}
+        className="app-shell__content min-w-0 flex-1"
+        style={{
+          paddingTop: hideTabs ? 0 : "env(safe-area-inset-top)",
+          paddingBottom: hideTabs
+            ? 0
+            : "calc(env(safe-area-inset-bottom) + 5.25rem)",
+        }}
       >
-        <Outlet />
+        <div className="mx-auto w-full min-w-0 max-w-md overflow-x-clip">
+          <Outlet />
+        </div>
       </div>
       {!hideTabs && (
         <nav
-          className="fixed bottom-0 inset-x-0 px-4 pt-2 bg-gradient-to-t from-background via-background/95 to-transparent"
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+          className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background via-background/95 to-transparent pt-2"
+          style={{
+            paddingBottom: "max(0.625rem, env(safe-area-inset-bottom))",
+            paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+            paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+          }}
         >
-          <div className="mx-auto max-w-md bg-surface/90 backdrop-blur rounded-full border border-border h-16 px-2 flex items-center justify-between gap-1">
+          <div className="mx-auto flex h-[58px] max-w-md items-center justify-between gap-0.5 rounded-full border border-border bg-surface/90 px-1.5 shadow-[0_18px_42px_-20px_black] backdrop-blur">
             {tabs.map(({ to, label, Icon }) => {
               const active =
                 pathname === to ||
@@ -85,12 +96,19 @@ function AppShell() {
                   to={to}
                   aria-label={label}
                   className={cn(
-                    "flex-1 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition tap",
+                    "tap flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[9px] font-medium transition",
                     active ? "bg-neon text-neon-foreground" : "text-muted-foreground",
                   )}
                 >
-                  <Icon className="size-5" />
-                  <span className={cn(active ? "opacity-100" : "opacity-70")}>{label}</span>
+                  <Icon className="size-[18px] shrink-0" />
+                  <span
+                    className={cn(
+                      "max-w-full truncate px-0.5",
+                      active ? "opacity-100" : "opacity-70",
+                    )}
+                  >
+                    {label}
+                  </span>
                 </Link>
               );
             })}

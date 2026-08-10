@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Play, Flame, Clock, Dumbbell } from "lucide-react";
 import type { Workout } from "@/lib/workouts";
 import { cn } from "@/lib/utils";
+import { FOCUS_LABELS } from "@/lib/profile";
 
 const diffBadge: Record<string, string> = {
   Beginner: "bg-emerald-400/15 text-emerald-300",
@@ -51,6 +52,9 @@ export function WorkoutCardHero({ w, className }: { w: Workout; className?: stri
         <div className="absolute inset-x-0 bottom-0 p-4">
           <h3 className="font-extrabold text-[17px] leading-tight">{w.title}</h3>
           <p className="text-[11px] text-white/70 mt-1 line-clamp-2">{w.description}</p>
+          <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.14em] text-neon">
+            {formatTargets(w)}
+          </p>
           <div className="mt-3 flex items-center gap-1.5 flex-wrap">
             <Pill icon={Clock}>{w.duration} min</Pill>
             <Pill icon={Flame}>{w.calories} kcal</Pill>
@@ -170,7 +174,7 @@ export function WorkoutCardRow({ w }: { w: Workout }) {
           </span>
           <span className="flex items-center gap-1 truncate">
             <Dumbbell className="size-3" />
-            {w.targetMuscles.slice(0, 2).join(" · ")}
+            {formatTargets(w)}
           </span>
         </div>
       </div>
@@ -214,6 +218,9 @@ export function WorkoutCardTile({ w }: { w: Workout }) {
 
         <div className="absolute inset-x-0 bottom-0 p-3">
           <h3 className="font-bold text-[13px] leading-tight">{w.title}</h3>
+          <p className="mt-1 truncate text-[8px] font-bold uppercase tracking-[0.12em] text-neon">
+            {formatTargets(w)}
+          </p>
           <div className="mt-1.5 flex items-center gap-1.5">
             <Pill icon={Clock} small>
               {w.duration}m
@@ -226,6 +233,13 @@ export function WorkoutCardTile({ w }: { w: Workout }) {
       </div>
     </Link>
   );
+}
+
+function formatTargets(workout: Workout) {
+  return workout.targetMuscles
+    .slice(0, 3)
+    .map((target) => FOCUS_LABELS[target])
+    .join(" · ");
 }
 
 function Pill({

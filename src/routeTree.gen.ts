@@ -16,12 +16,17 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
 import { Route as ApiCoachRouteImport } from './routes/api/coach'
 import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
+import { Route as AppTermsRouteImport } from './routes/_app.terms'
 import { Route as AppProgressRouteImport } from './routes/_app.progress'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
+import { Route as AppPrivacyRouteImport } from './routes/_app.privacy'
 import { Route as AppPhotosRouteImport } from './routes/_app.photos'
 import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppHealthDisclaimerRouteImport } from './routes/_app.health-disclaimer'
+import { Route as AppDeleteAccountRouteImport } from './routes/_app.delete-account'
+import { Route as AppContactRouteImport } from './routes/_app.contact'
 import { Route as AppCoachRouteImport } from './routes/_app.coach'
 import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
 import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
@@ -76,6 +81,11 @@ const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
   path: '/workouts',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTermsRoute = AppTermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProgressRoute = AppProgressRouteImport.update({
   id: '/progress',
   path: '/progress',
@@ -84,6 +94,11 @@ const AppProgressRoute = AppProgressRouteImport.update({
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPrivacyRoute = AppPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPhotosRoute = AppPhotosRouteImport.update({
@@ -104,6 +119,21 @@ const AppNotificationsRoute = AppNotificationsRouteImport.update({
 const AppHomeRoute = AppHomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHealthDisclaimerRoute = AppHealthDisclaimerRouteImport.update({
+  id: '/health-disclaimer',
+  path: '/health-disclaimer',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDeleteAccountRoute = AppDeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContactRoute = AppContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCoachRoute = AppCoachRouteImport.update({
@@ -208,12 +238,17 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
   '/coach': typeof AppCoachRoute
+  '/contact': typeof AppContactRoute
+  '/delete-account': typeof AppDeleteAccountRoute
+  '/health-disclaimer': typeof AppHealthDisclaimerRoute
   '/home': typeof AppHomeRoute
   '/notifications': typeof AppNotificationsRoute
   '/nutrition': typeof AppNutritionRoute
   '/photos': typeof AppPhotosRouteWithChildren
+  '/privacy': typeof AppPrivacyRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
+  '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
@@ -241,11 +276,16 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
   '/coach': typeof AppCoachRoute
+  '/contact': typeof AppContactRoute
+  '/delete-account': typeof AppDeleteAccountRoute
+  '/health-disclaimer': typeof AppHealthDisclaimerRoute
   '/home': typeof AppHomeRoute
   '/notifications': typeof AppNotificationsRoute
   '/nutrition': typeof AppNutritionRoute
+  '/privacy': typeof AppPrivacyRoute
   '/profile': typeof AppProfileRoute
   '/progress': typeof AppProgressRoute
+  '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
@@ -275,12 +315,17 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
   '/_app/coach': typeof AppCoachRoute
+  '/_app/contact': typeof AppContactRoute
+  '/_app/delete-account': typeof AppDeleteAccountRoute
+  '/_app/health-disclaimer': typeof AppHealthDisclaimerRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/nutrition': typeof AppNutritionRoute
   '/_app/photos': typeof AppPhotosRouteWithChildren
+  '/_app/privacy': typeof AppPrivacyRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/progress': typeof AppProgressRoute
+  '/_app/terms': typeof AppTermsRoute
   '/_app/workouts': typeof AppWorkoutsRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
@@ -310,12 +355,17 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paywall'
     | '/coach'
+    | '/contact'
+    | '/delete-account'
+    | '/health-disclaimer'
     | '/home'
     | '/notifications'
     | '/nutrition'
     | '/photos'
+    | '/privacy'
     | '/profile'
     | '/progress'
+    | '/terms'
     | '/workouts'
     | '/api/coach'
     | '/workout/$id'
@@ -343,11 +393,16 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paywall'
     | '/coach'
+    | '/contact'
+    | '/delete-account'
+    | '/health-disclaimer'
     | '/home'
     | '/notifications'
     | '/nutrition'
+    | '/privacy'
     | '/profile'
     | '/progress'
+    | '/terms'
     | '/workouts'
     | '/api/coach'
     | '/workout/$id'
@@ -376,12 +431,17 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/paywall'
     | '/_app/coach'
+    | '/_app/contact'
+    | '/_app/delete-account'
+    | '/_app/health-disclaimer'
     | '/_app/home'
     | '/_app/notifications'
     | '/_app/nutrition'
     | '/_app/photos'
+    | '/_app/privacy'
     | '/_app/profile'
     | '/_app/progress'
+    | '/_app/terms'
     | '/_app/workouts'
     | '/api/coach'
     | '/workout/$id'
@@ -468,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkoutsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/terms': {
+      id: '/_app/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof AppTermsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/progress': {
       id: '/_app/progress'
       path: '/progress'
@@ -480,6 +547,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/privacy': {
+      id: '/_app/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof AppPrivacyRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/photos': {
@@ -508,6 +582,27 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/health-disclaimer': {
+      id: '/_app/health-disclaimer'
+      path: '/health-disclaimer'
+      fullPath: '/health-disclaimer'
+      preLoaderRoute: typeof AppHealthDisclaimerRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/delete-account': {
+      id: '/_app/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof AppDeleteAccountRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/contact': {
+      id: '/_app/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof AppContactRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/coach': {
@@ -666,12 +761,17 @@ const AppPhotosRouteWithChildren = AppPhotosRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppCoachRoute: typeof AppCoachRoute
+  AppContactRoute: typeof AppContactRoute
+  AppDeleteAccountRoute: typeof AppDeleteAccountRoute
+  AppHealthDisclaimerRoute: typeof AppHealthDisclaimerRoute
   AppHomeRoute: typeof AppHomeRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppNutritionRoute: typeof AppNutritionRoute
   AppPhotosRoute: typeof AppPhotosRouteWithChildren
+  AppPrivacyRoute: typeof AppPrivacyRoute
   AppProfileRoute: typeof AppProfileRoute
   AppProgressRoute: typeof AppProgressRoute
+  AppTermsRoute: typeof AppTermsRoute
   AppWorkoutsRoute: typeof AppWorkoutsRoute
   AppReportWeekStartRoute: typeof AppReportWeekStartRoute
   AppReportHistoryRoute: typeof AppReportHistoryRoute
@@ -686,12 +786,17 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppCoachRoute: AppCoachRoute,
+  AppContactRoute: AppContactRoute,
+  AppDeleteAccountRoute: AppDeleteAccountRoute,
+  AppHealthDisclaimerRoute: AppHealthDisclaimerRoute,
   AppHomeRoute: AppHomeRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppNutritionRoute: AppNutritionRoute,
   AppPhotosRoute: AppPhotosRouteWithChildren,
+  AppPrivacyRoute: AppPrivacyRoute,
   AppProfileRoute: AppProfileRoute,
   AppProgressRoute: AppProgressRoute,
+  AppTermsRoute: AppTermsRoute,
   AppWorkoutsRoute: AppWorkoutsRoute,
   AppReportWeekStartRoute: AppReportWeekStartRoute,
   AppReportHistoryRoute: AppReportHistoryRoute,

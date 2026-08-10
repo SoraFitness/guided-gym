@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Check,
   Clock3,
+  GitCompareArrows,
   History,
   RefreshCcw,
   ShieldCheck,
@@ -43,12 +44,34 @@ export function BodyScanReport({
     { label: "Potential", metric: result.potential, featured: true },
   ];
   const confidencePercent = Math.round(result.confidence * 100);
+  const comparison = result.comparison;
+  const comparisonTitle =
+    comparison?.basis === "exact_match"
+      ? "Same photo, same result"
+      : comparison?.status === "change_detected"
+        ? "Reliable visual change detected"
+        : "Scores held steady";
+  const comparisonBadge =
+    comparison?.basis === "exact_match"
+      ? "Exact photo match"
+      : comparison?.status === "change_detected"
+        ? "Compared with previous"
+        : "No reliable change";
+  const deltaItems = comparison?.scoreDeltas
+    ? [
+        { label: "Overall", value: comparison.scoreDeltas.overallScore },
+        { label: "Muscle", value: comparison.scoreDeltas.muscleDevelopment },
+        { label: "V-Taper", value: comparison.scoreDeltas.vTaper },
+        { label: "Symmetry", value: comparison.scoreDeltas.symmetry },
+      ]
+    : [];
 
   return (
     <motion.main
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="min-h-dvh bg-black pb-10 text-white"
+      className="min-h-dvh bg-black text-white"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2.5rem)" }}
     >
       <section className="relative min-h-[82dvh] overflow-hidden">
         <img
@@ -59,7 +82,10 @@ export function BodyScanReport({
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/25 to-black" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,transparent_0%,rgba(0,0,0,0.18)_30%,rgba(0,0,0,0.94)_90%)]" />
 
-        <header className="relative z-10 mx-auto flex max-w-md items-center justify-between px-5 pt-5">
+        <header
+          className="relative z-10 mx-auto flex max-w-md items-center justify-between px-5"
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}
+        >
           <button
             type="button"
             onClick={onBack}
@@ -118,6 +144,49 @@ export function BodyScanReport({
       </section>
 
       <div className="mx-auto max-w-md space-y-4 px-5">
+        {comparison && comparison.status !== "baseline" && (
+          <section
+            className={`rounded-[28px] border p-5 ${
+              comparison.status === "change_detected"
+                ? "border-neon/20 bg-neon/[0.06]"
+                : "border-white/[0.08] bg-white/[0.035]"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-neon">
+                <GitCompareArrows className="size-4" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em]">
+                  Progress comparison
+                </p>
+              </div>
+              <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-white/50">
+                {comparisonBadge}
+              </span>
+            </div>
+            <h2 className="mt-4 text-lg font-bold">{comparisonTitle}</h2>
+            <p className="mt-2 text-[11px] leading-relaxed text-white/55">{comparison.summary}</p>
+
+            {comparison.status === "change_detected" && deltaItems.length > 0 && (
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                {deltaItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-white/[0.06] bg-black/20 px-2 py-3 text-center"
+                  >
+                    <p className="text-base font-black text-neon">
+                      {item.value > 0 ? "+" : ""}
+                      {item.value}
+                    </p>
+                    <p className="mt-1 text-[7px] font-bold uppercase tracking-wider text-white/35">
+                      {item.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="rounded-[28px] border border-white/[0.08] bg-white/[0.045] p-5">
           <div className="flex items-center gap-2 text-neon">
             <Target className="size-4" />

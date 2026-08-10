@@ -13,6 +13,9 @@ interface SoftAccountPromptProps {
   storageKey: string;
   dismissible?: boolean;
   primaryLabel?: string;
+  initialExpanded?: boolean;
+  initialMode?: "signin" | "signup";
+  onSignedIn?: () => void;
 }
 
 export function SoftAccountPrompt({
@@ -22,14 +25,17 @@ export function SoftAccountPrompt({
   storageKey,
   dismissible = true,
   primaryLabel = "Save & sync",
+  initialExpanded = false,
+  initialMode = "signup",
+  onSignedIn,
 }: SoftAccountPromptProps) {
   const [dismissed, setDismissed] = useState(() => {
     if (!dismissible) return false;
     if (typeof window === "undefined") return false;
     return localStorage.getItem(storageKey) === "dismissed";
   });
-  const [expanded, setExpanded] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,6 +74,10 @@ export function SoftAccountPrompt({
       } as never);
       if (error) toast.error(error.message);
       else if (mode === "signup") toast.success("Check your email to confirm.");
+      else {
+        toast.success("Welcome back.");
+        onSignedIn?.();
+      }
     } finally {
       setBusy(false);
     }

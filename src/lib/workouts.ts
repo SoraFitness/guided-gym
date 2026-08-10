@@ -1,4 +1,11 @@
-import type { Goal, ExperienceLevel, EquipmentSetup, FocusArea, Profile } from "./profile";
+import {
+  getProfileGoals,
+  type Goal,
+  type ExperienceLevel,
+  type EquipmentSetup,
+  type FocusArea,
+  type Profile,
+} from "./profile";
 import imgLowerBodyBurn from "@/assets/workouts/covers/sora-lower-strength-v2.png";
 import imgPushStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
 import imgPullStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
@@ -574,7 +581,10 @@ function scoreWorkout(w: Workout, p: Profile): number {
   // Hard requirement: equipment must match
   if (!matchesEquipment(w, p.equipment)) s -= 1000;
   // Goal match
-  if (w.recommendedForGoals.includes(p.goal)) s += 30;
+  const selectedGoals = getProfileGoals(p);
+  const matchedGoals = selectedGoals.filter((goal) => w.recommendedForGoals.includes(goal));
+  s += matchedGoals.length * 24;
+  if (w.recommendedForGoals.includes(p.goal)) s += 6;
   // Experience match
   if (w.recommendedForLevels.includes(p.experience)) s += 20;
   else if (
@@ -590,7 +600,7 @@ function scoreWorkout(w: Workout, p: Profile): number {
   s += Math.max(0, 15 - diff / 2);
   // Stable profile-specific variety keeps equally matched users from seeing
   // an identical order while preserving the same catalog across reloads.
-  const fingerprint = `${p.name}|${p.completedAt}|${p.goal}|${p.experience}|${p.equipment}`;
+  const fingerprint = `${p.name}|${p.completedAt}|${selectedGoals.join(",")}|${p.experience}|${p.equipment}`;
   let variety = 2166136261;
   const varietyText = `${fingerprint}|${w.id}`;
   for (let index = 0; index < varietyText.length; index += 1) {

@@ -17,11 +17,40 @@ export type ScenePropKind =
 function useGymMaterials() {
   return useMemo(
     () => ({
-      rubber: new THREE.MeshStandardMaterial({ color: "#0a0d12", roughness: 0.62, metalness: 0.08 }),
+      rubber: new THREE.MeshStandardMaterial({
+        color: "#0a0d12",
+        roughness: 0.62,
+        metalness: 0.08,
+      }),
       metal: new THREE.MeshStandardMaterial({ color: "#8a939f", roughness: 0.24, metalness: 0.85 }),
-      darkMetal: new THREE.MeshStandardMaterial({ color: "#2a2f38", roughness: 0.42, metalness: 0.6 }),
+      darkMetal: new THREE.MeshStandardMaterial({
+        color: "#2a2f38",
+        roughness: 0.42,
+        metalness: 0.6,
+      }),
       pad: new THREE.MeshStandardMaterial({ color: "#1c222d", roughness: 0.72, metalness: 0.02 }),
       accent: new THREE.MeshStandardMaterial({ color: "#39424f", roughness: 0.5, metalness: 0.3 }),
+      selector: new THREE.MeshStandardMaterial({
+        color: "#f2bd16",
+        emissive: "#7d5500",
+        emissiveIntensity: 0.34,
+        roughness: 0.34,
+        metalness: 0.42,
+      }),
+      guide: new THREE.MeshStandardMaterial({
+        color: "#30a9ff",
+        emissive: "#0875cf",
+        emissiveIntensity: 0.8,
+        roughness: 0.28,
+        metalness: 0.08,
+      }),
+      rope: new THREE.MeshStandardMaterial({
+        color: "#a3ff44",
+        emissive: "#4c9b12",
+        emissiveIntensity: 0.65,
+        roughness: 0.48,
+        metalness: 0.04,
+      }),
       matTop: new THREE.MeshStandardMaterial({ color: "#141a24", roughness: 0.85, metalness: 0 }),
     }),
     [],
@@ -97,13 +126,51 @@ export function CableBarProp({ scale = 1 }: { scale?: number }) {
         <cylinderGeometry args={[0.014, 0.014, 1.05, 14]} />
       </mesh>
       {[-0.45, 0.45].map((x) => (
-        <mesh key={x} castShadow material={m.rubber} position={[x, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh
+          key={x}
+          castShadow
+          material={m.rubber}
+          position={[x, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+        >
           <cylinderGeometry args={[0.02, 0.02, 0.14, 12]} />
         </mesh>
       ))}
       <mesh material={m.darkMetal} position={[0, 0.42, 0]}>
         <cylinderGeometry args={[0.008, 0.008, 0.85, 8]} />
       </mesh>
+    </group>
+  );
+}
+
+// Rope attachment for rows, face pulls, pushdowns, and other cable work.
+// The forked shape stays between both hands while the live cable tether is
+// rendered by the athlete component.
+export function CableRopeProp({ scale = 1 }: { scale?: number }) {
+  const m = useGymMaterials();
+  return (
+    <group scale={scale}>
+      <mesh castShadow material={m.metal} position={[0, 0.16, 0]}>
+        <torusGeometry args={[0.026, 0.009, 10, 20]} />
+      </mesh>
+      {([-1, 1] as const).map((side) => (
+        <group key={side} rotation={[0, 0, side * -0.42]}>
+          <mesh castShadow material={m.rope} position={[side * 0.075, -0.045, 0]}>
+            <capsuleGeometry args={[0.012, 0.2, 5, 10]} />
+          </mesh>
+          <mesh
+            castShadow
+            material={m.rubber}
+            position={[side * 0.145, -0.145, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+          >
+            <capsuleGeometry args={[0.022, 0.1, 5, 12]} />
+          </mesh>
+          <mesh material={m.rope} position={[side * 0.205, -0.145, 0]}>
+            <sphereGeometry args={[0.03, 14, 10]} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -140,7 +207,12 @@ function PullupBar() {
           <boxGeometry args={[0.07, PULLUP_BAR_Y, 0.07]} />
         </mesh>
       ))}
-      <mesh castShadow material={m.metal} position={[0, PULLUP_BAR_Y, 0]} rotation={[0, 0, Math.PI / 2]}>
+      <mesh
+        castShadow
+        material={m.metal}
+        position={[0, PULLUP_BAR_Y, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+      >
         <cylinderGeometry args={[0.017, 0.017, 1.2, 16]} />
       </mesh>
       {[-0.56, 0.56].map((x) => (
@@ -165,6 +237,17 @@ function CableColumn() {
       <mesh castShadow material={m.metal} position={[0, 1.28, 0.16]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.045, 0.045, 0.05, 18]} />
       </mesh>
+      <mesh castShadow material={m.selector} position={[0, 1.28, 0.2]}>
+        <boxGeometry args={[0.2, 0.16, 0.08]} />
+      </mesh>
+      <group position={[0, 1.04, 0.23]}>
+        <mesh material={m.guide} position={[0, 0.07, 0]}>
+          <cylinderGeometry args={[0.025, 0.025, 0.15, 12]} />
+        </mesh>
+        <mesh material={m.guide} position={[0, -0.055, 0]} rotation={[0, 0, Math.PI]}>
+          <coneGeometry args={[0.075, 0.13, 16]} />
+        </mesh>
+      </group>
       <mesh castShadow receiveShadow material={m.rubber} position={[0, 0.03, 0.1]}>
         <boxGeometry args={[0.44, 0.06, 0.5]} />
       </mesh>

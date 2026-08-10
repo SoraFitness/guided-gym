@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -13,6 +13,7 @@ import {
   HeartPulse,
   MessageCircle,
   Play,
+  RefreshCw,
   ScanLine,
   Sparkles,
   Target,
@@ -20,7 +21,7 @@ import {
   Utensils,
   Zap,
 } from "lucide-react";
-import { useProfile } from "@/lib/profile";
+import { FOCUS_LABELS, useProfile, type FocusArea } from "@/lib/profile";
 import { getWorkout, workoutRecommendationService, type Workout } from "@/lib/workouts";
 import { weeklyScheduleService, type WeeklyScheduleDay } from "@/lib/weeklySchedule";
 import { WorkoutCardHero } from "@/components/WorkoutCard";
@@ -31,6 +32,7 @@ import { QuickLogFab } from "@/components/weekly/QuickLogFab";
 import { listNotifications } from "@/lib/weeklyReport.functions";
 import { cn } from "@/lib/utils";
 import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
+import { useCompletedWorkouts, type CompletedWorkout } from "@/lib/workoutSessionStore";
 
 export const Route = createFileRoute("/_app/home")({
   head: () => ({ meta: [{ title: "Home — Ascendr" }] }),
@@ -49,9 +51,12 @@ const GOAL_SUBTITLES: Record<string, string> = {
 
 function HomePage() {
   const { profile } = useProfile();
-  const displayName = getDisplayName(profile?.name);
+  const displayName =
+    profile?.name?.trim().toLowerCase() === "sahil" ? "Admin" : getDisplayName(profile?.name);
   const { totals, goals } = useNutrition();
   const progress = useProgress(profile?.sessionMinutes ?? 30);
+  const completedWorkouts = useCompletedWorkouts();
+  const [dismissedRecoveryCheck, setDismissedRecoveryCheck] = useState(false);
   const savedPlans = useSavedWorkoutPlans();
   const activePlan = useMemo(
     () => getActiveWorkoutPlan(savedPlans, profile),
@@ -78,6 +83,10 @@ function HomePage() {
         : [],
     [profile, scheduledWorkout?.id],
   );
+  const adaptiveInsight = useMemo(
+    () => getAdaptiveTrainingInsight(completedWorkouts, heroWorkout, recommended),
+    [completedWorkouts, heroWorkout, recommended],
+  );
 
   const listNotif = useServerFn(listNotifications);
   const { data: notifs } = useQuery({
@@ -92,13 +101,13 @@ function HomePage() {
     : "Your training, nutrition, and progress in one place";
 
   return (
-    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
+    <div className="animate-slide-up px-4 pb-6 pt-4 sm:px-5 sm:pb-8 sm:pt-5">
       <header data-tour="tour-home-header" className="flex items-center justify-between gap-4 px-1">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neon">
             {formatToday()}
           </p>
-          <h1 className="mt-1 truncate text-[25px] font-extrabold leading-tight tracking-[-0.03em]">
+          <h1 className="mt-1 truncate text-[clamp(21px,6.4vw,25px)] font-extrabold leading-tight tracking-[-0.03em]">
             {getGreeting()}, {displayName}
           </h1>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">{subtitle}</p>
@@ -117,7 +126,19 @@ function HomePage() {
         </Link>
       </header>
 
-      <section data-tour="tour-today-workout" className="mt-5">
+      {adaptiveInsight && !dismissedRecoveryCheck && (
+        <section className="mt-4">
+          <AdaptivePlanCard
+            insight={adaptiveInsight}
+            onKeepPlan={() => setDismissedRecoveryCheck(true)}
+          />
+        </section>
+      )}
+
+      <section
+        data-tour="tour-today-workout"
+        className={cn(adaptiveInsight && !dismissedRecoveryCheck ? "mt-3" : "mt-4 sm:mt-5")}
+      >
         <TodayHero
           plan={todayPlan}
           workout={heroWorkout}
@@ -200,6 +221,66 @@ function HomePage() {
   );
 }
 
+type AdaptiveTrainingInsight = {
+  overlap: FocusArea[];
+  alternative: Workout;
+  hoursSince: number;
+};
+
+function AdaptivePlanCard({
+  insight,
+  onKeepPlan,
+}: {
+  insight: AdaptiveTrainingInsight;
+  onKeepPlan: () => void;
+}) {
+  const muscleList = formatAreaList(insight.overlap);
+  const timing = insight.hoursSince < 24 ? "within the last day" : "yesterday";
+
+  return (
+    <div className="relative overflow-hidden rounded-[23px] border border-neon/20 bg-gradient-to-br from-neon/[0.11] via-surface to-surface p-4 shadow-[0_20px_42px_-30px_var(--color-neon)]">
+      <div className="pointer-events-none absolute -right-8 -top-12 size-32 rounded-full bg-neon/10 blur-3xl" />
+      <div className="relative flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground shadow-[0_0_24px_-10px_var(--color-neon)]">
+          <RefreshCw className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[9px] font-extrabold uppercase tracking-[0.19em] text-neon">
+            Smart recovery check
+          </p>
+          <h2 className="mt-1 text-[15px] font-extrabold leading-tight">
+            Give {muscleList} more recovery?
+          </h2>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+            You trained {muscleList} {timing}. Switching focus may keep today&apos;s work more
+            productive.
+          </p>
+        </div>
+      </div>
+      <div className="relative mt-3 grid grid-cols-[1fr_auto] gap-2">
+        <Link
+          to="/workout/$id"
+          params={{ id: insight.alternative.id }}
+          className="flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full bg-neon px-4 text-[11px] font-extrabold text-neon-foreground transition active:scale-[0.98]"
+        >
+          Switch to{" "}
+          {insight.alternative.targetMuscles[0]
+            ? FOCUS_LABELS[insight.alternative.targetMuscles[0]]
+            : "another focus"}
+          <ChevronRight className="size-3.5 shrink-0" />
+        </Link>
+        <button
+          type="button"
+          onClick={onKeepPlan}
+          className="h-10 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 text-[10px] font-bold text-white/75"
+        >
+          Keep plan
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TodayHero({
   plan,
   workout,
@@ -225,7 +306,7 @@ function TodayHero({
     : (plan?.estimatedCalories ?? workout?.calories ?? 0);
 
   return (
-    <div className="relative min-h-[355px] overflow-hidden rounded-[30px] border border-white/[0.08] bg-surface-2 shadow-[0_28px_65px_-32px_oklch(0_0_0/0.95)]">
+    <div className="relative min-h-[305px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-surface-2 shadow-[0_28px_65px_-32px_oklch(0_0_0/0.95)] sm:min-h-[355px] sm:rounded-[30px]">
       {workout?.image && (
         <img
           src={workout.image}
@@ -237,7 +318,7 @@ function TodayHero({
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/25 to-black" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(0.92_0.21_130/0.16),transparent_38%)]" />
 
-      <div className="relative flex min-h-[355px] flex-col p-5">
+      <div className="relative flex min-h-[305px] flex-col p-4 sm:min-h-[355px] sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] backdrop-blur-md">
             {isRecovery ? (
@@ -267,7 +348,7 @@ function TodayHero({
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
             {isRecovery ? "Reset · Restore · Recover" : plan?.splitLabel}
           </p>
-          <h2 className="mt-2 text-[30px] font-extrabold leading-[1.02] tracking-[-0.04em]">
+          <h2 className="mt-2 text-[26px] font-extrabold leading-[1.02] tracking-[-0.04em] sm:text-[30px]">
             {isRecovery ? "Recovery is part of the plan." : (workout?.title ?? plan?.workoutTitle)}
           </h2>
           <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-white/65">
@@ -340,7 +421,7 @@ function NutritionSnapshot({
     <Link
       data-tour="tour-nutrition-card"
       to="/nutrition"
-      className="group relative min-h-[190px] overflow-hidden rounded-[25px] border border-white/[0.06] bg-surface p-4 transition active:scale-[0.99]"
+      className="group relative min-h-[172px] overflow-hidden rounded-[22px] border border-white/[0.06] bg-surface p-3.5 transition active:scale-[0.99] sm:min-h-[190px] sm:rounded-[25px] sm:p-4"
     >
       <div className="absolute right-[-34px] top-[-36px] size-28 rounded-full bg-neon/[0.07] blur-2xl" />
       <div className="relative flex items-center justify-between">
@@ -399,7 +480,7 @@ function ActivitySnapshot({
     <Link
       data-tour="tour-progress-card"
       to="/progress"
-      className="group relative min-h-[190px] overflow-hidden rounded-[25px] border border-white/[0.06] bg-surface p-4 transition active:scale-[0.99]"
+      className="group relative min-h-[172px] overflow-hidden rounded-[22px] border border-white/[0.06] bg-surface p-3.5 transition active:scale-[0.99] sm:min-h-[190px] sm:rounded-[25px] sm:p-4"
     >
       <div className="absolute right-[-32px] top-[-34px] size-28 rounded-full bg-sky-400/[0.06] blur-2xl" />
       <div className="relative flex items-center justify-between">
@@ -584,4 +665,89 @@ function formatToday() {
 
 function percent(value: number, goal: number) {
   return goal ? Math.min(100, Math.max(0, Math.round((value / goal) * 100))) : 0;
+}
+
+function getAdaptiveTrainingInsight(
+  completedWorkouts: CompletedWorkout[],
+  todayWorkout: Workout | null,
+  alternatives: Workout[],
+): AdaptiveTrainingInsight | null {
+  if (!todayWorkout || completedWorkouts.length === 0) return null;
+
+  const recent = [...completedWorkouts]
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+    .find((workout) => {
+      const completedAt = new Date(workout.completedAt).getTime();
+      const age = Date.now() - completedAt;
+      return Number.isFinite(completedAt) && age >= 0 && age <= 48 * 60 * 60 * 1000;
+    });
+
+  if (!recent) return null;
+
+  const recentAreas = new Set(
+    recent.exercises
+      .map((exercise) => focusAreaFromMuscleGroup(exercise.muscleGroup))
+      .filter((area): area is FocusArea => Boolean(area)),
+  );
+  const overlap = todayWorkout.targetMuscles.filter(
+    (area) => BODY_FOCUS_AREAS.has(area) && recentAreas.has(area),
+  );
+
+  if (overlap.length === 0) return null;
+
+  const alternative = alternatives.find(
+    (workout) =>
+      workout.targetMuscles.some((area) => BODY_FOCUS_AREAS.has(area)) &&
+      workout.targetMuscles.every((area) => !overlap.includes(area)),
+  );
+  if (!alternative) return null;
+
+  return {
+    overlap: [...new Set(overlap)],
+    alternative,
+    hoursSince: Math.max(
+      0,
+      Math.round((Date.now() - new Date(recent.completedAt).getTime()) / (60 * 60 * 1000)),
+    ),
+  };
+}
+
+const BODY_FOCUS_AREAS = new Set<FocusArea>(["chest", "back", "legs", "glutes", "arms", "core"]);
+
+function focusAreaFromMuscleGroup(value: string): FocusArea | null {
+  const muscle = value.toLowerCase();
+  if (muscle.includes("chest") || muscle.includes("pec")) return "chest";
+  if (muscle.includes("back") || muscle.includes("lat") || muscle.includes("trap")) {
+    return "back";
+  }
+  if (muscle.includes("glute")) return "glutes";
+  if (
+    muscle.includes("quad") ||
+    muscle.includes("hamstring") ||
+    muscle.includes("calf") ||
+    muscle.includes("leg")
+  ) {
+    return "legs";
+  }
+  if (
+    muscle.includes("arm") ||
+    muscle.includes("bicep") ||
+    muscle.includes("tricep") ||
+    muscle.includes("shoulder") ||
+    muscle.includes("delt") ||
+    muscle.includes("forearm")
+  ) {
+    return "arms";
+  }
+  if (muscle.includes("core") || muscle.includes("ab") || muscle.includes("oblique")) {
+    return "core";
+  }
+  return null;
+}
+
+function formatAreaList(areas: FocusArea[]) {
+  const labels = areas.map((area) => FOCUS_LABELS[area].toLowerCase());
+  if (labels.length <= 1) return labels[0] ?? "those muscles";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
 }

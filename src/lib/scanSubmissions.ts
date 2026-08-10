@@ -15,8 +15,27 @@ interface SaveScanSubmissionInput {
 }
 
 function makeUuid() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  throw new Error("This browser cannot create a secure scan identifier.");
+  if (typeof crypto !== "undefined") {
+    if (typeof crypto.randomUUID === "function") {
+      try {
+        return crypto.randomUUID();
+      } catch {
+        // Some mobile browsers expose randomUUID but block it on a LAN HTTP origin.
+      }
+    }
+
+    // getRandomValues remains available on mobile HTTP origins even when randomUUID is not.
+    // Set the RFC 4122 version/variant bits so Supabase accepts the value as a UUID column.
+    if (typeof crypto.getRandomValues === "function") {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+  }
+
+  throw new Error("This browser cannot securely prepare the scan. Try a modern browser.");
 }
 
 async function dataUrlToJpeg(dataUrl: string): Promise<Blob> {

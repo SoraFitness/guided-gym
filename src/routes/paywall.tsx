@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -19,8 +19,19 @@ import {
 import { cn } from "@/lib/utils";
 import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
 import { useProfile } from "@/lib/profile";
+import { useAuthSession } from "@/lib/authSession";
+import { syncProfileToCloud } from "@/lib/profileSync";
+import {
+  clearOnboardingResume,
+  getOnboardingPaywallCheckpoint,
+  markOnboardingPaywallVisited,
+} from "@/lib/onboardingResume";
 
 export const Route = createFileRoute("/paywall")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    source:
+      search.source === "body-scan" || search.source === "face-scan" ? search.source : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Unlock Premium — Ascendr Pro" },
@@ -47,33 +58,71 @@ const FEATURES = [
 
 function PaywallScreen() {
   const navigate = useNavigate();
+  const { source } = Route.useSearch();
   const { profile, updateProfile } = useProfile();
+  const session = useAuthSession();
+  const scanOffer = source === "body-scan" || source === "face-scan";
+  const faceScanOffer = source === "face-scan";
   const [selected, setSelected] = useState<Plan>("yearly");
   const [purchasing, setPurchasing] = useState(false);
   const [referral, setReferral] = useState(profile?.referralCode ?? "");
   const [referralApplied, setReferralApplied] = useState(!!profile?.referralCode);
-  const [referralOpen, setReferralOpen] = useState(!!profile?.referralCode);
+  const [referralSaving, setReferralSaving] = useState(false);
+  const [checkpoint] = useState(() => getOnboardingPaywallCheckpoint());
+  const returningUser = Boolean(checkpoint?.lastVisitedAt);
 
-  const applyReferral = () => {
+  useEffect(() => {
+    markOnboardingPaywallVisited();
+  }, []);
+
+  const continueAfterUnlock = () => {
+    clearOnboardingResume();
+    if (scanOffer) {
+      if (faceScanOffer) {
+        navigate({ to: "/scan/face", search: { pending: "onboarding" } });
+      } else {
+        navigate({ to: "/scan/body/new", search: { pending: "onboarding" } });
+      }
+    } else {
+      navigate({ to: "/home" });
+    }
+  };
+
+  const applyReferral = async () => {
     const code = referral.trim().toUpperCase();
     if (!code) return;
     setReferral(code);
-    if (profile) updateProfile({ referralCode: code });
-    setReferralApplied(true);
+    if (!profile) return;
+
+    const nextProfile = { ...profile, referralCode: code };
+    updateProfile({ referralCode: code });
+    setReferralSaving(true);
+    try {
+      if (session && session !== "loading") {
+        await syncProfileToCloud(session.userId, nextProfile);
+      }
+      setReferralApplied(true);
+    } catch (error) {
+      console.warn("[paywall] Referral code saved locally; cloud sync will retry", error);
+      setReferralApplied(true);
+    } finally {
+      setReferralSaving(false);
+    }
   };
 
   const handlePurchase = () => {
     setPurchasing(true);
     setTimeout(() => {
       subscribe(selected);
-      navigate({ to: "/home" });
+      continueAfterUnlock();
     }, 900);
   };
 
   const handleRestore = () => {
     const sub = restorePurchases();
-    if (sub.active) navigate({ to: "/home" });
-    else alert("No previous purchases found.");
+    if (sub.active) {
+      continueAfterUnlock();
+    } else alert("No previous purchases found.");
   };
 
   return (
@@ -107,8 +156,26 @@ function PaywallScreen() {
           className="mt-8 flex items-center gap-2"
         >
           <Sparkles className="h-4 w-4 text-neon" />
-          <span className="text-xs font-bold tracking-[0.25em] text-neon">{APP_NAME}</span>
+          <span className="text-xs font-bold tracking-[0.25em] text-neon">
+            {scanOffer ? `ASCENDR ${faceScanOffer ? "FACE" : "BODY"} SCAN` : APP_NAME}
+          </span>
         </motion.div>
+
+        {returningUser && checkpoint && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-5 rounded-2xl border border-neon/20 bg-neon/[0.07] px-4 py-3"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+              Welcome back, {checkpoint.name}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Your answers and personalized setup are saved. You can continue exactly where you left
+              off.
+            </p>
+          </motion.div>
+        )}
 
         {/* Headline */}
         <motion.h1
@@ -116,12 +183,49 @@ function PaywallScreen() {
           animate={{ opacity: 1, y: 0, transition: { delay: 0.05 } }}
           className="mt-3 text-[40px] leading-[1.05] font-bold tracking-tight"
         >
-          Unlock Your <span className="text-neon">Best Body</span>
+          {scanOffer ? (
+            <>
+              Your Analysis Is <span className="text-neon">Ready</span>
+            </>
+          ) : (
+            <>
+              Unlock Your <span className="text-neon">Best Body</span>
+            </>
+          )}
         </motion.h1>
-        <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
+        {scanOffer && (
+          <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
+            {faceScanOffer
+              ? "Unlock your appearance score, facial symmetry, jawline, skin, eye-area, looksmax potential, and personalized action plan."
+              : "Unlock your full physique score, muscle development, symmetry, body-fat range, potential, and personalized action plan."}
+          </p>
+        )}
+        <p
+          className={cn(
+            "mt-4 text-[15px] leading-relaxed text-muted-foreground",
+            scanOffer && "hidden",
+          )}
+        >
           Personalized workouts, nutrition tools, progress tracking, and premium fitness insights —
           your complete training system.
         </p>
+
+        {scanOffer && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-neon/25 bg-neon/[0.07] p-4">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-neon text-neon-foreground">
+              <Scan className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-bold">
+                Your {faceScanOffer ? "face" : "body"} analysis is ready
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                Your private AI report is complete. Subscribe to reveal every score, insight, and
+                action step.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Social proof */}
         <div className="mt-5 flex items-center gap-3">
@@ -152,18 +256,73 @@ function PaywallScreen() {
         </div>
 
         {/* Plan cards — moved to top */}
-        <div className="mt-7 space-y-3">
+        <div className="mt-7 space-y-2">
           <PlanCard
             plan="yearly"
             selected={selected === "yearly"}
             onSelect={() => setSelected("yearly")}
-            badge="BEST VALUE · SAVE 90%"
+            badge="SAVE 79%"
+          />
+          <PlanCard
+            plan="monthly"
+            selected={selected === "monthly"}
+            onSelect={() => setSelected("monthly")}
           />
           <PlanCard
             plan="weekly"
             selected={selected === "weekly"}
             onSelect={() => setSelected("weekly")}
           />
+        </div>
+        <p className="mt-3 px-2 text-center text-[10px] leading-snug text-muted-foreground/70">
+          Subscription auto-renews until canceled at least 24 hours before the end of the current
+          period. Manage it in your App Store account settings.
+        </p>
+
+        {/* Optional referral code lives at checkout, not in onboarding. */}
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-neon/20 bg-neon/10 text-neon">
+              <Tag className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-bold">Referral code</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Optional — apply a creator or friend code before checkout.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              value={referral}
+              onChange={(event) => {
+                setReferral(event.target.value.toUpperCase());
+                setReferralApplied(false);
+              }}
+              placeholder="ENTER CODE"
+              maxLength={24}
+              aria-label="Referral code"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 text-sm font-semibold tracking-widest uppercase outline-none focus:border-neon/40"
+            />
+            <button
+              type="button"
+              onClick={() => void applyReferral()}
+              disabled={!referral.trim() || referralSaving}
+              className={cn(
+                "h-11 rounded-xl px-4 text-sm font-semibold transition",
+                referral.trim() && !referralSaving
+                  ? "bg-neon text-neon-foreground"
+                  : "bg-white/[0.05] text-muted-foreground",
+              )}
+            >
+              {referralSaving ? "Saving…" : "Apply"}
+            </button>
+          </div>
+          {referralApplied && (
+            <div className="mt-3 flex items-center gap-2 text-xs font-medium text-neon">
+              <Check className="size-4" strokeWidth={3} /> Code saved to your Ascendr profile
+            </div>
+          )}
         </div>
 
         {/* Benefits */}
@@ -191,59 +350,11 @@ function PaywallScreen() {
           </h2>
           <ComparisonTable />
         </div>
-
-        {/* Referral code */}
-        <div className="mt-6">
-          {!referralOpen ? (
-            <button
-              onClick={() => setReferralOpen(true)}
-              className="w-full h-12 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition"
-            >
-              <Tag className="h-4 w-4" />
-              Have a referral code?
-            </button>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
-                <Tag className="h-3.5 w-3.5" /> Referral code
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  value={referral}
-                  onChange={(e) => {
-                    setReferral(e.target.value.toUpperCase());
-                    setReferralApplied(false);
-                  }}
-                  placeholder="ENTER CODE"
-                  maxLength={24}
-                  className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tracking-widest uppercase outline-none focus:border-neon/40"
-                />
-                <button
-                  onClick={applyReferral}
-                  disabled={!referral.trim()}
-                  className={cn(
-                    "h-11 px-4 rounded-xl text-sm font-semibold transition",
-                    referral.trim()
-                      ? "bg-neon text-neon-foreground"
-                      : "bg-white/[0.05] text-muted-foreground",
-                  )}
-                >
-                  Apply
-                </button>
-              </div>
-              {referralApplied && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-neon">
-                  <Check className="h-4 w-4" strokeWidth={3} /> Code saved
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Sticky CTA */}
       <div
-        className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-8"
+        className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-2"
         style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
       >
         <div className="mx-auto max-w-md px-5">
@@ -261,7 +372,8 @@ function PaywallScreen() {
               "Processing…"
             ) : (
               <>
-                Unlock Premium <ArrowRight className="h-5 w-5" />
+                {scanOffer ? "Unlock My Results" : "Unlock Premium"}
+                <ArrowRight className="h-5 w-5" />
               </>
             )}
           </button>
@@ -274,18 +386,14 @@ function PaywallScreen() {
               Restore Purchases
             </button>
             <span className="opacity-40">·</span>
-            <a href="#" className="hover:text-foreground">
+            <a href="/terms" className="hover:text-foreground">
               Terms
             </a>
             <span className="opacity-40">·</span>
-            <a href="#" className="hover:text-foreground">
+            <a href="/privacy" className="hover:text-foreground">
               Privacy
             </a>
           </div>
-          <p className="mt-2 text-center text-[10px] leading-snug text-muted-foreground/70 px-4">
-            Subscription auto-renews until canceled at least 24 hours before the end of the current
-            period. Manage in account settings.
-          </p>
         </div>
       </div>
     </div>
@@ -308,35 +416,33 @@ function PlanCard({
     <button
       onClick={onSelect}
       className={cn(
-        "w-full text-left relative rounded-2xl border p-4 transition-all",
+        "relative w-full rounded-full border px-4 py-3 text-left transition-all",
         selected
           ? "border-neon bg-neon/[0.06] shadow-[0_0_0_1px_var(--neon),0_8px_30px_-10px_color-mix(in_oklab,var(--neon)_50%,transparent)]"
           : "border-white/10 bg-white/[0.03] hover:border-white/20",
       )}
     >
       {badge && (
-        <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-neon text-neon-foreground text-[10px] font-bold tracking-wider">
+        <span className="absolute right-4 top-0 -translate-y-1/2 whitespace-nowrap rounded-full bg-neon px-2 py-0.5 text-[9px] font-bold tracking-wider text-neon-foreground">
           {badge}
         </span>
       )}
       <div className="flex items-center gap-3">
         <div
           className={cn(
-            "h-5 w-5 rounded-full border-2 grid place-items-center shrink-0",
+            "grid h-5 w-5 shrink-0 place-items-center rounded-full border-2",
             selected ? "border-neon bg-neon" : "border-white/30",
           )}
         >
           {selected && <Check className="h-3 w-3 text-neon-foreground" strokeWidth={3} />}
         </div>
-        <div className="flex-1">
-          <div className="flex items-baseline justify-between">
-            <span className="font-semibold">{p.label}</span>
-            <span className="text-lg font-bold">
-              {p.price}
-              <span className="text-xs font-medium text-muted-foreground">{p.per}</span>
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">{p.subtitle}</p>
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-semibold">{p.label}</span>
+          <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{p.subtitle}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="text-lg font-bold leading-none">{p.price}</span>
+          <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">{p.per}</span>
         </div>
       </div>
     </button>

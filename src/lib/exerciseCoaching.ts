@@ -529,6 +529,27 @@ export function getExerciseDemoInfo(
     exercise.demoType,
     exercise.muscleGroup,
   );
+  if (/face[- ]pull/i.test(exercise.name)) {
+    return adjustForContext(
+      {
+        animation,
+        equipment,
+        primaryMuscles: ["rearDelts", "midBack"],
+        secondaryMuscles: ["traps", "biceps", "forearms"],
+        formInstructions: [
+          "Set the cable near eye level and step back until the rope is taut.",
+          "Pull toward your temples while driving the elbows wide.",
+          "Pause with the shoulder blades together, then reach forward under control.",
+        ],
+        breathing: "Exhale as you pull the rope in. Inhale during the controlled reach.",
+        mistakes: ["Shrugging the shoulders", "Dropping the elbows", "Leaning back to finish"],
+        safetyTips: ["Use a light load that lets the shoulders rotate without pain."],
+        trainerCue: "Pull to the temples and show your elbows to the walls.",
+      },
+      experience,
+      goal,
+    );
+  }
   return adjustForContext({ ...DEMOS[animation], equipment }, experience, goal);
 }
 

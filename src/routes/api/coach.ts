@@ -95,36 +95,7 @@ export const Route = createFileRoute("/api/coach")({
           return new Response("Unauthorized", { status: 401 });
         }
 
-        if (supabase && userId) {
-          // Verify the thread belongs to this user
-          const { data: thread } = await supabase
-            .from("coach_threads")
-            .select("id")
-            .eq("id", threadId)
-            .eq("user_id", userId)
-            .maybeSingle();
-          if (!thread) return new Response("Thread not found", { status: 404 });
-        }
-
-        // Persist latest user message before streaming (last item of messages)
         const lastUser = [...messages].reverse().find((m) => m.role === "user");
-        if (supabase && userId && lastUser) {
-          // Avoid duplicate insert on retries by checking id existence
-          const { data: existing } = await supabase
-            .from("coach_messages")
-            .select("id")
-            .eq("id", lastUser.id)
-            .maybeSingle();
-          if (!existing) {
-            await supabase.from("coach_messages").insert({
-              id: lastUser.id,
-              thread_id: threadId,
-              user_id: userId,
-              role: "user",
-              parts: lastUser.parts as unknown as Json,
-            });
-          }
-        }
 
         const openrouter = createOpenRouterProvider(key);
         const model = openrouter(OPENROUTER_COACH_MODEL);
@@ -135,11 +106,21 @@ export const Route = createFileRoute("/api/coach")({
         const authedUserId = userId;
         let memories: string[] = [];
         if (authedSupabase && authedUserId) {
-          const { data: mem } = await authedSupabase
-            .from("coach_user_memory")
-            .select("memories")
-            .eq("user_id", authedUserId)
-            .maybeSingle();
+          const [threadResult, memoryResult] = await Promise.all([
+            authedSupabase
+              .from("coach_threads")
+              .select("id")
+              .eq("id", threadId)
+              .eq("user_id", authedUserId)
+              .maybeSingle(),
+            authedSupabase
+              .from("coach_user_memory")
+              .select("memories")
+              .eq("user_id", authedUserId)
+              .maybeSingle(),
+          ]);
+          if (!threadResult.data) return new Response("Thread not found", { status: 404 });
+          const mem = memoryResult.data;
           if (Array.isArray(mem?.memories)) {
             memories = (mem.memories as unknown[]).filter(
               (m): m is string => typeof m === "string",
@@ -230,25 +211,27 @@ export const Route = createFileRoute("/api/coach")({
                 .join("\n")}`
             : "";
 
-        const system = `${SYSTEM_PROMPT}${memoryBlock}\n\nUSER_CONTEXT:\n${JSON.stringify(
-          userContext ?? {},
-          null,
-          2,
-        )}`;
+        const system = `${SYSTEM_PROMPT}${memoryBlock}\n\nUSER_CONTEXT:${JSON.stringify(userContext ?? {})}`;
+        const recentMessages = messages.slice(-12);
 
         const result = streamText({
           model,
           system,
-          messages: await convertToModelMessages(messages),
+          messages: await convertToModelMessages(recentMessages),
           tools,
-          stopWhen: stepCountIs(50),
+          maxOutputTokens: 600,
+          maxRetries: 1,
+          temperature: 0.25,
+          stopWhen: stepCountIs(4),
           providerOptions: {
-            // Merged into the OpenRouter request body. Qwen 3.5 Plus is a hybrid
-            // reasoning model: low effort keeps coach replies snappy, and exclude
-            // keeps thinking tokens out of the streamed response. Raise effort or
-            // drop exclude to surface step-by-step reasoning in the UI.
             openrouter: {
-              reasoning: { enabled: true, effort: "low", exclude: true },
+              reasoning: { enabled: false, exclude: true },
+              provider: {
+                sort: "latency",
+                allow_fallbacks: true,
+                preferred_max_latency: { p90: 2 },
+              },
+              session_id: threadId,
             },
           },
         });
@@ -260,29 +243,33 @@ export const Route = createFileRoute("/api/coach")({
             const assistant = [...finalMessages].reverse().find((m) => m.role === "assistant");
             if (!assistant) return;
             try {
-              const { data: existing } = await supabase
-                .from("coach_messages")
-                .select("id")
-                .eq("id", assistant.id)
-                .maybeSingle();
-              if (existing) {
-                await supabase
-                  .from("coach_messages")
-                  .update({ parts: assistant.parts as unknown as Json })
-                  .eq("id", assistant.id);
-              } else {
-                await supabase.from("coach_messages").insert({
+              const rows = [
+                ...(lastUser
+                  ? [
+                      {
+                        id: lastUser.id,
+                        thread_id: threadId,
+                        user_id: userId,
+                        role: "user",
+                        parts: lastUser.parts as unknown as Json,
+                      },
+                    ]
+                  : []),
+                {
                   id: assistant.id,
                   thread_id: threadId,
                   user_id: userId,
                   role: "assistant",
                   parts: assistant.parts as unknown as Json,
-                });
-              }
-              await supabase
-                .from("coach_threads")
-                .update({ updated_at: new Date().toISOString() })
-                .eq("id", threadId);
+                },
+              ];
+              await Promise.all([
+                supabase.from("coach_messages").upsert(rows, { onConflict: "id" }),
+                supabase
+                  .from("coach_threads")
+                  .update({ updated_at: new Date().toISOString() })
+                  .eq("id", threadId),
+              ]);
             } catch (e) {
               console.error("[coach] persist assistant failed", e);
             }

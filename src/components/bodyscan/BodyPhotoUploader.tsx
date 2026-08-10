@@ -37,7 +37,7 @@ export function PhotoSlot({
   const handle = async (f: File | undefined) => {
     if (!f) return;
     if (!f.type.startsWith("image/")) {
-      toast.error("Choose an image file to continue.");
+      toast.error("Ascendr scans use a still photo, not a video. Take or choose a photo.");
       return;
     }
     if (f.size > 15 * 1024 * 1024) {
@@ -134,7 +134,7 @@ export function PhotoSlot({
           onClick={() => cameraRef.current?.click()}
           className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white/[0.06] text-sm font-semibold transition hover:bg-white/10 disabled:opacity-40"
         >
-          <Camera className="size-4" /> Camera
+          <Camera className="size-4" /> Take photo
         </button>
         <button
           type="button"
@@ -160,6 +160,9 @@ export function PhotoSlot({
           onChange={(e) => handle(e.target.files?.[0])}
         />
       </div>
+      <p className="mt-2 text-center text-[9px] text-muted-foreground">
+        Still photos only. Video recording is not used for AI scans.
+      </p>
     </div>
   );
 }

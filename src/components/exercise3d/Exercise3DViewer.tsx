@@ -76,7 +76,7 @@ class ViewerErrorBoundary extends Component<BoundaryProps, { error: unknown | nu
 }
 
 function defaultView(config: ExerciseAnimationConfig): ViewPreset {
-  return config.animation === "benchPress" ? "front" : "side";
+  return config.clip === "facePull" ? "side" : "front";
 }
 
 function normalizeSpeed(value: number) {
@@ -101,14 +101,29 @@ function MuscleLegend({ primary, secondary }: { primary: MuscleKey[]; secondary:
   return (
     <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex flex-col gap-1.5">
       <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-white/[0.06] bg-black/55 px-3 py-1.5 text-[11px] font-semibold backdrop-blur">
-        <span className="size-2 rounded-full bg-[#ff2038] shadow-[0_0_12px_rgba(255,32,56,0.8)]" />
+        <span className="size-2 rounded-full bg-[#ff6245] shadow-[0_0_12px_rgba(255,98,69,0.8)]" />
         <span className="truncate">Primary: {primaryText || "Full body"}</span>
       </div>
       <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-white/[0.06] bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white/80 backdrop-blur">
-        <span className="size-2 rounded-full bg-[#ff7a2f] shadow-[0_0_10px_rgba(255,122,47,0.65)]" />
+        <span className="size-2 rounded-full bg-[#45aaff] shadow-[0_0_10px_rgba(69,170,255,0.65)]" />
         <span className="truncate">Secondary: {secondaryText || "Stabilizers"}</span>
       </div>
     </div>
+  );
+}
+
+function ExerciseStudio() {
+  return (
+    <group>
+      <mesh receiveShadow position={[0, 1.55, -2.15]}>
+        <planeGeometry args={[6.4, 3.8]} />
+        <meshStandardMaterial color="#111315" roughness={0.96} metalness={0.01} />
+      </mesh>
+      <mesh position={[0, 1.28, -2.08]}>
+        <circleGeometry args={[1.85, 96]} />
+        <meshBasicMaterial color="#27292b" transparent opacity={0.32} />
+      </mesh>
+    </group>
   );
 }
 
@@ -249,6 +264,7 @@ export function Exercise3DViewer({
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(() => normalizeSpeed(defaultSpeed));
   const [view, setView] = useState<ViewPreset>(() => defaultView(config));
+  const [autoAngles, setAutoAngles] = useState(config.clip === "facePull");
   const [restartToken, setRestartToken] = useState(0);
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -281,11 +297,26 @@ export function Exercise3DViewer({
   useEffect(() => {
     setSpeed(normalizeSpeed(defaultSpeed));
     setView(defaultView(config));
+    setAutoAngles(config.clip === "facePull");
     setFitState({
       distance: Math.max(...config.fitBox.size),
       target: config.fitBox.center,
     });
   }, [config, defaultSpeed]);
+
+  useEffect(() => {
+    if (!playing || !autoAngles || config.clip !== "facePull") return;
+
+    const sequence: ViewPreset[] = ["side", "front", "rear"];
+    let index = 0;
+    setView(sequence[index]);
+    const timer = window.setInterval(() => {
+      index = (index + 1) % sequence.length;
+      setView(sequence[index]);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, [autoAngles, config.clip, playing, restartToken]);
 
   const activePrimary = primaryMuscles.length ? primaryMuscles : config.primaryMuscles;
   const activeSecondary = secondaryMuscles.length ? secondaryMuscles : config.secondaryMuscles;
@@ -324,8 +355,8 @@ export function Exercise3DViewer({
                 far: 40,
               }}
             >
-              <color attach="background" args={["#05070b"]} />
-              <fog attach="fog" args={["#05070b", 6.5, 12]} />
+              <color attach="background" args={["#090a0b"]} />
+              <fog attach="fog" args={["#090a0b", 6.2, 11]} />
               <ResponsiveExerciseCamera
                 config={config}
                 view={view}
@@ -334,11 +365,11 @@ export function Exercise3DViewer({
               />
               {/* No HDR environment map — it requires an external CDN fetch that can
                   suspend the scene forever offline. The light rig below covers it. */}
-              <ambientLight intensity={0.3} />
-              <hemisphereLight args={["#dfe8ff", "#111722", 0.5]} />
+              <ambientLight intensity={0.38} />
+              <hemisphereLight args={["#f4f0e8", "#141517", 0.76]} />
               <directionalLight
                 position={[3.4, 4.8, 3.2]}
-                intensity={1.45}
+                intensity={1.25}
                 castShadow
                 shadow-mapSize-width={2048}
                 shadow-mapSize-height={2048}
@@ -347,12 +378,13 @@ export function Exercise3DViewer({
                 position={[-2.6, 3.4, 2.4]}
                 angle={0.5}
                 penumbra={0.62}
-                intensity={0.72}
-                color="#f5fff4"
+                intensity={0.88}
+                color="#d9f7ff"
               />
-              <pointLight position={[0, 1.4, -2.6]} intensity={0.58} color="#ff3046" />
-              <pointLight position={[2.2, 1.6, -0.8]} intensity={0.38} color="#b7ff4a" />
+              <pointLight position={[-1.9, 1.7, -1.2]} intensity={0.46} color="#ff765b" />
+              <pointLight position={[2.2, 1.6, -0.8]} intensity={0.34} color="#6ab8ff" />
               <Suspense fallback={null}>
+                <ExerciseStudio />
                 <SceneProps props={config.props} />
                 <SoraAthlete
                   gender={gender}
@@ -394,8 +426,21 @@ export function Exercise3DViewer({
         )}
 
         <MuscleLegend primary={activePrimary} secondary={activeSecondary} />
+        <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-black/50 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.13em] text-white/70 backdrop-blur">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              playing ? "animate-pulse bg-neon" : "bg-white/35",
+            )}
+          />
+          {playing && autoAngles && config.clip === "facePull"
+            ? "Auto angles"
+            : playing
+              ? "Auto loop"
+              : "Paused"}
+        </div>
         <div className="pointer-events-none absolute bottom-[5.4rem] left-3 z-10 rounded-full border border-white/[0.06] bg-black/45 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/65 backdrop-blur">
-          {selectedModel} Ascendr demo model
+          {selectedModel} model · drag to rotate
         </div>
       </div>
 
@@ -407,10 +452,14 @@ export function Exercise3DViewer({
           cameraPresets={config.cameraPresets}
           onPlayToggle={() => setPlaying((value) => !value)}
           onSpeedCycle={() => setSpeed((value) => cycleSpeed(value))}
-          onViewChange={setView}
+          onViewChange={(nextView) => {
+            setAutoAngles(false);
+            setView(nextView);
+          }}
           onRestart={() => {
             setPlaying(true);
             setSpeed(normalizeSpeed(defaultSpeed));
+            setAutoAngles(config.clip === "facePull");
             setRestartToken((token) => token + 1);
           }}
           onResetCamera={() => setCameraResetToken((token) => token + 1)}

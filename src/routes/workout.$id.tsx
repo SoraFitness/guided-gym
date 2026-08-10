@@ -11,6 +11,7 @@ import { ArrowLeft, Clock, Flame, Play, Heart, Eye } from "lucide-react";
 import { getWorkout, type Workout } from "@/lib/workouts";
 import { startSession, updateSession } from "@/lib/workoutSessionStore";
 import { cn } from "@/lib/utils";
+import { WorkoutMuscleMap } from "@/components/workouts/WorkoutMuscleMap";
 
 export const Route = createFileRoute("/workout/$id")({
   head: ({ params }) => ({
@@ -177,6 +178,12 @@ function WorkoutDetail() {
         </div>
         <h1 className="mt-1 text-3xl font-extrabold">{w.title}</h1>
         <p className="mt-3 text-muted-foreground leading-relaxed">{w.description}</p>
+
+        <WorkoutMuscleMap
+          className="mt-6"
+          targetMuscles={w.targetMuscles}
+          exerciseMuscles={w.exercises.map((exercise) => exercise.muscleGroup)}
+        />
 
         <div className="mt-7 flex items-center justify-between">
           <h2 className="font-bold text-lg">Exercises</h2>

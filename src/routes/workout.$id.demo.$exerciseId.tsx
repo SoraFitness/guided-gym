@@ -161,8 +161,8 @@ function MuscleRow({
 }) {
   const dot =
     tone === "primary"
-      ? "bg-[#ff2038] shadow-[0_0_12px_rgba(255,32,56,0.75)]"
-      : "bg-[#ff7a2f] shadow-[0_0_10px_rgba(255,122,47,0.65)]";
+      ? "bg-[#ff6245] shadow-[0_0_12px_rgba(255,98,69,0.75)]"
+      : "bg-[#45aaff] shadow-[0_0_10px_rgba(69,170,255,0.65)]";
 
   return (
     <div className="flex items-start gap-2">

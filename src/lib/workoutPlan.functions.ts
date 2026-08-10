@@ -16,17 +16,20 @@ const FocusSchema = z.enum([
   "cardio",
   "mobility",
 ]);
+const GoalSchema = z.enum([
+  "lose_weight",
+  "build_muscle",
+  "recomp",
+  "endurance",
+  "maintain",
+  "get_stronger",
+  "overall",
+]);
 const InputSchema = z.object({
-  goal: z.enum([
-    "lose_weight",
-    "build_muscle",
-    "recomp",
-    "endurance",
-    "maintain",
-    "get_stronger",
-    "overall",
-  ]),
+  goal: GoalSchema,
+  goals: z.array(GoalSchema).min(1).max(7).optional(),
   experience: z.enum(["beginner", "intermediate", "advanced"]),
+  currentWorkoutsPerWeek: z.number().int().min(0).max(7).optional(),
   equipment: z.enum(["none", "dumbbells", "gym", "mixed"]),
   focusAreas: z.array(FocusSchema).min(1).max(5),
   daysPerWeek: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
@@ -56,9 +59,17 @@ export interface WorkoutPlanGenerationResult {
   plan: SavedWorkoutPlan;
 }
 
+function requestedGoals(input: WorkoutPlanInput) {
+  return input.goals?.length ? [...new Set(input.goals)] : [input.goal];
+}
+
 function scoreCandidate(workout: (typeof workouts)[number], input: WorkoutPlanInput) {
   let score = 0;
-  if (workout.recommendedForGoals.includes(input.goal)) score += 20;
+  const matchedGoals = requestedGoals(input).filter((goal) =>
+    workout.recommendedForGoals.includes(goal),
+  );
+  score += matchedGoals.length * 18;
+  if (workout.recommendedForGoals.includes(input.goal)) score += 4;
   if (workout.recommendedForLevels.includes(input.experience)) score += 16;
   score += workout.targetMuscles.filter((muscle) => input.focusAreas.includes(muscle)).length * 14;
   score += Math.max(0, 10 - Math.abs(workout.duration - input.sessionMinutes) / 2);
@@ -86,14 +97,28 @@ function buildCandidates(input: WorkoutPlanInput) {
 }
 
 function fallbackPlan(input: WorkoutPlanInput, candidates: ReturnType<typeof buildCandidates>) {
-  const picked = candidates.slice(0, input.daysPerWeek).map(({ workout }) => workout.id);
+  const picked: string[] = [];
+  for (const goal of requestedGoals(input)) {
+    const match = candidates.find(
+      ({ workout }) => !picked.includes(workout.id) && workout.recommendedForGoals.includes(goal),
+    );
+    if (match) picked.push(match.workout.id);
+    if (picked.length >= input.daysPerWeek) break;
+  }
+  for (const { workout } of candidates) {
+    if (!picked.includes(workout.id)) picked.push(workout.id);
+    if (picked.length >= input.daysPerWeek) break;
+  }
   const focus = input.focusAreas
     .map((area) => area.charAt(0).toUpperCase() + area.slice(1))
     .join(" + ");
   const split = getWorkoutSplitOption(input.workoutSplit);
+  const goalSummary = requestedGoals(input)
+    .map((goal) => goal.replaceAll("_", " "))
+    .join(" + ");
   return {
     name: `${split.shortName} · ${focus}`.slice(0, 50),
-    summary: `A balanced ${input.daysPerWeek}-day ${split.shortName.toLowerCase()} plan centered on ${focus.toLowerCase()}, matched to your ${input.sessionMinutes}-minute sessions and available equipment.`,
+    summary: `A balanced ${input.daysPerWeek}-day ${split.shortName.toLowerCase()} plan combining ${goalSummary}, centered on ${focus.toLowerCase()}, and matched to your ${input.sessionMinutes}-minute sessions and available equipment.`,
     workoutIds: picked,
   };
 }

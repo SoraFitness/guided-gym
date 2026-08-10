@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { claimScanQuota } from "@/lib/scanQuota.functions";
 
 const OPENROUTER_FACE_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
 
@@ -243,6 +244,8 @@ export const analyzeFaceScan = createServerFn({ method: "POST" })
     if (existing.kind !== "scan_submission" || existing.scan_type !== "face") {
       throw new Error("Invalid face scan submission.");
     }
+    const alreadyCompleted = parseFaceScanResult(existing.analysis);
+    if (existing.status === "complete" && alreadyCompleted) return alreadyCompleted;
 
     const photoPaths = existing.photo_paths;
     if (!photoPaths || typeof photoPaths !== "object" || Array.isArray(photoPaths)) {
@@ -252,6 +255,8 @@ export const analyzeFaceScan = createServerFn({ method: "POST" })
     if (typeof photoPath !== "string" || !photoPath.startsWith(`${userId}/scans/face/`)) {
       throw new Error("Invalid face scan photo.");
     }
+
+    await claimScanQuota(supabase, data.submissionId, "face");
 
     const processing: Json = {
       ...existing,

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -11,34 +11,58 @@ import {
   ScanLine,
   Sparkles,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { BodyScanReport } from "@/components/scans/BodyScanReport";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
+import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { useAuthSession } from "@/lib/authSession";
 import { analyzeBodyScan, type BodyScanAiResult } from "@/lib/bodyScan.functions";
 import { saveScanSubmission } from "@/lib/scanSubmissions";
 import { deleteScanSubmission } from "@/lib/scanSubmissions.functions";
+import {
+  clearPendingBodyScan,
+  getPendingBodyScan,
+  savePendingBodyScan,
+} from "@/lib/pendingBodyScan";
+import { useSubscription } from "@/lib/subscription";
+import { getScanQuota, quotaLimitMessage } from "@/lib/scanQuota.functions";
 
 export const Route = createFileRoute("/_app/scan/body/new")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    pending: search.pending === "onboarding" ? ("onboarding" as const) : undefined,
+  }),
   head: () => ({ meta: [{ title: "New Body Scan — Ascendr" }] }),
   component: NewBodyScan,
 });
 
 function NewBodyScan() {
   const navigate = useNavigate();
+  const { pending } = Route.useSearch();
   const session = useAuthSession();
+  const subscription = useSubscription();
   const analyze = useServerFn(analyzeBodyScan);
   const deleteSubmission = useServerFn(deleteScanSubmission);
+  const loadQuota = useServerFn(getScanQuota);
   const queryClient = useQueryClient();
   const requestLock = useRef(false);
+  const pendingLoaded = useRef(false);
+  const autoScanStarted = useRef(false);
   const [photo, setPhoto] = useState<string | null>(null);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [result, setResult] = useState<BodyScanAiResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(pending === "onboarding");
+  const pendingLocked = pending === "onboarding" && !subscription.active;
+  const quotaQuery = useQuery({
+    queryKey: ["scan-quota", "body", session && session !== "loading" ? session.userId : "guest"],
+    queryFn: () => loadQuota({ data: { scanType: "body" } }),
+    enabled: Boolean(session && session !== "loading"),
+  });
+  const weeklyLimitReached = quotaQuery.data?.remaining === 0;
 
   function changePhoto(next: string | null) {
     if (submissionId && next !== photo) {
@@ -50,6 +74,10 @@ function NewBodyScan() {
     setSubmissionId(null);
     setResult(null);
     setError(null);
+    if (pending === "onboarding") {
+      if (next) void savePendingBodyScan(next);
+      else void clearPendingBodyScan();
+    }
   }
 
   function reset() {
@@ -57,54 +85,123 @@ function NewBodyScan() {
     setSubmissionId(null);
     setResult(null);
     setError(null);
+    if (pending === "onboarding") void clearPendingBodyScan();
   }
 
-  async function runScan() {
-    if (!photo || session === "loading" || busy) return;
-    if (!session) {
-      const message = "Sign in or create an account first so we can save and analyze your scan.";
-      setError(message);
-      toast.info(message);
-      document
-        .getElementById("body-scan-account")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const runScan = useCallback(
+    async (selectedPhoto = photo) => {
+      if (!selectedPhoto || session === "loading" || busy) return;
+      if (pending === "onboarding" && !subscription.active) {
+        navigate({ to: "/paywall", search: { source: "body-scan" } });
+        return;
+      }
+      if (!session) {
+        const message = "Sign in or create an account first so we can save and analyze your scan.";
+        setError(message);
+        toast.info(message);
+        document
+          .getElementById("body-scan-account")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      if (weeklyLimitReached) {
+        const message = quotaLimitMessage("body");
+        setError(message);
+        toast.info(message);
+        return;
+      }
+      if (requestLock.current) return;
+      requestLock.current = true;
+
+      setBusy(true);
+      setError(null);
+      try {
+        let currentId = submissionId;
+        if (!currentId) {
+          const submission = await saveScanSubmission({
+            userId: session.userId,
+            scanType: "body",
+            photos: { body: selectedPhoto },
+            status: "ready_for_analysis",
+          });
+          currentId = submission.id;
+          setSubmissionId(currentId);
+        }
+
+        const analysis = await analyze({ data: { submissionId: currentId } });
+        setResult(analysis);
+        if (pending === "onboarding") await clearPendingBodyScan();
+        await queryClient.invalidateQueries({ queryKey: ["scan-submissions", "body"] });
+        toast.success(
+          analysis.comparison?.basis === "exact_match"
+            ? "Same photo detected — your original scores were reused"
+            : "Your Body Scan is ready",
+        );
+      } catch (scanError) {
+        console.error(scanError);
+        const message =
+          scanError instanceof Error
+            ? scanError.message
+            : "Body analysis couldn't be completed. Please try again.";
+        setError(message);
+        toast.error(message);
+      } finally {
+        await queryClient.invalidateQueries({ queryKey: ["scan-quota", "body"] });
+        requestLock.current = false;
+        setBusy(false);
+      }
+    },
+    [
+      analyze,
+      busy,
+      navigate,
+      pending,
+      photo,
+      queryClient,
+      session,
+      submissionId,
+      subscription.active,
+      weeklyLimitReached,
+    ],
+  );
+
+  useEffect(() => {
+    if (pending !== "onboarding" || pendingLoaded.current) return;
+    pendingLoaded.current = true;
+    let cancelled = false;
+
+    void getPendingBodyScan()
+      .then((record) => {
+        if (cancelled) return;
+        if (record?.photo) {
+          setPhoto(record.photo);
+          setSubmissionId(record.submissionId ?? null);
+        } else setError("Your pending photo could not be found. Upload it again to continue.");
+      })
+      .finally(() => {
+        if (!cancelled) setPendingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pending]);
+
+  useEffect(() => {
+    if (
+      pending !== "onboarding" ||
+      pendingLoading ||
+      !subscription.active ||
+      !session ||
+      session === "loading" ||
+      !photo ||
+      autoScanStarted.current
+    ) {
       return;
     }
-    if (requestLock.current) return;
-    requestLock.current = true;
-
-    setBusy(true);
-    setError(null);
-    try {
-      let currentId = submissionId;
-      if (!currentId) {
-        const submission = await saveScanSubmission({
-          userId: session.userId,
-          scanType: "body",
-          photos: { body: photo },
-          status: "ready_for_analysis",
-        });
-        currentId = submission.id;
-        setSubmissionId(currentId);
-      }
-
-      const analysis = await analyze({ data: { submissionId: currentId } });
-      setResult(analysis);
-      await queryClient.invalidateQueries({ queryKey: ["scan-submissions", "body"] });
-      toast.success("Your Body Scan is ready");
-    } catch (scanError) {
-      console.error(scanError);
-      const message =
-        scanError instanceof Error
-          ? scanError.message
-          : "Body analysis couldn't be completed. Please try again.";
-      setError(message);
-      toast.error(message);
-    } finally {
-      requestLock.current = false;
-      setBusy(false);
-    }
-  }
+    autoScanStarted.current = true;
+    void runScan(photo);
+  }, [pending, pendingLoading, photo, runScan, session, subscription.active]);
 
   return (
     <AnimatePresence mode="wait">
@@ -125,9 +222,13 @@ function NewBodyScan() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -12 }}
-          className="min-h-dvh pb-10"
+          className="min-h-dvh"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2.5rem)" }}
         >
-          <header className="mx-auto flex max-w-md items-center gap-3 px-5 pt-5">
+          <header
+            className="mx-auto flex max-w-md items-center gap-3 px-5"
+            style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}
+          >
             <button
               type="button"
               onClick={() => navigate({ to: "/scan/body" })}
@@ -174,13 +275,24 @@ function NewBodyScan() {
                 <SoftAccountPrompt
                   title="Save your scan privately"
                   description="Create or sign in to your Ascendr account before uploading. Your photo and AI report will be saved to your private cloud account."
-                  redirectPath="/scan/body/new"
+                  redirectPath={
+                    pending === "onboarding"
+                      ? "/scan/body/new?pending=onboarding"
+                      : "/scan/body/new"
+                  }
                   storageKey="fitness:body-scan-account-required"
                   dismissible={false}
                   primaryLabel="Create account or sign in"
                 />
               </div>
             )}
+
+            <ScanQuotaCard
+              scanType="body"
+              quota={quotaQuery.data}
+              loading={quotaQuery.isLoading}
+              signedIn={Boolean(session && session !== "loading")}
+            />
 
             <div className="mt-5">
               <PhotoSlot
@@ -189,7 +301,7 @@ function NewBodyScan() {
                 capture="environment"
                 value={photo}
                 onChange={changePhoto}
-                hint="Show your full body from head to toe with the camera level."
+                hint="Take one still photo with your full body visible from head to toe and the camera level."
               />
             </div>
 
@@ -225,12 +337,16 @@ function NewBodyScan() {
 
             <button
               type="button"
-              onClick={runScan}
-              disabled={!photo || session === "loading" || busy}
+              onClick={() => void runScan()}
+              disabled={
+                !photo || session === "loading" || busy || pendingLoading || weeklyLimitReached
+              }
               className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon font-bold text-neon-foreground disabled:opacity-40"
             >
-              {busy ? (
+              {busy || pendingLoading ? (
                 <Loader2 className="size-5 animate-spin" />
+              ) : pendingLocked || weeklyLimitReached ? (
+                <LockKeyhole className="size-5" />
               ) : session === null ? (
                 <LockKeyhole className="size-5" />
               ) : error ? (
@@ -240,11 +356,17 @@ function NewBodyScan() {
               )}
               {busy
                 ? "Starting Analysis"
-                : session === null
-                  ? "Sign In to Analyze"
-                  : error
-                    ? "Try Analysis Again"
-                    : "Analyze My Physique"}
+                : pendingLoading
+                  ? "Loading Your Photo"
+                  : weeklyLimitReached
+                    ? "Weekly Limit Reached"
+                    : pendingLocked
+                      ? "Unlock to Analyze"
+                      : session === null
+                        ? "Sign In to Analyze"
+                        : error
+                          ? "Try Analysis Again"
+                          : "Analyze My Physique"}
             </button>
           </main>
         </motion.div>

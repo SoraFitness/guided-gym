@@ -47,18 +47,42 @@ export interface PartialPose {
 
 // Every channel, flattened, for interpolation.
 const CHANNELS = [
-  "rootX", "rootY", "rootZ", "rootRX", "rootRY", "rootRZ",
-  "pelvis.x", "pelvis.y", "pelvis.z",
-  "torso.x", "torso.y", "torso.z",
-  "chest.x", "chest.y", "chest.z",
-  "head.x", "head.y", "head.z",
-  "shoulderL.x", "shoulderL.y", "shoulderL.z",
-  "shoulderR.x", "shoulderR.y", "shoulderR.z",
-  "elbowL", "elbowR",
-  "hipL.x", "hipL.y", "hipL.z",
-  "hipR.x", "hipR.y", "hipR.z",
-  "kneeL", "kneeR",
-  "ankleL", "ankleR",
+  "rootX",
+  "rootY",
+  "rootZ",
+  "rootRX",
+  "rootRY",
+  "rootRZ",
+  "pelvis.x",
+  "pelvis.y",
+  "pelvis.z",
+  "torso.x",
+  "torso.y",
+  "torso.z",
+  "chest.x",
+  "chest.y",
+  "chest.z",
+  "head.x",
+  "head.y",
+  "head.z",
+  "shoulderL.x",
+  "shoulderL.y",
+  "shoulderL.z",
+  "shoulderR.x",
+  "shoulderR.y",
+  "shoulderR.z",
+  "elbowL",
+  "elbowR",
+  "hipL.x",
+  "hipL.y",
+  "hipL.z",
+  "hipR.x",
+  "hipR.y",
+  "hipR.z",
+  "kneeL",
+  "kneeR",
+  "ankleL",
+  "ankleR",
 ] as const;
 
 export type Channel = (typeof CHANNELS)[number];
@@ -102,13 +126,38 @@ const ankles = (v: number): PartialPose => ({ ankleL: v, ankleR: v });
 const merge = (...poses: PartialPose[]): PartialPose => Object.assign({}, ...poses);
 
 export type ClipKey =
-  | "idle" | "squat" | "wallSit" | "pushup" | "lunge" | "stepUp"
-  | "plank" | "mountainClimber" | "deadBug" | "birdDog" | "hollowHold"
-  | "shoulderPress" | "benchPress" | "row" | "curl" | "tricepsExtension"
-  | "dip" | "lateralRaise" | "hinge" | "swing" | "bridge" | "pull"
-  | "pulldown" | "run" | "jumpingJack" | "burpee" | "twist" | "stretch" | "kickback";
+  | "idle"
+  | "squat"
+  | "wallSit"
+  | "pushup"
+  | "lunge"
+  | "stepUp"
+  | "plank"
+  | "mountainClimber"
+  | "deadBug"
+  | "birdDog"
+  | "hollowHold"
+  | "shoulderPress"
+  | "benchPress"
+  | "row"
+  | "facePull"
+  | "curl"
+  | "tricepsExtension"
+  | "dip"
+  | "lateralRaise"
+  | "hinge"
+  | "swing"
+  | "bridge"
+  | "pull"
+  | "pulldown"
+  | "run"
+  | "jumpingJack"
+  | "burpee"
+  | "twist"
+  | "stretch"
+  | "kickback";
 
-export type HeldProp = "none" | "dumbbells" | "kettlebell" | "barbell" | "cableBar";
+export type HeldProp = "none" | "dumbbells" | "kettlebell" | "barbell" | "cableBar" | "cableRope";
 
 export interface ExerciseClip {
   duration: number; // seconds per loop at 1x speed
@@ -163,12 +212,7 @@ const wallSit: ExerciseClip = {
 
 // rootY values are offsets from standing pelvis height (0.98m), so floor
 // positions sit around -0.5 to -0.9.
-const PUSHUP_BASE = merge(
-  { rootRX: d(84) },
-  hips(d(4)),
-  ankles(d(64)),
-  { head: { x: -d(20) } },
-);
+const PUSHUP_BASE = merge({ rootRX: d(84) }, hips(d(4)), ankles(d(64)), { head: { x: -d(20) } });
 
 const pushup: ExerciseClip = {
   duration: 2.8,
@@ -183,12 +227,12 @@ const pushup: ExerciseClip = {
 
 // Alternating reverse lunge: right leg steps back in the first half, left in the second.
 function lungeHalf(back: "L" | "R"): PartialPose {
-  const backLeg = back === "L"
-    ? { hipL: { x: d(26) }, kneeL: d(96), ankleL: d(50) }
-    : { hipR: { x: d(26) }, kneeR: d(96), ankleR: d(50) };
-  const frontLeg = back === "L"
-    ? { hipR: { x: -d(72) }, kneeR: d(82) }
-    : { hipL: { x: -d(72) }, kneeL: d(82) };
+  const backLeg =
+    back === "L"
+      ? { hipL: { x: d(26) }, kneeL: d(96), ankleL: d(50) }
+      : { hipR: { x: d(26) }, kneeR: d(96), ankleR: d(50) };
+  const frontLeg =
+    back === "L" ? { hipR: { x: -d(72) }, kneeR: d(82) } : { hipL: { x: -d(72) }, kneeL: d(82) };
   return merge(
     { rootY: -0.3, torso: { x: -d(8) } },
     backLeg,
@@ -276,10 +320,7 @@ const mountainClimber: ExerciseClip = {
   ],
 };
 
-const DEADBUG_BASE = merge(
-  { rootRX: -d(90), rootY: -0.85 },
-  { head: { x: d(10) } },
-);
+const DEADBUG_BASE = merge({ rootRX: -d(90), rootY: -0.85 }, { head: { x: d(10) } });
 
 const deadBug: ExerciseClip = {
   duration: 3.6,
@@ -433,6 +474,20 @@ const row: ExerciseClip = {
   ],
 };
 
+// Upright cable face pull. The arms begin long at shoulder height, then the
+// elbows open wide as the rope travels toward the temples.
+const facePull: ExerciseClip = {
+  planted: true,
+  duration: 3.2,
+  base: merge(RELAXED, { chest: { x: d(2) }, head: { x: -d(2) } }),
+  keys: [
+    { t: 0, pose: merge(arms(-d(82), d(8)), elbows(-d(10))) },
+    { t: 0.42, pose: merge(arms(-d(78), d(58)), elbows(-d(104))) },
+    { t: 0.56, pose: merge(arms(-d(78), d(58)), elbows(-d(104))) },
+    { t: 1, pose: merge(arms(-d(82), d(8)), elbows(-d(10))) },
+  ],
+};
+
 const curl: ExerciseClip = {
   planted: true,
   duration: 2.9,
@@ -529,12 +584,7 @@ const swing: ExerciseClip = {
     },
     {
       t: 0.5,
-      pose: merge(
-        { torso: { x: -d(2) }, head: { x: 0 } },
-        hips(-d(2)),
-        knees(d(2)),
-        arms(-d(92)),
-      ),
+      pose: merge({ torso: { x: -d(2) }, head: { x: 0 } }, hips(-d(2)), knees(d(2)), arms(-d(92))),
     },
     {
       t: 1,
@@ -689,7 +739,10 @@ const burpee: ExerciseClip = {
     },
     { t: 0.62, pose: BURPEE_CROUCH },
     { t: 0.8, pose: merge({ rootY: 0.22 }, arms(0, d(160)), elbows(-d(8))) },
-    { t: 0.92, pose: merge({ rootY: -0.06 }, arms(0, d(24)), elbows(-d(14)), knees(d(20)), hips(-d(14))) },
+    {
+      t: 0.92,
+      pose: merge({ rootY: -0.06 }, arms(0, d(24)), elbows(-d(14)), knees(d(20)), hips(-d(14))),
+    },
     { t: 1, pose: {} },
   ],
 };
@@ -772,10 +825,36 @@ const idle: ExerciseClip = {
 };
 
 export const CLIPS: Record<ClipKey, ExerciseClip> = {
-  idle, squat, wallSit, pushup, lunge, stepUp, plank, mountainClimber,
-  deadBug, birdDog, hollowHold, shoulderPress, benchPress, row, curl,
-  tricepsExtension, dip, lateralRaise, hinge, swing, bridge, pull, pulldown,
-  run, jumpingJack, burpee, twist, stretch, kickback,
+  idle,
+  squat,
+  wallSit,
+  pushup,
+  lunge,
+  stepUp,
+  plank,
+  mountainClimber,
+  deadBug,
+  birdDog,
+  hollowHold,
+  shoulderPress,
+  benchPress,
+  row,
+  facePull,
+  curl,
+  tricepsExtension,
+  dip,
+  lateralRaise,
+  hinge,
+  swing,
+  bridge,
+  pull,
+  pulldown,
+  run,
+  jumpingJack,
+  burpee,
+  twist,
+  stretch,
+  kickback,
 };
 
 /* ------------------------------ clip resolution ---------------------------- */
@@ -805,6 +884,7 @@ const ANIMATION_TO_CLIP: Record<AnimationType, ClipKey> = {
 // Name-level refinements on top of the coarse AnimationType.
 export function resolveClip(animation: AnimationType, exerciseText: string): ClipKey {
   const s = exerciseText.toLowerCase();
+  if (s.includes("face pull") || s.includes("face-pull")) return "facePull";
   if (s.includes("wall sit") || s.includes("wall-sit")) return "wallSit";
   if (s.includes("climber")) return "mountainClimber";
   if (s.includes("dead bug") || s.includes("deadbug")) return "deadBug";
@@ -812,7 +892,8 @@ export function resolveClip(animation: AnimationType, exerciseText: string): Cli
   if (s.includes("hollow")) return "hollowHold";
   if (s.includes("burpee")) return "burpee";
   if (s.includes("swing")) return "swing";
-  if (s.includes("pulldown") || s.includes("pull-down") || s.includes("pull down")) return "pulldown";
+  if (s.includes("pulldown") || s.includes("pull-down") || s.includes("pull down"))
+    return "pulldown";
   if (s.includes("step up") || s.includes("step-up") || s.includes("step ")) return "stepUp";
   if (s.includes("dip")) return "dip";
   return ANIMATION_TO_CLIP[animation] ?? "idle";
@@ -824,8 +905,7 @@ export function resolveHeldProp(clip: ClipKey, equipment?: DemoEquipment): HeldP
   if (equipment === "dumbbells" || equipment === "dumbbellBench") return "dumbbells";
   if (equipment === "barbellBench") return "barbell";
   if (equipment === "cableMachine") {
-    // Rendered as dumbbell handles so hands are never empty on cable moves.
-    return clip === "pull" ? "none" : "dumbbells";
+    return clip === "pull" ? "none" : "cableRope";
   }
   return "none";
 }

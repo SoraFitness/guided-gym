@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Flame, Clock, Trophy, TrendingUp, Dumbbell, ChevronRight } from "lucide-react";
+import { Flame, Clock, Trophy, TrendingUp, Dumbbell, ChevronRight, Activity } from "lucide-react";
 import { useMemo } from "react";
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
@@ -50,6 +50,8 @@ function ProgressPage() {
   const trainedMin = log.reduce((s, l) => s + l.minutes, 0);
   const trainedH = Math.floor(trainedMin / 60);
   const trainedM = trainedMin % 60;
+  const weeklyMinutes = week.reduce((sum, day) => sum + day.m, 0);
+  const activeDays = week.filter((day) => day.m > 0).length;
 
   const prEntries = Object.entries(prs.maxWeightByExercise)
     .sort((a, b) => b[1].weight - a[1].weight)
@@ -59,18 +61,27 @@ function ProgressPage() {
     .slice(0, 3);
 
   return (
-    <div className="px-5 pt-6 pb-8 animate-slide-up">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Progress</h1>
+    <div className="animate-slide-up px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
+      <header className="flex items-start justify-between gap-4 px-1">
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Performance</p>
+          <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
+            Proof you&apos;re progressing.
+          </h1>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Training consistency, volume, records, and physique changes.
+          </p>
+        </div>
         <Link
           to="/workout/history"
-          className="h-9 px-3 rounded-full bg-white/[0.05] border border-white/[0.06] text-[11px] font-semibold flex items-center gap-1.5"
+          aria-label="Workout history"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface text-muted-foreground transition active:scale-95"
         >
-          History <ChevronRight className="size-3.5" />
+          <Clock className="size-5" />
         </Link>
-      </div>
+      </header>
 
-      <div className="mt-6">
+      <div className="mt-5">
         <GoalPanel />
       </div>
 
@@ -82,40 +93,86 @@ function ProgressPage() {
         <ProgressPicturesCard />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
-        <StatCard
-          icon={Clock}
-          label="Trained"
-          value={trainedH > 0 ? `${trainedH}h ${trainedM}m` : `${trainedM}m`}
-        />
-        <StatCard icon={Trophy} label="Streak" value={`${progress.streakDays} days`} />
-        <StatCard icon={TrendingUp} label="Workouts" value={`${prs.totalWorkouts}`} tint />
-      </div>
-
-      <section className="mt-8 rounded-3xl bg-surface p-5">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-bold">Weekly activity</h2>
-          <span className="text-xs text-muted-foreground">Minutes</span>
+      <section className="mt-7">
+        <div className="mb-3 flex items-end justify-between px-1">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+              At a glance
+            </p>
+            <h2 className="mt-0.5 text-lg font-extrabold">Your training numbers</h2>
+          </div>
+          <Link
+            to="/workout/history"
+            className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"
+          >
+            History <ChevronRight className="size-3" />
+          </Link>
         </div>
-        <div className="h-44 flex items-end gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
+          <StatCard
+            icon={Clock}
+            label="Trained"
+            value={trainedH > 0 ? `${trainedH}h ${trainedM}m` : `${trainedM}m`}
+          />
+          <StatCard icon={Trophy} label="Streak" value={`${progress.streakDays} days`} />
+          <StatCard icon={TrendingUp} label="Workouts" value={`${prs.totalWorkouts}`} tint />
+        </div>
+      </section>
+
+      <section className="relative mt-7 overflow-hidden rounded-[27px] border border-white/[0.07] bg-surface p-5">
+        <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-neon/[0.06] blur-3xl" />
+        <div className="relative flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">This week</p>
+            <h2 className="mt-1 font-extrabold">Training rhythm</h2>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {activeDays
+                ? `${activeDays} active day${activeDays === 1 ? "" : "s"}`
+                : "Your first session starts the chart"}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2 text-right">
+            <p className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Total
+            </p>
+            <p className="mt-0.5 text-lg font-extrabold tabular-nums">
+              {weeklyMinutes}
+              <span className="ml-1 text-[9px] font-semibold text-muted-foreground">min</span>
+            </p>
+          </div>
+        </div>
+        <div className="relative mt-5 flex h-44 items-end gap-3 rounded-2xl border border-white/[0.04] bg-black/15 px-3 pb-3 pt-5">
+          <div className="pointer-events-none absolute inset-x-3 top-1/3 border-t border-dashed border-white/[0.06]" />
+          <div className="pointer-events-none absolute inset-x-3 top-2/3 border-t border-dashed border-white/[0.06]" />
           {week.map((day) => (
-            <div key={day.d} className="flex-1 flex flex-col items-center gap-2">
+            <div
+              key={day.d}
+              className="relative z-10 flex h-full flex-1 flex-col items-center justify-end gap-2"
+            >
               <div className="text-[10px] text-muted-foreground tabular-nums">
                 {day.m > 0 ? day.m : ""}
               </div>
               <div
-                className="w-full rounded-t-xl bg-gradient-to-t from-neon to-emerald-300 transition-all"
+                className="min-h-0 w-full rounded-t-[9px] bg-gradient-to-t from-neon to-emerald-300 shadow-[0_0_18px_-8px_var(--color-neon)] transition-all"
                 style={{ height: `${Math.max(2, day.v)}%` }}
               />
-              <span className="text-[11px] text-muted-foreground">{day.d}</span>
+              <span className="text-[9px] font-semibold text-muted-foreground">
+                {day.d.slice(0, 1)}
+              </span>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="mt-6 rounded-3xl bg-surface p-5">
-        <h2 className="font-bold mb-3">Volume & sets</h2>
+      <section className="mt-6 rounded-[27px] border border-white/[0.07] bg-surface p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">Workload</p>
+            <h2 className="mt-1 font-extrabold">Volume & sets</h2>
+          </div>
+          <Activity className="size-5 text-neon" />
+        </div>
         <Record label="Total sets" value={`${prs.totalSets}`} />
         <Record label="Total reps" value={`${prs.totalReps}`} />
         <Record label="Total volume" value={`${prs.totalVolume.toLocaleString()}`} />
@@ -130,7 +187,7 @@ function ProgressPage() {
         />
       </section>
 
-      <section className="mt-6 rounded-3xl bg-surface p-5">
+      <section className="mt-6 rounded-[27px] border border-white/[0.07] bg-surface p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold">Personal records</h2>
           <Dumbbell className="size-4 text-neon" />
@@ -188,13 +245,27 @@ function StatCard({
   tint?: boolean;
 }) {
   return (
-    <div className={`rounded-3xl p-4 ${tint ? "bg-neon text-neon-foreground" : "bg-surface"}`}>
-      <Icon className="size-5" />
-      <div className="mt-6 text-2xl font-extrabold">
+    <div
+      className={`relative overflow-hidden rounded-[23px] border p-4 ${
+        tint
+          ? "border-neon bg-neon text-neon-foreground shadow-[0_18px_35px_-24px_var(--color-neon)]"
+          : "border-white/[0.06] bg-surface"
+      }`}
+    >
+      <span
+        className={`grid size-9 place-items-center rounded-xl ${tint ? "bg-black/10" : "bg-white/[0.045] text-neon"}`}
+      >
+        <Icon className="size-[18px]" />
+      </span>
+      <div className="mt-5 text-[22px] font-extrabold tracking-[-0.03em]">
         {value}
         {unit && <span className="text-sm font-medium ml-1 opacity-70">{unit}</span>}
       </div>
-      <div className={`text-xs ${tint ? "opacity-80" : "text-muted-foreground"}`}>{label}</div>
+      <div
+        className={`mt-0.5 text-[10px] font-semibold ${tint ? "opacity-75" : "text-muted-foreground"}`}
+      >
+        {label}
+      </div>
     </div>
   );
 }

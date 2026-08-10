@@ -2,7 +2,7 @@
 ## Part 1 — Make it feel like a native iOS PWA (installable only, no service worker)
 
 **New files in `public/`** (icons via `imagegen`, dark background with neon accent mark):
-- `manifest.webmanifest` — `name: "Pulse"`, `short_name: "Pulse"`, `display: "standalone"`, `start_url: "/"`, `scope: "/"`, `background_color: "#0A0A0A"`, `theme_color: "#0A0A0A"`, `orientation: "portrait"`, icons 192/512 + maskable 512.
+- `manifest.webmanifest` — `name: "Sora"`, `short_name: "Sora"`, `display: "standalone"`, `start_url: "/"`, `scope: "/"`, `background_color: "#0A0A0A"`, `theme_color: "#0A0A0A"`, `orientation: "portrait"`, icons 192/512 + maskable 512.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon-180.png`, `favicon.ico`.
 - `apple-splash-{1290x2796, 1179x2556, 1170x2532, 1284x2778, 1125x2436, 828x1792, 750x1334}.png` — generated dark splash with centered logo.
 
@@ -12,7 +12,7 @@
 - `<meta name="apple-mobile-web-app-capable" content="yes">`
 - `<meta name="mobile-web-app-capable" content="yes">`
 - `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`
-- `<meta name="apple-mobile-web-app-title" content="Pulse">`
+- `<meta name="apple-mobile-web-app-title" content="Sora">`
 - `<meta name="format-detection" content="telephone=no">`
 - Confirm viewport already has `viewport-fit=cover` (it does).
 - One `<link rel="apple-touch-startup-image">` per splash size with `media="(device-width: …px) and (device-height: …px) and (-webkit-device-pixel-ratio: …) and (orientation: portrait)"`.

@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useServerFn } from "@tanstack/react-start";
 import {
   useProfile,
+  getProfileGoals,
   GOAL_LABELS,
   FOCUS_LABELS,
   EQUIPMENT_LABELS,
@@ -348,6 +349,7 @@ function WorkoutPlanBuilder({
   const { updateProfile } = useProfile();
   const [input, setInput] = useState<WorkoutPlanInput>({
     goal: profile.goal,
+    goals: getProfileGoals(profile),
     experience: profile.experience,
     equipment: profile.equipment,
     focusAreas: profile.focusAreas.length ? profile.focusAreas.slice(0, 3) : ["chest"],
@@ -381,6 +383,7 @@ function WorkoutPlanBuilder({
       saveWorkoutPlan(response.plan);
       updateProfile({
         goal: input.goal,
+        goals: input.goals?.length ? input.goals : [input.goal],
         experience: input.experience,
         equipment: input.equipment,
         focusAreas: input.focusAreas,
@@ -513,7 +516,11 @@ function WorkoutPlanBuilder({
                 <select
                   value={input.goal}
                   onChange={(event) =>
-                    setInput((current) => ({ ...current, goal: event.target.value as Goal }))
+                    setInput((current) => ({
+                      ...current,
+                      goal: event.target.value as Goal,
+                      goals: [event.target.value as Goal],
+                    }))
                   }
                   className="mt-2 h-12 w-full rounded-2xl border border-white/[0.07] bg-white/[0.04] px-3 text-xs outline-none"
                 >

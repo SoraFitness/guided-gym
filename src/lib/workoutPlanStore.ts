@@ -1,10 +1,19 @@
 import { useSyncExternalStore } from "react";
-import type { EquipmentSetup, ExperienceLevel, FocusArea, Goal, Profile } from "./profile";
+import {
+  getProfileGoals,
+  type EquipmentSetup,
+  type ExperienceLevel,
+  type FocusArea,
+  type Goal,
+  type Profile,
+} from "./profile";
 import type { WorkoutSplitId } from "./workoutSplits";
 
 export interface WorkoutPlanInput {
   goal: Goal;
+  goals?: Goal[];
   experience: ExperienceLevel;
+  currentWorkoutsPerWeek?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   equipment: EquipmentSetup;
   focusAreas: FocusArea[];
   daysPerWeek: 2 | 3 | 4 | 5 | 6;
@@ -57,13 +66,18 @@ export function getActiveWorkoutPlan(plans: SavedWorkoutPlan[], profile: Profile
     const input = plan.input;
     const planFocus = [...input.focusAreas].sort().join("|");
     const profileFocus = [...profile.focusAreas].sort().join("|");
+    const planGoals = [...(input.goals?.length ? input.goals : [input.goal])].sort().join("|");
+    const profileGoals = [...getProfileGoals(profile)].sort().join("|");
     return (
-      input.goal === profile.goal &&
+      planGoals === profileGoals &&
       input.experience === profile.experience &&
+      (input.currentWorkoutsPerWeek == null ||
+        input.currentWorkoutsPerWeek === (profile.currentWorkoutsPerWeek ?? 3)) &&
       input.equipment === profile.equipment &&
       input.daysPerWeek === profile.daysPerWeek &&
       input.sessionMinutes === profile.sessionMinutes &&
       (input.workoutSplit ?? "auto") === (profile.workoutSplit ?? "auto") &&
+      (input.notes ?? "") === (profile.injuries ?? "") &&
       planFocus === profileFocus
     );
   });

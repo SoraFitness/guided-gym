@@ -41,6 +41,10 @@ export const GOAL_OPTIONS: Goal[] = [
   "endurance",
   "overall",
 ];
+
+export function getProfileGoals(profile: Pick<Profile, "goal" | "goals">): Goal[] {
+  return profile.goals?.length ? [...new Set(profile.goals)] : [profile.goal];
+}
 export const EQUIPMENT_LABELS: Record<EquipmentSetup, string> = {
   none: "Home · no equipment",
   dumbbells: "Dumbbells only",
@@ -92,7 +96,9 @@ export interface Profile {
   name: string;
   // Main
   goal: Goal;
+  goals?: Goal[];
   experience: ExperienceLevel;
+  currentWorkoutsPerWeek?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   equipment: EquipmentSetup;
   daysPerWeek: 2 | 3 | 4 | 5 | 6;
   sessionMinutes: 20 | 30 | 45 | 60;
@@ -217,13 +223,25 @@ function migrate(raw: Record<string, unknown>): Profile {
     days <= 2 ? "light" : days <= 4 ? "moderate" : "very";
   const defaultTarget = new Date();
   defaultTarget.setDate(defaultTarget.getDate() + 84); // 12 weeks
+  const primaryGoal =
+    (raw.goal as string) in goalMap
+      ? goalMap[raw.goal as string]
+      : ((raw.goal as Goal) ?? "build_muscle");
+  const selectedGoals = Array.isArray(raw.goals)
+    ? [
+        ...new Set(
+          (raw.goals as unknown[]).filter(
+            (goal): goal is Goal => typeof goal === "string" && goal in GOAL_LABELS,
+          ),
+        ),
+      ]
+    : [];
   return {
     name: (raw.name as string) ?? "Athlete",
-    goal:
-      (raw.goal as string) in goalMap
-        ? goalMap[raw.goal as string]
-        : ((raw.goal as Goal) ?? "build_muscle"),
+    goal: selectedGoals[0] ?? primaryGoal,
+    goals: selectedGoals.length ? selectedGoals : [primaryGoal],
     experience: (raw.experience as ExperienceLevel) ?? "intermediate",
+    currentWorkoutsPerWeek: (raw.currentWorkoutsPerWeek as Profile["currentWorkoutsPerWeek"]) ?? 3,
     equipment: (raw.equipment as EquipmentSetup) ?? equipMap(raw.location),
     daysPerWeek: days,
     sessionMinutes: (raw.sessionMinutes as 20 | 30 | 45 | 60) ?? 30,

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Loader2,
   Layers3,
+  MessageCircleQuestion,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -202,7 +203,7 @@ function ProfilePage() {
                 ? "Syncing your profile to Supabase..."
                 : profileSyncState === "error"
                   ? "Signed in. Profile sync will retry when Supabase is ready."
-                  : "Profile synced to Supabase."}
+                  : "Profile synced to Ascendr database."}
             </p>
           </div>
           <button
@@ -252,6 +253,8 @@ function ProfilePage() {
             </div>
           </div>
         </section>
+
+        <ProfileLegalFooter />
       </div>
     );
   }
@@ -482,6 +485,13 @@ function ProfilePage() {
           <Link to="/scan" className="block active:bg-white/[0.03]">
             <RowContent icon={ScanLine} label="Scan center" value="Face and body assessments" />
           </Link>
+          <Link to="/contact" className="block active:bg-white/[0.03]">
+            <RowContent
+              icon={MessageCircleQuestion}
+              label="Contact support"
+              value="Questions, feedback, or account help"
+            />
+          </Link>
           <button
             type="button"
             onClick={restartTour}
@@ -504,6 +514,8 @@ function ProfilePage() {
         Reset profile
       </button>
 
+      <ProfileLegalFooter />
+
       {/* Goal sheet */}
       <Sheet open={openSheet === "goal"} onOpenChange={(o) => !o && setOpenSheet(null)}>
         <SheetContent side="bottom" className="bg-background border-border rounded-t-3xl">
@@ -516,7 +528,7 @@ function ProfilePage() {
               <button
                 key={g}
                 onClick={() => {
-                  updateProfile({ goal: g });
+                  updateProfile({ goal: g, goals: [g] });
                   setOpenSheet(null);
                 }}
                 className={cn(
@@ -877,5 +889,41 @@ function RowContent({
       </div>
       <ChevronRight className="size-5 text-muted-foreground shrink-0" />
     </div>
+  );
+}
+
+function ProfileLegalFooter() {
+  return (
+    <footer className="mt-8 border-t border-white/[0.055] px-2 pb-2 pt-6 text-center">
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">Ascendr</p>
+      <p className="mt-1.5 text-[10px] text-muted-foreground">Train with direction.</p>
+      <nav
+        aria-label="Legal and support"
+        className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2"
+      >
+        <Link to="/terms" className="text-[10px] font-medium text-white/60 hover:text-neon">
+          Terms of Service
+        </Link>
+        <Link to="/privacy" className="text-[10px] font-medium text-white/60 hover:text-neon">
+          Privacy Policy
+        </Link>
+        <Link
+          to="/health-disclaimer"
+          className="text-[10px] font-medium text-white/60 hover:text-neon"
+        >
+          Health & AI Disclaimer
+        </Link>
+        <Link to="/contact" className="text-[10px] font-medium text-white/60 hover:text-neon">
+          Contact
+        </Link>
+        <Link
+          to="/delete-account"
+          className="text-[10px] font-medium text-white/60 hover:text-neon"
+        >
+          Delete Account
+        </Link>
+      </nav>
+      <p className="mt-4 text-[9px] text-white/30">© 2026 Ascendr. All rights reserved.</p>
+    </footer>
   );
 }

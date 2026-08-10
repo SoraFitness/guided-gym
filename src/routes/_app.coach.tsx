@@ -230,7 +230,12 @@ function CoachChat({ session }: { session: AuthSession | null }) {
   const isEmpty = loaded && messages.length === 0;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-96px)]">
+    <div
+      className="flex min-h-0 flex-col"
+      style={{
+        height: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5.25rem)",
+      }}
+    >
       <header className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type Plan = "weekly" | "yearly";
+export type Plan = "weekly" | "monthly" | "yearly";
 
 export interface Subscription {
   active: boolean;
@@ -20,6 +20,10 @@ function read(): Subscription {
   } catch {
     return { active: false, plan: null, since: null };
   }
+}
+
+export function getSubscription(): Subscription {
+  return read();
 }
 
 function write(sub: Subscription) {
@@ -53,7 +57,16 @@ export function useSubscription() {
   );
 }
 
-export const PLAN_PRICES: Record<Plan, { label: string; price: string; per: string; subtitle: string }> = {
+export const PLAN_PRICES: Record<
+  Plan,
+  { label: string; price: string; per: string; subtitle: string }
+> = {
   weekly: { label: "Weekly", price: "$9.99", per: "/week", subtitle: "Billed weekly" },
-  yearly: { label: "Yearly", price: "$49.99", per: "/year", subtitle: "Just $0.96/week — save 90%" },
+  monthly: { label: "Monthly", price: "$19.99", per: "/month", subtitle: "Billed monthly" },
+  yearly: {
+    label: "Yearly",
+    price: "$49.99",
+    per: "/year",
+    subtitle: "$4.17/month · save 79%",
+  },
 };

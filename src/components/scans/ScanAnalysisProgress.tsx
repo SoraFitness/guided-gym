@@ -5,7 +5,16 @@ import { useEffect, useState } from "react";
 interface ScanAnalysisProgressProps {
   photo: string;
   scanType: "face" | "body";
+  preview?: boolean;
 }
+
+const previewSteps = [
+  "Preparing your photo",
+  "Checking image clarity",
+  "Creating your private preview",
+  "Locking personalized insights",
+  "Ready for the next step",
+] as const;
 
 const steps = {
   face: [
@@ -33,10 +42,14 @@ function formatElapsed(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function ScanAnalysisProgress({ photo, scanType }: ScanAnalysisProgressProps) {
+export function ScanAnalysisProgress({
+  photo,
+  scanType,
+  preview = false,
+}: ScanAnalysisProgressProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const scanSteps = steps[scanType];
-  const timings = stageTimings[scanType];
+  const scanSteps = preview ? previewSteps : steps[scanType];
+  const timings = preview ? ([0, 1, 2, 3, 4] as const) : stageTimings[scanType];
   const activeStep = timings.reduce<number>(
     (current, threshold, index) => (elapsedSeconds >= threshold ? index : current),
     0,
@@ -84,7 +97,9 @@ export function ScanAnalysisProgress({ photo, scanType }: ScanAnalysisProgressPr
                 <p className="text-[9px] font-black uppercase tracking-[0.24em] text-neon">
                   Ascendr Vision
                 </p>
-                <h1 className="mt-0.5 text-lg font-bold">Building your report</h1>
+                <h1 className="mt-0.5 text-lg font-bold">
+                  {preview ? "Preparing your preview" : "Building your report"}
+                </h1>
               </div>
             </div>
             <div className="text-right">
@@ -92,7 +107,7 @@ export function ScanAnalysisProgress({ photo, scanType }: ScanAnalysisProgressPr
                 <Clock3 className="size-3.5" /> {formatElapsed(elapsedSeconds)}
               </p>
               <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-white/35">
-                Usually 20–70 sec
+                {preview ? "No sign-in needed" : "Usually 20–70 sec"}
               </p>
             </div>
           </div>
@@ -137,11 +152,13 @@ export function ScanAnalysisProgress({ photo, scanType }: ScanAnalysisProgressPr
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
             )}
             <p className="text-[10px] leading-relaxed text-white/45">
-              {nearlyTimedOut
-                ? "Still connected. If the provider times out, your private photo stays saved for a one-tap retry."
-                : takingLonger
-                  ? "This high-detail scan is taking longer than usual, but it is still working. Keep this screen open."
-                  : "Keep this screen open. Your private photo and completed report are saved to your account."}
+              {preview
+                ? "This onboarding preview stays on this device. The full AI scan runs only after you subscribe."
+                : nearlyTimedOut
+                  ? "Still connected. If the provider times out, your private photo stays saved for a one-tap retry."
+                  : takingLonger
+                    ? "This high-detail scan is taking longer than usual, but it is still working. Keep this screen open."
+                    : "Keep this screen open. Your private photo and completed report are saved to your account."}
             </p>
           </div>
         </div>

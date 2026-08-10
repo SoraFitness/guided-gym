@@ -126,6 +126,7 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
       ? {
           name: p.name,
           goal: p.goal,
+          goals: p.goals,
           experience: p.experience,
           equipment: p.equipment,
           daysPerWeek: p.daysPerWeek,

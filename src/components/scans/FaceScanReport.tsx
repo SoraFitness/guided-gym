@@ -48,7 +48,8 @@ export function FaceScanReport({
     <motion.main
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="min-h-dvh bg-black pb-10 text-white"
+      className="min-h-dvh bg-black text-white"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2.5rem)" }}
     >
       <section className="relative min-h-[76dvh] overflow-hidden">
         <img
@@ -59,7 +60,10 @@ export function FaceScanReport({
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_24%,transparent_0%,rgba(0,0,0,0.18)_35%,rgba(0,0,0,0.92)_88%)]" />
 
-        <header className="relative z-10 mx-auto flex max-w-md items-center justify-between px-5 pt-5">
+        <header
+          className="relative z-10 mx-auto flex max-w-md items-center justify-between px-5"
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}
+        >
           <button
             type="button"
             onClick={onBack}
