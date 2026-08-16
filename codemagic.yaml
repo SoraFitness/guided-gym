@@ -5,8 +5,6 @@ workflows:
     max_build_duration: 30
     environment:
       node: 22.14.0
-      vars:
-        NODE_ENV: production
     cache:
       cache_paths:
         - $CM_BUILD_DIR/node_modules
@@ -21,7 +19,7 @@ workflows:
           source: true
     scripts:
       - name: Install locked dependencies
-        script: npm ci
+        script: npm ci --include=dev
       - name: Build Ascendr web application
         script: npm run build
     artifacts:
@@ -60,7 +58,9 @@ workflows:
             *) echo "ASCENDR_APP_URL must begin with https://"; exit 1 ;;
           esac
       - name: Install locked dependencies
-        script: npm ci
+        script: npm ci --include=dev
+      - name: Validate Ascendr web application
+        script: npm run build
       - name: Sync Capacitor configuration and web shell
         script: npx cap sync ios
       - name: Apply App Store signing profiles
@@ -83,3 +83,5 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
