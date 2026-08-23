@@ -20,8 +20,8 @@ workflows:
     scripts:
       - name: Install locked dependencies
         script: npm ci --include=dev
-      - name: Build Ascendr web application
-        script: npm run build
+      - name: Run Ascendr release checks
+        script: npm run check
     artifacts:
       - dist/**
       - /tmp/xcodebuild_logs/*.log
@@ -57,10 +57,11 @@ workflows:
             https://*) ;;
             *) echo "ASCENDR_APP_URL must begin with https://"; exit 1 ;;
           esac
+          curl --fail --silent --show-error --location --max-time 20 "$ASCENDR_APP_URL" > /dev/null
       - name: Install locked dependencies
         script: npm ci --include=dev
-      - name: Validate Ascendr web application
-        script: npm run build
+      - name: Run Ascendr release checks
+        script: npm run check
       - name: Sync Capacitor configuration and web shell
         script: npx cap sync ios
       - name: Apply App Store signing profiles
