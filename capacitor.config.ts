@@ -3,7 +3,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const hostedAppUrl = process.env.ASCENDR_APP_URL?.trim();
 
 const config: CapacitorConfig = {
-  appId: "org.ascendr.fitness",
+  appId: "com.ascendr.org",
   appName: "Ascendr",
   webDir: "mobile-shell",
   ios: {
