@@ -19,6 +19,7 @@ import {
   Target,
   Trophy,
   Utensils,
+  UserRound,
   Zap,
 } from "lucide-react";
 import { FOCUS_LABELS, useProfile, type FocusArea } from "@/lib/profile";
@@ -33,6 +34,8 @@ import { listNotifications } from "@/lib/weeklyReport.functions";
 import { cn } from "@/lib/utils";
 import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
 import { useCompletedWorkouts, type CompletedWorkout } from "@/lib/workoutSessionStore";
+import { computeMuscleInsights, type MuscleInsight } from "@/lib/muscleAnalytics";
+import { scoreLogEntries, type NutritionQuality } from "@/lib/nutritionQuality";
 
 export const Route = createFileRoute("/_app/home")({
   head: () => ({ meta: [{ title: "Home — Ascendr" }] }),
@@ -53,7 +56,7 @@ function HomePage() {
   const { profile } = useProfile();
   const displayName =
     profile?.name?.trim().toLowerCase() === "sahil" ? "Admin" : getDisplayName(profile?.name);
-  const { totals, goals } = useNutrition();
+  const { totals, goals, todayEntries } = useNutrition();
   const progress = useProgress(profile?.sessionMinutes ?? 30);
   const completedWorkouts = useCompletedWorkouts();
   const [dismissedRecoveryCheck, setDismissedRecoveryCheck] = useState(false);
@@ -87,6 +90,19 @@ function HomePage() {
     () => getAdaptiveTrainingInsight(completedWorkouts, heroWorkout, recommended),
     [completedWorkouts, heroWorkout, recommended],
   );
+  const muscleInsights = useMemo(
+    () =>
+      computeMuscleInsights({
+        history: completedWorkouts,
+        experience: profile?.experience,
+        focusAreas: profile?.focusAreas,
+      }),
+    [completedWorkouts, profile?.experience, profile?.focusAreas],
+  );
+  const fuelQuality = useMemo(
+    () => scoreLogEntries(todayEntries, goals.protein).day,
+    [todayEntries, goals.protein],
+  );
 
   const listNotif = useServerFn(listNotifications);
   const { data: notifs } = useQuery({
@@ -112,18 +128,27 @@ function HomePage() {
           </h1>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
-        <Link
-          to="/notifications"
-          className="relative grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface shadow-[0_14px_30px_-18px_oklch(0_0_0/0.9)] transition active:scale-95"
-          aria-label={unread ? `${unread} unread notifications` : "Notifications"}
-        >
-          <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute right-2 top-2 grid min-w-4 place-items-center rounded-full bg-neon px-1 text-[8px] font-extrabold leading-4 text-neon-foreground">
-              {unread > 9 ? "9+" : unread}
-            </span>
-          )}
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            to="/notifications"
+            className="relative grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface shadow-[0_14px_30px_-18px_oklch(0_0_0/0.9)] transition active:scale-95"
+            aria-label={unread ? `${unread} unread notifications` : "Notifications"}
+          >
+            <Bell className="size-5" />
+            {unread > 0 && (
+              <span className="absolute right-2 top-2 grid min-w-4 place-items-center rounded-full bg-neon px-1 text-[8px] font-extrabold leading-4 text-neon-foreground">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </Link>
+          <Link
+            to="/profile"
+            aria-label="Open profile"
+            className="grid h-[44px] w-[44px] place-items-center overflow-hidden rounded-2xl border border-neon/20 bg-gradient-to-br from-neon/20 to-surface text-neon shadow-[0_14px_30px_-18px_var(--color-neon)] transition active:scale-95"
+          >
+            <UserRound className="size-5" />
+          </Link>
+        </div>
       </header>
 
       {adaptiveInsight && !dismissedRecoveryCheck && (
@@ -143,7 +168,8 @@ function HomePage() {
           plan={todayPlan}
           workout={heroWorkout}
           completed={Boolean(todayPlan?.isCompleted || progress.workoutMinutesToday > 0)}
-          planSource={activePlan?.source}
+          muscleInsights={muscleInsights}
+          fuelQuality={fuelQuality}
         />
       </section>
 
@@ -285,12 +311,14 @@ function TodayHero({
   plan,
   workout,
   completed,
-  planSource,
+  muscleInsights,
+  fuelQuality,
 }: {
   plan?: WeeklyScheduleDay;
   workout: Workout | null;
   completed: boolean;
-  planSource?: "ai" | "smart";
+  muscleInsights: MuscleInsight[];
+  fuelQuality: NutritionQuality;
 }) {
   const isRecovery = !plan || plan.isRestDay || !plan.workoutId;
   const primaryPath = isRecovery ? "/workout/$id" : "/workout/$id/session";
@@ -306,11 +334,12 @@ function TodayHero({
     : (plan?.estimatedCalories ?? workout?.calories ?? 0);
 
   return (
-    <div className="relative min-h-[305px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-surface-2 shadow-[0_28px_65px_-32px_oklch(0_0_0/0.95)] sm:min-h-[355px] sm:rounded-[30px]">
+    <div className="relative min-h-[385px] overflow-hidden rounded-[28px] border border-white/[0.09] bg-surface-2 shadow-[0_32px_75px_-32px_oklch(0_0_0/0.95)] sm:min-h-[410px] sm:rounded-[32px]">
       {workout?.image && (
         <img
           src={workout.image}
           alt=""
+          fetchPriority="high"
           className="absolute inset-0 size-full object-cover"
           style={{ objectPosition: workout.imagePosition }}
         />
@@ -318,7 +347,7 @@ function TodayHero({
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/25 to-black" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(0.92_0.21_130/0.16),transparent_38%)]" />
 
-      <div className="relative flex min-h-[305px] flex-col p-4 sm:min-h-[355px] sm:p-5">
+      <div className="relative flex min-h-[385px] flex-col p-4 sm:min-h-[410px] sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] backdrop-blur-md">
             {isRecovery ? (
@@ -326,11 +355,7 @@ function TodayHero({
             ) : (
               <Zap className="size-3 text-neon" />
             )}
-            {isRecovery
-              ? "Recovery day"
-              : planSource === "ai"
-                ? "AI plan · Today’s training"
-                : "Today’s training"}
+            Today&apos;s brief
           </span>
           <span
             className={cn(
@@ -357,7 +382,45 @@ function TodayHero({
               : plan?.focus || workout?.description}
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-white/80">
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Link
+              to="/progress"
+              className="rounded-[17px] border border-white/10 bg-black/45 p-3 backdrop-blur-md transition active:scale-[0.98]"
+            >
+              <p className="text-[8px] font-extrabold uppercase tracking-[0.16em] text-analytics-teal">
+                Train next
+              </p>
+              <p className="mt-1 truncate text-[12px] font-extrabold">
+                {muscleInsights
+                  .slice(0, 2)
+                  .map((item) => item.label)
+                  .join(" + ")}
+              </p>
+              <p className="mt-0.5 text-[9px] text-white/50">
+                {muscleInsights[0]?.priority ?? 0}% priority · estimated
+              </p>
+            </Link>
+            <Link
+              to="/nutrition"
+              className="rounded-[17px] border border-white/10 bg-black/45 p-3 backdrop-blur-md transition active:scale-[0.98]"
+            >
+              <p className="text-[8px] font-extrabold uppercase tracking-[0.16em] text-analytics-amber">
+                Fuel quality
+              </p>
+              <p className="mt-1 text-[12px] font-extrabold">
+                {fuelQuality.score == null
+                  ? "Not scored yet"
+                  : `${fuelQuality.score} · ${fuelQuality.band}`}
+              </p>
+              <p className="mt-0.5 text-[9px] text-white/50">
+                {fuelQuality.score == null
+                  ? "Log food to see quality"
+                  : `${fuelQuality.confidence} nutrition data`}
+              </p>
+            </Link>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-white/80">
             <HeroStat icon={<Clock3 />} label={`${duration} min`} />
             <HeroStat icon={<Dumbbell />} label={`${exerciseCount} exercises`} />
             {calories > 0 && <HeroStat icon={<Flame />} label={`~${calories} kcal`} />}
@@ -367,7 +430,7 @@ function TodayHero({
             <Link
               to={primaryPath}
               params={{ id: workoutId }}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-neon px-5 text-[13px] font-extrabold text-neon-foreground shadow-[0_14px_30px_-15px_var(--color-neon)] transition active:scale-[0.98]"
+              className="flex h-12 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-full bg-neon px-5 text-[13px] font-extrabold text-neon-foreground shadow-[0_14px_30px_-15px_var(--color-neon)] transition active:scale-[0.98]"
             >
               {isRecovery ? (
                 <HeartPulse className="size-4" />
@@ -379,7 +442,7 @@ function TodayHero({
             <Link
               to="/workouts"
               aria-label="Choose another workout"
-              className="grid size-12 place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
+              className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
             >
               <ChevronRight className="size-5" />
             </Link>

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   Search,
@@ -43,7 +43,6 @@ import {
 } from "@/lib/nutritionStore";
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { BrandLogo } from "@/components/BrandLogo";
-import { BarcodeScannerPanel } from "@/components/BarcodeScannerPanel";
 import { resultToCustom, type LookupResult } from "@/lib/foodLookup";
 import { analyzeFoodImage, type FoodScanItem, type FoodScanResult } from "@/lib/foodScan.functions";
 import { searchFoodDatabase, type FoodSearchResult } from "@/lib/foodSearch.functions";
@@ -68,6 +67,17 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  scoreLogEntries,
+  scoreNutritionQuality,
+  type NutritionQuality,
+} from "@/lib/nutritionQuality";
+
+const BarcodeScannerPanel = lazy(() =>
+  import("@/components/BarcodeScannerPanel").then((module) => ({
+    default: module.BarcodeScannerPanel,
+  })),
+);
 
 export const Route = createFileRoute("/_app/nutrition")({
   head: () => ({ meta: [{ title: "Nutrition — Ascendr" }] }),
@@ -82,6 +92,7 @@ function NutritionPage() {
 
   const today = useMemo(() => entriesOn(entries, day), [entries, day]);
   const totals = macrosFor(today);
+  const quality = useMemo(() => scoreLogEntries(today, goals.protein), [today, goals.protein]);
 
   const add = (entry: Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string }) => {
     storeAdd({ ...entry, loggedAt: entry.loggedAt ?? day.toISOString() });
@@ -102,13 +113,15 @@ function NutritionPage() {
           Eat with intention.
         </h1>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Track calories and macros without slowing down your day.
+          See the quality of your fuel—not only the calories.
         </p>
       </header>
 
       <div className="mt-5">
         <DayStepper day={day} setDay={setDay} label={dayLabel} />
       </div>
+
+      <FuelQualityHero quality={quality.day} itemCount={today.length} />
 
       {/* Summary card */}
       <section className="relative mt-4 overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(160deg,oklch(0.22_0_0)_0%,oklch(0.16_0_0)_100%)] p-5 shadow-[0_10px_40px_-20px_oklch(0_0_0/0.8)]">
@@ -219,6 +232,8 @@ function NutritionPage() {
               meal={m}
               items={items}
               totals={mTotals}
+              quality={quality.meals[m]?.quality ?? null}
+              proteinGoal={goals.protein}
               onAdd={() => setAddFor(m)}
               onEdit={(e) => setEditing(e)}
               onRemove={remove}
@@ -233,6 +248,7 @@ function NutritionPage() {
       {addFor && (
         <AddFoodModal
           meal={addFor}
+          proteinGoal={goals.protein}
           onClose={() => setAddFor(null)}
           onAdd={(entry) => {
             add(entry);
@@ -243,6 +259,7 @@ function NutritionPage() {
       {editing && (
         <AddFoodModal
           meal={editing.meal}
+          proteinGoal={goals.protein}
           editEntry={editing}
           onClose={() => setEditing(null)}
           onAdd={(entry) => {
@@ -252,6 +269,95 @@ function NutritionPage() {
         />
       )}
     </div>
+  );
+}
+
+function FuelQualityHero({ quality, itemCount }: { quality: NutritionQuality; itemCount: number }) {
+  return (
+    <section className="premium-panel relative mt-4 overflow-hidden rounded-[29px] p-5">
+      <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-analytics-teal/10 blur-3xl" />
+      <div className="relative flex items-start gap-4">
+        <div className="grid size-[76px] shrink-0 place-items-center rounded-[24px] border border-white/10 bg-black/25">
+          <div className="text-center">
+            <strong className="block text-[27px] font-extrabold leading-none tabular-nums text-analytics-teal">
+              {quality.score ?? "—"}
+            </strong>
+            <span className="mt-1 block text-[8px] font-extrabold uppercase tracking-[0.15em] text-white/35">
+              Fuel score
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="data-kicker text-analytics-teal">Daily fuel quality</p>
+          <h2 className="mt-1 text-xl font-extrabold">
+            {quality.score == null ? "Quality starts with your log." : quality.band}
+          </h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            {quality.score == null
+              ? "Add a meal with nutrition details to see positive signals and what to watch."
+              : `${quality.confidence === "partial" ? "Partial" : quality.confidence === "estimated" ? "Estimated" : "Verified"} score from ${itemCount} logged item${itemCount === 1 ? "" : "s"}. Missing nutrients are excluded.`}
+          </p>
+        </div>
+      </div>
+      {quality.score != null && (
+        <div className="relative mt-4 grid grid-cols-2 gap-2">
+          <QualitySignal
+            label="Positive"
+            value={quality.positives[0] ?? "Protein and nutrient data tracked"}
+            positive
+          />
+          <QualitySignal
+            label="Watch"
+            value={quality.watchItems[0] ?? "No major watch items detected"}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function QualitySignal({
+  label,
+  value,
+  positive,
+}: {
+  label: string;
+  value: string;
+  positive?: boolean;
+}) {
+  return (
+    <div className="rounded-[17px] border border-white/[0.06] bg-black/20 p-3">
+      <p
+        className={cn(
+          "text-[8px] font-extrabold uppercase tracking-[0.16em]",
+          positive ? "text-analytics-teal" : "text-analytics-amber",
+        )}
+      >
+        {label}
+      </p>
+      <p className="mt-1 text-[9px] leading-snug text-white/65">{value}</p>
+    </div>
+  );
+}
+
+function QualityBadge({ quality }: { quality: NutritionQuality }) {
+  const score = quality.score;
+  const unrated = score == null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.12em]",
+        unrated
+          ? "border-white/[0.07] bg-white/[0.035] text-white/35"
+          : (score ?? 0) >= 70
+            ? "border-analytics-teal/20 bg-analytics-teal/10 text-analytics-teal"
+            : (score ?? 0) >= 55
+              ? "border-neon/20 bg-neon/10 text-neon"
+              : "border-analytics-amber/20 bg-analytics-amber/10 text-analytics-amber",
+      )}
+    >
+      {unrated ? "Partial data" : `${quality.score} · ${quality.band}`}
+    </span>
   );
 }
 
@@ -282,7 +388,7 @@ function DayStepper({
     <div className="flex w-full items-center gap-1 rounded-2xl border border-white/[0.06] bg-surface/80 p-1">
       <button
         onClick={() => shift(-1)}
-        className="size-8 grid place-items-center rounded-full active:bg-surface-2"
+        className="grid h-[44px] w-[44px] place-items-center rounded-full active:bg-surface-2"
         aria-label="Previous day"
       >
         <ChevronLeft className="size-4" />
@@ -290,7 +396,7 @@ function DayStepper({
       <button
         onClick={() => setDay(new Date())}
         className={cn(
-          "h-8 flex-1 rounded-xl px-3 text-xs font-semibold tabular-nums",
+          "h-[44px] flex-1 rounded-xl px-3 text-xs font-semibold tabular-nums",
           isToday ? "text-neon" : "text-foreground",
         )}
       >
@@ -299,7 +405,7 @@ function DayStepper({
       <button
         onClick={() => shift(1)}
         disabled={isToday}
-        className="size-8 grid place-items-center rounded-full active:bg-surface-2 disabled:opacity-30"
+        className="grid h-[44px] w-[44px] place-items-center rounded-full active:bg-surface-2 disabled:opacity-30"
         aria-label="Next day"
       >
         <ChevronRight className="size-4" />
@@ -380,6 +486,8 @@ function MealSection({
   meal,
   items,
   totals,
+  quality,
+  proteinGoal,
   onAdd,
   onEdit,
   onRemove,
@@ -388,6 +496,8 @@ function MealSection({
   meal: Meal;
   items: LogEntry[];
   totals: { kcal: number; protein: number; carbs: number; fat: number };
+  quality: NutritionQuality | null;
+  proteinGoal: number;
   onAdd: () => void;
   onEdit: (e: LogEntry) => void;
   onRemove: (id: string) => void;
@@ -407,9 +517,10 @@ function MealSection({
               : `${items.length} item${items.length === 1 ? "" : "s"} · ${Math.round(totals.kcal)} kcal`}
           </p>
         </div>
+        {quality && <QualityBadge quality={quality} />}
         <button
           onClick={onAdd}
-          className="size-9 rounded-full bg-neon text-neon-foreground grid place-items-center active:scale-95 transition glow-neon"
+          className="grid h-[44px] w-[44px] place-items-center rounded-full bg-neon text-neon-foreground transition active:scale-95 glow-neon"
           aria-label={`Add to ${meal}`}
         >
           <Plus className="size-5" />
@@ -422,6 +533,34 @@ function MealSection({
             const f = entryFood(e);
             const open = openId === e.id;
             const kcal = Math.round(f.kcal * e.servings);
+            const itemQuality = scoreNutritionQuality({
+              kcal,
+              protein: f.protein * e.servings,
+              proteinGoal,
+              meal,
+              nutrients: f.nutrients
+                ? {
+                    fiberG:
+                      f.nutrients.fiberG === undefined
+                        ? undefined
+                        : f.nutrients.fiberG * e.servings,
+                    sugarsG:
+                      f.nutrients.sugarsG === undefined
+                        ? undefined
+                        : f.nutrients.sugarsG * e.servings,
+                    saturatedFatG:
+                      f.nutrients.saturatedFatG === undefined
+                        ? undefined
+                        : f.nutrients.saturatedFatG * e.servings,
+                    sodiumMg:
+                      f.nutrients.sodiumMg === undefined
+                        ? undefined
+                        : f.nutrients.sodiumMg * e.servings,
+                    provenance: f.nutrients.provenance,
+                  }
+                : undefined,
+              tags: f.tags,
+            });
             return (
               <li key={e.id} className="border-b border-white/[0.04] last:border-b-0">
                 <button
@@ -446,6 +585,7 @@ function MealSection({
                     </div>
                   </div>
                   <div className="text-right shrink-0">
+                    <QualityBadge quality={itemQuality} />
                     <div className="text-sm font-bold text-neon tabular-nums leading-none">
                       {kcal}
                     </div>
@@ -528,11 +668,13 @@ type AddEntryArg = Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string };
 
 function AddFoodModal({
   meal,
+  proteinGoal,
   editEntry,
   onClose,
   onAdd,
 }: {
   meal: Meal;
+  proteinGoal: number;
   editEntry?: LogEntry;
   onClose: () => void;
   onAdd: (entry: AddEntryArg) => void;
@@ -550,6 +692,7 @@ function AddFoodModal({
           protein: f.protein,
           carbs: f.carbs,
           fat: f.fat,
+          nutrients: f.nutrients,
         };
       })()
     : null;
@@ -575,6 +718,7 @@ function AddFoodModal({
         <FoodConfirmSheet
           food={confirming}
           defaultMeal={meal}
+          proteinGoal={proteinGoal}
           onBack={() => setConfirming(null)}
           onSave={(entry) => {
             onAdd(entry);
@@ -613,10 +757,24 @@ function AddFoodModal({
 
       <div className="mt-4 pb-6">
         {tab === "search" && <SearchPanel meal={meal} onPick={setConfirming} />}
-        {tab === "barcode" && <BarcodeScannerPanel onResult={(r) => handleResult(r, "barcode")} />}
+        {tab === "barcode" && (
+          <Suspense
+            fallback={
+              <div className="grid min-h-64 place-items-center rounded-3xl border border-white/[0.06] bg-white/[0.02]">
+                <div className="text-center">
+                  <Loader2 className="mx-auto size-6 animate-spin text-neon" />
+                  <p className="mt-2 text-[11px] text-muted-foreground">Opening scanner…</p>
+                </div>
+              </div>
+            }
+          >
+            <BarcodeScannerPanel onResult={(r) => handleResult(r, "barcode")} />
+          </Suspense>
+        )}
         {tab === "photo" && (
           <PhotoPanel
             meal={meal}
+            proteinGoal={proteinGoal}
             onAdd={onAdd}
             onEditManually={(r) => handleResult(r, "image")}
             onDone={onClose}
@@ -676,6 +834,7 @@ function legacyFoodToStored(f: Food): StoredFood {
     verified: false,
     category: "generic",
     imageUrl: getFoodImageUrl({ ...f, id: `legacy:${f.id}` }),
+    nutrients: f.nutrients,
   };
 }
 
@@ -949,11 +1108,13 @@ function fileToDataUrl(f: File): Promise<string> {
 
 function PhotoPanel({
   meal,
+  proteinGoal,
   onAdd,
   onEditManually,
   onDone,
 }: {
   meal: Meal;
+  proteinGoal: number;
   onAdd: (e: Omit<LogEntry, "id" | "loggedAt">) => void;
   onEditManually: (r: LookupResult) => void;
   onDone: () => void;
@@ -1013,6 +1174,7 @@ function PhotoPanel({
     return (
       <PhotoConfirm
         meal={meal}
+        proteinGoal={proteinGoal}
         preview={preview}
         result={result}
         onReanalyze={runAnalyze}
@@ -1030,6 +1192,13 @@ function PhotoPanel({
             carbs: t.carbs,
             fat: t.fat,
             confidence: result.confidence,
+            nutrients: {
+              fiberG: result.items.reduce((sum, item) => sum + item.fiber, 0),
+              sugarsG: result.items.reduce((sum, item) => sum + item.sugars, 0),
+              saturatedFatG: result.items.reduce((sum, item) => sum + item.saturated_fat, 0),
+              sodiumMg: result.items.reduce((sum, item) => sum + item.sodium, 0),
+              provenance: "estimated",
+            },
           });
         }}
         onSave={(items) => {
@@ -1045,6 +1214,13 @@ function PhotoPanel({
                 carbs: it.carbs,
                 fat: it.fat,
                 source: "image",
+                nutrients: {
+                  fiberG: it.fiber,
+                  sugarsG: it.sugars,
+                  saturatedFatG: it.saturated_fat,
+                  sodiumMg: it.sodium,
+                  provenance: "estimated",
+                },
               },
             });
           }
@@ -1158,6 +1334,7 @@ function PhotoPanel({
 
 function PhotoConfirm({
   meal,
+  proteinGoal,
   preview,
   result,
   onSave,
@@ -1165,6 +1342,7 @@ function PhotoConfirm({
   onEditManually,
 }: {
   meal: Meal;
+  proteinGoal: number;
   preview: string;
   result: FoodScanResult;
   onSave: (items: FoodScanItem[]) => void;
@@ -1188,6 +1366,10 @@ function PhotoConfirm({
         protein: 0,
         carbs: 0,
         fat: 0,
+        fiber: 0,
+        sugars: 0,
+        saturated_fat: 0,
+        sodium: 0,
       },
     ]);
 
@@ -1197,9 +1379,26 @@ function PhotoConfirm({
       protein: a.protein + (Number(i.protein) || 0),
       carbs: a.carbs + (Number(i.carbs) || 0),
       fat: a.fat + (Number(i.fat) || 0),
+      fiber: a.fiber + (Number(i.fiber) || 0),
+      sugars: a.sugars + (Number(i.sugars) || 0),
+      saturatedFat: a.saturatedFat + (Number(i.saturated_fat) || 0),
+      sodium: a.sodium + (Number(i.sodium) || 0),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugars: 0, saturatedFat: 0, sodium: 0 },
   );
+  const quality = scoreNutritionQuality({
+    kcal: total.calories,
+    protein: total.protein,
+    proteinGoal,
+    meal,
+    nutrients: {
+      fiberG: total.fiber,
+      sugarsG: total.sugars,
+      saturatedFatG: total.saturatedFat,
+      sodiumMg: total.sodium,
+      provenance: "estimated",
+    },
+  });
 
   const lowConfidence = result.needs_user_confirmation || result.confidence < 0.7;
   const confColor =
@@ -1299,6 +1498,10 @@ function PhotoConfirm({
                 </label>
               ))}
             </div>
+            <p className="text-[9px] leading-relaxed text-muted-foreground">
+              Fibre {Math.round(it.fiber * 10) / 10}g · Sugars {Math.round(it.sugars * 10) / 10}g ·
+              Sat. fat {Math.round(it.saturated_fat * 10) / 10}g · Sodium {Math.round(it.sodium)}mg
+            </p>
           </div>
         ))}
 
@@ -1310,7 +1513,34 @@ function PhotoConfirm({
         </button>
       </div>
 
-      <div className="rounded-2xl bg-neon/10 border border-neon/20 p-3">
+      <div className="rounded-[20px] border border-analytics-teal/20 bg-analytics-teal/[0.07] p-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="data-kicker text-analytics-teal">Estimated fuel quality</p>
+            <p className="mt-1 text-sm font-extrabold">{quality.band}</p>
+          </div>
+          <strong className="text-2xl font-extrabold text-analytics-teal tabular-nums">
+            {quality.score ?? "—"}
+          </strong>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <QualitySignal
+            label="Positive"
+            value={quality.positives[0] ?? "Nutrition details detected"}
+            positive
+          />
+          <QualitySignal
+            label="Watch"
+            value={quality.watchItems[0] ?? "No major watch item detected"}
+          />
+        </div>
+        <p className="mt-2 text-[9px] leading-relaxed text-white/40">
+          Based on the ingredients and portions above · {Math.round(result.confidence * 100)}% image
+          confidence. Confirm before logging.
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-white/[0.035] border border-white/[0.06] p-3">
         <div className="flex items-baseline justify-between">
           <span className="text-[10px] uppercase tracking-wider text-neon">Total</span>
           <span className="text-base font-bold tabular-nums">{total.calories} kcal</span>
@@ -1401,6 +1631,7 @@ function ManualPanel({
         carbs: Number(carbs) || 0,
         fat: Number(fat) || 0,
         source,
+        nutrients: prefill?.nutrients,
       },
     });
   };
@@ -1532,7 +1763,7 @@ function Sheet({
         onClick={onClose}
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fade_0.2s_ease-out]"
       />
-      <div className="relative w-full max-w-md bg-[oklch(0.16_0_0)] rounded-t-[28px] border-t border-white/[0.08] max-h-[90dvh] overflow-y-auto animate-[slideup_0.25s_ease-out]">
+      <div className="relative max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border-t border-white/[0.08] bg-[oklch(0.16_0_0)] page-pb-safe animate-[slideup_0.25s_ease-out]">
         <div className="sticky top-0 bg-[oklch(0.16_0_0)]/95 backdrop-blur z-10 px-5 pt-3 pb-3 flex items-center justify-between border-b border-white/[0.05]">
           <div className="absolute left-1/2 -translate-x-1/2 top-1.5 h-1 w-10 rounded-full bg-white/15" />
           <h2 className="font-bold text-base mt-2">{title}</h2>
@@ -1571,11 +1802,13 @@ function fromLocalDatetimeValue(v: string): string {
 function FoodConfirmSheet({
   food,
   defaultMeal,
+  proteinGoal,
   onBack,
   onSave,
 }: {
   food: StoredFood;
   defaultMeal: Meal;
+  proteinGoal: number;
   onBack: () => void;
   onSave: (entry: AddEntryArg) => void;
 }) {
@@ -1590,6 +1823,27 @@ function FoodConfirmSheet({
     carbs: Math.round(food.carbs * servings * 10) / 10,
     fat: Math.round(food.fat * servings * 10) / 10,
   };
+  const quality = scoreNutritionQuality({
+    kcal: totals.kcal,
+    protein: totals.protein,
+    proteinGoal,
+    meal,
+    nutrients: food.nutrients
+      ? {
+          fiberG:
+            food.nutrients.fiberG === undefined ? undefined : food.nutrients.fiberG * servings,
+          sugarsG:
+            food.nutrients.sugarsG === undefined ? undefined : food.nutrients.sugarsG * servings,
+          saturatedFatG:
+            food.nutrients.saturatedFatG === undefined
+              ? undefined
+              : food.nutrients.saturatedFatG * servings,
+          sodiumMg:
+            food.nutrients.sodiumMg === undefined ? undefined : food.nutrients.sodiumMg * servings,
+          provenance: food.nutrients.provenance,
+        }
+      : undefined,
+  });
 
   const bumpServings = (delta: number) =>
     setServings((s) => Math.max(0.25, Math.round((s + delta) * 4) / 4));
@@ -1624,6 +1878,7 @@ function FoodConfirmSheet({
         carbs: food.carbs,
         fat: food.fat,
         source: "preset",
+        nutrients: food.nutrients,
       },
     });
     pushRecent(food);
@@ -1689,6 +1944,33 @@ function FoodConfirmSheet({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mt-3 rounded-[20px] border border-white/[0.07] bg-black/20 p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="data-kicker text-analytics-teal">Fuel quality</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {quality.confidence === "partial"
+                ? "Partial score—missing nutrients stay excluded"
+                : `${quality.confidence} nutrition details`}
+            </p>
+          </div>
+          <QualityBadge quality={quality} />
+        </div>
+        {(quality.positives[0] || quality.watchItems[0]) && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <QualitySignal
+              label="Positive"
+              value={quality.positives[0] ?? "More nutrition data needed"}
+              positive
+            />
+            <QualitySignal
+              label="Watch"
+              value={quality.watchItems[0] ?? "No major watch item detected"}
+            />
+          </div>
+        )}
       </div>
 
       {/* Quantity stepper */}

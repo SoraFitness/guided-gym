@@ -196,6 +196,7 @@ export type Database = {
           logged_on: string;
           meal: string;
           name: string;
+          nutrition_details: Json;
           protein_g: number;
           user_id: string;
         };
@@ -210,6 +211,7 @@ export type Database = {
           logged_on?: string;
           meal?: string;
           name: string;
+          nutrition_details?: Json;
           protein_g?: number;
           user_id: string;
         };
@@ -224,6 +226,7 @@ export type Database = {
           logged_on?: string;
           meal?: string;
           name?: string;
+          nutrition_details?: Json;
           protein_g?: number;
           user_id?: string;
         };
@@ -343,6 +346,39 @@ export type Database = {
           profile?: Json;
           updated_at?: string;
           user_id?: string;
+        };
+        Relationships: [];
+      };
+      onboarding_submissions: {
+        Row: {
+          attribution: Json;
+          completed_at: string | null;
+          created_at: string;
+          flow_version: string;
+          id: string;
+          responses: Json;
+          started_at: string;
+          visitor_id: string;
+        };
+        Insert: {
+          attribution?: Json;
+          completed_at?: string | null;
+          created_at?: string;
+          flow_version: string;
+          id?: string;
+          responses?: Json;
+          started_at?: string;
+          visitor_id: string;
+        };
+        Update: {
+          attribution?: Json;
+          completed_at?: string | null;
+          created_at?: string;
+          flow_version?: string;
+          id?: string;
+          responses?: Json;
+          started_at?: string;
+          visitor_id?: string;
         };
         Relationships: [];
       };

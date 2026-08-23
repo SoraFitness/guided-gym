@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createProgressPhoto, type PhotoType } from "@/lib/progressPhotos.functions";
 import { compressImage } from "@/lib/imageCompress";
+import { createClientId } from "@/lib/clientId";
 import { PHOTO_TYPES, todayIso, typeLabel } from "@/components/photos/photoUtils";
 
 export const Route = createFileRoute("/_app/photos/new")({
@@ -51,10 +52,7 @@ function NewPhoto() {
       const weight_kg = Number.isFinite(weightNum) ? (weightNum as number) : null;
 
       if (session && session !== "loading") {
-        const uuid =
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const uuid = createClientId();
         const path = `${session.userId}/${uuid}.jpg`;
         const { error: upErr } = await supabase.storage
           .from("progress-photos")
@@ -127,6 +125,7 @@ function NewPhoto() {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <input
             ref={cameraRef}
+            aria-label="Take a progress photo"
             type="file"
             accept="image/*"
             capture="environment"
@@ -135,6 +134,7 @@ function NewPhoto() {
           />
           <input
             ref={fileRef}
+            aria-label="Choose a progress photo"
             type="file"
             accept="image/*"
             hidden
@@ -182,8 +182,9 @@ function NewPhoto() {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Date</Label>
+            <Label htmlFor="progress-photo-date">Date</Label>
             <Input
+              id="progress-photo-date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -191,8 +192,9 @@ function NewPhoto() {
             />
           </div>
           <div>
-            <Label>Weight (kg)</Label>
+            <Label htmlFor="progress-photo-weight">Weight (kg)</Label>
             <Input
+              id="progress-photo-weight"
               type="number"
               step="0.1"
               inputMode="decimal"
@@ -205,8 +207,9 @@ function NewPhoto() {
         </div>
 
         <div>
-          <Label>Notes (optional)</Label>
+          <Label htmlFor="progress-photo-notes">Notes (optional)</Label>
           <Textarea
+            id="progress-photo-notes"
             placeholder="How are you feeling? Diet, training, mood…"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -238,8 +241,10 @@ function NewPhoto() {
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
-    <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{children}</span>
+    <label htmlFor={htmlFor} className="text-[11px] uppercase tracking-wider text-muted-foreground">
+      {children}
+    </label>
   );
 }

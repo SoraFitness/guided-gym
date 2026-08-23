@@ -1,5 +1,6 @@
 // Mock food lookup services for barcode + image scanning
 import type { Food } from "./foods";
+import type { NutrientDetails } from "./nutritionQuality";
 
 export interface LookupResult {
   name: string;
@@ -11,6 +12,7 @@ export interface LookupResult {
   carbs: number;
   fat: number;
   confidence?: number; // 0-1 for image
+  nutrients?: NutrientDetails;
 }
 
 // A small mock barcode database — in production this would call OpenFoodFacts etc.
@@ -108,6 +110,7 @@ export function resultToCustom(r: LookupResult, source: "manual" | "barcode" | "
     carbs: Math.round(r.carbs),
     fat: Math.round(r.fat),
     source,
+    nutrients: r.nutrients,
   };
 }
 

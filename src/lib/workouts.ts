@@ -6,18 +6,18 @@ import {
   type FocusArea,
   type Profile,
 } from "./profile";
-import imgLowerBodyBurn from "@/assets/workouts/covers/sora-lower-strength-v2.png";
-import imgPushStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
-import imgPullStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
-import imgFullBodySweat from "@/assets/workouts/covers/sora-hiit-conditioning-v2.png";
-import imgDumbbellBuilder from "@/assets/workouts/covers/sora-upper-strength-v2.png";
-import imgCoreCrusher from "@/assets/workouts/covers/sora-core-v2.png";
-import imgFatLossHiit from "@/assets/workouts/covers/sora-hiit-conditioning-v2.png";
-import imgMobilityRecovery from "@/assets/workouts/covers/sora-mobility-v2.png";
-import imgGluteBuilder from "@/assets/workouts/covers/sora-lower-strength-v2.png";
-import imgUpperBodyStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
+import imgLowerBodyBurn from "@/assets/workouts/covers/sora-lower-strength-v2.webp";
+import imgPushStrength from "@/assets/workouts/covers/sora-upper-strength-v2.webp";
+import imgPullStrength from "@/assets/workouts/covers/sora-upper-strength-v2.webp";
+import imgFullBodySweat from "@/assets/workouts/covers/sora-hiit-conditioning-v2.webp";
+import imgDumbbellBuilder from "@/assets/workouts/covers/sora-upper-strength-v2.webp";
+import imgCoreCrusher from "@/assets/workouts/covers/sora-core-v2.webp";
+import imgFatLossHiit from "@/assets/workouts/covers/sora-hiit-conditioning-v2.webp";
+import imgMobilityRecovery from "@/assets/workouts/covers/sora-mobility-v2.webp";
+import imgGluteBuilder from "@/assets/workouts/covers/sora-lower-strength-v2.webp";
+import imgUpperBodyStrength from "@/assets/workouts/covers/sora-upper-strength-v2.webp";
 import imgBodyweightStarter from "@/assets/workouts/bodyweight-starter.jpg";
-import imgEnduranceRun from "@/assets/workouts/covers/sora-cardio-v2.png";
+import imgEnduranceRun from "@/assets/workouts/covers/sora-cardio-v2.webp";
 import { createGeneratedWorkoutCatalog, GENERATED_WORKOUT_COUNT } from "./workoutCatalog";
 
 export type Category = "Strength" | "Cardio" | "HIIT" | "Mobility" | "Core";

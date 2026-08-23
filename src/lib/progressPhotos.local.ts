@@ -4,6 +4,7 @@ import {
   type PhotoType,
   type ProgressPhotoRow,
 } from "@/lib/progressPhotos.functions";
+import { createClientId } from "@/lib/clientId";
 
 const KEY = "fitness:guest-progress-photos";
 
@@ -72,10 +73,7 @@ function sortRows(rows: ProgressPhotoRow[]): ProgressPhotoRow[] {
 }
 
 function makeId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `guest-${crypto.randomUUID()}`;
-  }
-  return `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `guest-${createClientId()}`;
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -152,10 +150,7 @@ export async function syncLocalProgressPhotosToCloud(userId: string) {
 
   for (const row of rows) {
     const blob = await fetch(row.data_url).then((response) => response.blob());
-    const uuid =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const uuid = createClientId();
     const path = `${userId}/${uuid}.jpg`;
 
     const { error: uploadError } = await supabase.storage

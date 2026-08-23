@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Home, Dumbbell, Apple, User, Sparkles, ScanLine } from "lucide-react";
+import { Home, Dumbbell, Apple, Sparkles, ChartNoAxesCombined, ScanLine } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { startCloudSync } from "@/lib/cloudSync";
@@ -15,11 +15,11 @@ export const Route = createFileRoute("/_app")({
 
 const tabs = [
   { to: "/home", label: "Home", Icon: Home },
-  { to: "/workouts", label: "Workouts", Icon: Dumbbell },
+  { to: "/workouts", label: "Train", Icon: Dumbbell },
   { to: "/coach", label: "Coach", Icon: Sparkles },
-  { to: "/nutrition", label: "Nutrition", Icon: Apple },
+  { to: "/nutrition", label: "Fuel", Icon: Apple },
   { to: "/scan", label: "Scans", Icon: ScanLine },
-  { to: "/profile", label: "Profile", Icon: User },
+  { to: "/progress", label: "Progress", Icon: ChartNoAxesCombined },
 ] as const;
 
 // Runs the localStorage <-> Supabase sync engine while a user is signed in.
@@ -48,10 +48,10 @@ function AppShell() {
 
   // auto-open tour the first time the user lands in the app with a profile
   useEffect(() => {
-    if (ready && profile && !tourCompleted && !tourOpen) {
+    if (ready && profile && pathname === "/home" && !tourCompleted && !tourOpen) {
       setTourOpen(true);
     }
-  }, [ready, profile, tourCompleted, tourOpen]);
+  }, [ready, profile, pathname, tourCompleted, tourOpen]);
 
   const hideTabs =
     pathname.startsWith("/workout/") ||
@@ -66,9 +66,7 @@ function AppShell() {
         className="app-shell__content min-w-0 flex-1"
         style={{
           paddingTop: hideTabs ? 0 : "env(safe-area-inset-top)",
-          paddingBottom: hideTabs
-            ? 0
-            : "calc(env(safe-area-inset-bottom) + 5.25rem)",
+          paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 5.25rem)",
         }}
       >
         <div className="mx-auto w-full min-w-0 max-w-md overflow-x-clip">
@@ -84,20 +82,22 @@ function AppShell() {
             paddingRight: "max(0.75rem, env(safe-area-inset-right))",
           }}
         >
-          <div className="mx-auto flex h-[58px] max-w-md items-center justify-between gap-0.5 rounded-full border border-border bg-surface/90 px-1.5 shadow-[0_18px_42px_-20px_black] backdrop-blur">
+          <div className="mx-auto flex h-[62px] max-w-md items-center justify-between gap-1 rounded-[22px] border border-white/10 bg-[color:var(--surface-glass)] px-1.5 shadow-[0_22px_55px_-24px_black] backdrop-blur-xl">
             {tabs.map(({ to, label, Icon }) => {
               const active =
                 pathname === to ||
                 pathname.startsWith(`${to}/`) ||
-                (to === "/profile" && pathname.startsWith("/photos"));
+                (to === "/progress" && pathname.startsWith("/photos"));
               return (
                 <Link
                   key={to}
                   to={to}
                   aria-label={label}
                   className={cn(
-                    "tap flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[9px] font-medium transition",
-                    active ? "bg-neon text-neon-foreground" : "text-muted-foreground",
+                    "tap relative flex h-[50px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[17px] text-[9px] font-semibold transition-all duration-300",
+                    active
+                      ? "bg-neon text-neon-foreground shadow-[0_8px_24px_-10px_var(--neon)]"
+                      : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
                   )}
                 >
                   <Icon className="size-[18px] shrink-0" />

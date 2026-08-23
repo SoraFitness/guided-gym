@@ -23,7 +23,11 @@ function ReportPage() {
   return (
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-center justify-between mb-5">
-        <Link to="/home" className="size-9 rounded-full bg-surface grid place-items-center">
+        <Link
+          to="/home"
+          aria-label="Back to home"
+          className="size-9 rounded-full bg-surface grid place-items-center"
+        >
           <ArrowLeft className="size-4" />
         </Link>
         <h1 className="font-bold">Weekly Report</h1>

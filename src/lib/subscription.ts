@@ -10,16 +10,29 @@ export interface Subscription {
 
 const KEY = "fitness:subscription";
 const listeners = new Set<() => void>();
+const EMPTY_SUBSCRIPTION: Subscription = {
+  active: false,
+  plan: null,
+  since: null,
+};
+
+let cachedRaw: string | null | undefined;
+let cachedSubscription: Subscription = EMPTY_SUBSCRIPTION;
 
 function read(): Subscription {
-  if (typeof window === "undefined") return { active: false, plan: null, since: null };
+  if (typeof window === "undefined") return EMPTY_SUBSCRIPTION;
+
+  const raw = localStorage.getItem(KEY);
+  if (raw === cachedRaw) return cachedSubscription;
+
+  cachedRaw = raw;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return { active: false, plan: null, since: null };
-    return JSON.parse(raw) as Subscription;
+    cachedSubscription = raw ? (JSON.parse(raw) as Subscription) : EMPTY_SUBSCRIPTION;
   } catch {
-    return { active: false, plan: null, since: null };
+    cachedSubscription = EMPTY_SUBSCRIPTION;
   }
+
+  return cachedSubscription;
 }
 
 export function getSubscription(): Subscription {
@@ -27,7 +40,10 @@ export function getSubscription(): Subscription {
 }
 
 function write(sub: Subscription) {
-  localStorage.setItem(KEY, JSON.stringify(sub));
+  const raw = JSON.stringify(sub);
+  localStorage.setItem(KEY, raw);
+  cachedRaw = raw;
+  cachedSubscription = sub;
   listeners.forEach((l) => l());
 }
 
@@ -53,7 +69,7 @@ export function useSubscription() {
       return () => listeners.delete(cb);
     },
     read,
-    () => ({ active: false, plan: null, since: null }),
+    () => EMPTY_SUBSCRIPTION,
   );
 }
 

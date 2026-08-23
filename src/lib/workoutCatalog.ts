@@ -1,11 +1,11 @@
 import type { Category, Difficulty, Exercise, Workout } from "./workouts";
 import type { EquipmentSetup, ExperienceLevel, FocusArea, Goal } from "./profile";
-import imgUpperStrength from "@/assets/workouts/covers/sora-upper-strength-v2.png";
-import imgLowerStrength from "@/assets/workouts/covers/sora-lower-strength-v2.png";
-import imgHiitConditioning from "@/assets/workouts/covers/sora-hiit-conditioning-v2.png";
-import imgMobility from "@/assets/workouts/covers/sora-mobility-v2.png";
-import imgCore from "@/assets/workouts/covers/sora-core-v2.png";
-import imgCardio from "@/assets/workouts/covers/sora-cardio-v2.png";
+import imgUpperStrength from "@/assets/workouts/covers/sora-upper-strength-v2.webp";
+import imgLowerStrength from "@/assets/workouts/covers/sora-lower-strength-v2.webp";
+import imgHiitConditioning from "@/assets/workouts/covers/sora-hiit-conditioning-v2.webp";
+import imgMobility from "@/assets/workouts/covers/sora-mobility-v2.webp";
+import imgCore from "@/assets/workouts/covers/sora-core-v2.webp";
+import imgCardio from "@/assets/workouts/covers/sora-cardio-v2.webp";
 
 type BlueprintId =
   | "push"

@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createOpenRouterProvider } from "@/lib/openrouter.server";
+import { claimRateLimit } from "@/lib/rateLimit.server";
 import { generateText } from "ai";
 
 const BUCKET = "progress-photos";
@@ -76,7 +78,7 @@ export const listProgressPhotos = createServerFn({ method: "GET" })
 
 export const getProgressPhoto = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
+  .validator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }): Promise<ProgressPhotoRow | null> => {
     const { supabase, userId } = context;
     const { data: row, error } = await supabase
@@ -104,7 +106,7 @@ export const getProgressPhoto = createServerFn({ method: "GET" })
 
 export const createProgressPhoto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => createInput.parse(data))
+  .validator((data: unknown) => createInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     // Defense in depth: ensure the path starts with userId/
@@ -129,7 +131,7 @@ export const createProgressPhoto = createServerFn({ method: "POST" })
 
 export const updateProgressPhoto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => updateInput.parse(data))
+  .validator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const patch: {
@@ -154,7 +156,7 @@ export const updateProgressPhoto = createServerFn({ method: "POST" })
 
 export const deleteProgressPhoto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
+  .validator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: row, error: rErr } = await supabase
@@ -183,11 +185,16 @@ interface AiFeedback {
 
 export const compareProgressPhotosAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { beforeId: string; afterId: string }) =>
+  .validator((data: { beforeId: string; afterId: string }) =>
     z.object({ beforeId: z.string().uuid(), afterId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data, context }): Promise<AiFeedback> => {
     const { supabase, userId } = context;
+    claimRateLimit("progress-photo-compare", {
+      limit: 8,
+      windowMs: 60 * 60 * 1_000,
+      identity: userId,
+    });
     const { data: rows, error } = await supabase
       .from("progress_photos")
       .select("id, image_path, weight_kg, taken_on, photo_type")
@@ -206,17 +213,18 @@ export const compareProgressPhotosAI = createServerFn({ method: "POST" })
     const afterUrl = signed?.find((s) => s.path === after.image_path)?.signedUrl;
     if (!beforeUrl || !afterUrl) throw new Error("Could not load images");
 
-    const key = process.env.LOVABLE_API_KEY;
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const key = lovableKey || openRouterKey;
     if (!key) throw new Error("AI is not configured");
-    const gateway = createLovableAiGatewayProvider(key);
+    const gateway = lovableKey
+      ? createLovableAiGatewayProvider(lovableKey)
+      : createOpenRouterProvider(openRouterKey as string);
     const model = gateway("google/gemini-2.5-flash");
 
     const beforeDate = new Date(before.taken_on as string);
     const afterDate = new Date(after.taken_on as string);
-    const days = Math.max(
-      0,
-      Math.round((afterDate.getTime() - beforeDate.getTime()) / 86400000),
-    );
+    const days = Math.max(0, Math.round((afterDate.getTime() - beforeDate.getTime()) / 86400000));
     const wb = before.weight_kg !== null ? Number(before.weight_kg) : null;
     const wa = after.weight_kg !== null ? Number(after.weight_kg) : null;
     const weightDiff = wb !== null && wa !== null ? +(wa - wb).toFixed(1) : null;

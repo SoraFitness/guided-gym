@@ -6,11 +6,7 @@ interface Props {
 // Stylized gradient-blob athlete with morphing blobs and a bouncing silhouette.
 export function AnimatedAthlete({ size = 280, className = "" }: Props) {
   return (
-    <div
-      className={`relative ${className}`}
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
+    <div className={`relative ${className}`} style={{ width: size, height: size }} aria-hidden>
       {/* Outer halo blob */}
       <div
         className="absolute inset-0 animate-blob"
@@ -25,17 +21,13 @@ export function AnimatedAthlete({ size = 280, className = "" }: Props) {
         className="absolute animate-blob"
         style={{
           inset: "18%",
-          background:
-            "linear-gradient(135deg, var(--color-neon), oklch(0.85 0.18 160))",
+          background: "linear-gradient(135deg, var(--color-neon), oklch(0.85 0.18 160))",
           animationDuration: "5s",
           animationDirection: "reverse",
         }}
       />
       {/* Spinning ring */}
-      <svg
-        viewBox="0 0 200 200"
-        className="absolute inset-0 animate-spin-slow"
-      >
+      <svg viewBox="0 0 200 200" className="absolute inset-0 animate-spin-slow">
         <circle
           cx="100"
           cy="100"
@@ -64,34 +56,15 @@ export function AnimatedAthlete({ size = 280, className = "" }: Props) {
           {/* head */}
           <circle cx="60" cy="22" r="14" fill="url(#ath)" />
           {/* torso */}
-          <path
-            d="M40 40 Q60 32 80 40 L78 86 Q60 92 42 86 Z"
-            fill="url(#ath)"
-          />
+          <path d="M40 40 Q60 32 80 40 L78 86 Q60 92 42 86 Z" fill="url(#ath)" />
           {/* arms raised */}
-          <path
-            d="M40 44 Q22 38 18 18 L26 16 Q32 34 46 50 Z"
-            fill="url(#ath)"
-          />
-          <path
-            d="M80 44 Q98 38 102 18 L94 16 Q88 34 74 50 Z"
-            fill="url(#ath)"
-          />
+          <path d="M40 44 Q22 38 18 18 L26 16 Q32 34 46 50 Z" fill="url(#ath)" />
+          <path d="M80 44 Q98 38 102 18 L94 16 Q88 34 74 50 Z" fill="url(#ath)" />
           {/* legs squat */}
-          <path
-            d="M44 86 Q36 110 28 138 L42 142 Q52 116 58 96 Z"
-            fill="url(#ath)"
-          />
-          <path
-            d="M76 86 Q84 110 92 138 L78 142 Q68 116 62 96 Z"
-            fill="url(#ath)"
-          />
+          <path d="M44 86 Q36 110 28 138 L42 142 Q52 116 58 96 Z" fill="url(#ath)" />
+          <path d="M76 86 Q84 110 92 138 L78 142 Q68 116 62 96 Z" fill="url(#ath)" />
           {/* neon accent stripe */}
-          <path
-            d="M48 56 L72 56 L70 78 L50 78 Z"
-            fill="var(--color-neon)"
-            opacity="0.9"
-          />
+          <path d="M48 56 L72 56 L70 78 L50 78 Z" fill="var(--color-neon)" opacity="0.9" />
         </svg>
       </div>
     </div>

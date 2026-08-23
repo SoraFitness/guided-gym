@@ -59,6 +59,7 @@ export function ProgressPicturesCard() {
       <div className="mt-4 flex items-center gap-3">
         <Link
           to="/photos"
+          aria-label="Open progress photos"
           className="size-20 rounded-2xl bg-black overflow-hidden border border-border shrink-0 grid place-items-center"
         >
           {latest?.signed_url ? (

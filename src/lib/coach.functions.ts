@@ -52,7 +52,7 @@ export const getCoachThread = createServerFn({ method: "GET" })
 // Delete every message in the user's thread (keeps the thread row).
 export const clearCoachThread = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { threadId: string }) => data)
+  .validator((data: { threadId: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { error } = await supabase
@@ -66,7 +66,7 @@ export const clearCoachThread = createServerFn({ method: "POST" })
 
 export const importCoachMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { messages: StoredCoachMessage[] }) => data)
+  .validator((data: { messages: StoredCoachMessage[] }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const messages = (data.messages ?? [])

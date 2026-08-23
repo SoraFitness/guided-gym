@@ -298,6 +298,14 @@ function FaceScanPage() {
               </div>
             </div>
 
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/scan/face/$id", params: { id: "demo" } })}
+              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.035] text-sm font-bold text-white/70 transition active:scale-[0.985]"
+            >
+              <ScanFace className="size-4 text-neon" /> View sample report
+            </button>
+
             {session === null && (
               <div id="face-scan-account" className="mt-5 scroll-mt-5">
                 <SoftAccountPrompt

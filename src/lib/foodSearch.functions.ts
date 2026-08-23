@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { NutrientDetails } from "./nutritionQuality";
 
 export type FoodSearchSource = "preset" | "nutritionix" | "usda" | "openfoodfacts";
 
@@ -17,6 +18,7 @@ export interface FoodSearchResult {
   estimated?: boolean; // true when macros may be approximate (e.g. Nutritionix instant w/o detail)
   category?: "restaurant" | "protein" | "grocery" | "generic";
   imageUrl?: string;
+  nutrients?: NutrientDetails;
 }
 
 export type FoodSearchResponse =
@@ -35,6 +37,11 @@ const round = (n: unknown, d = 1) => {
   if (!Number.isFinite(v)) return 0;
   const f = 10 ** d;
   return Math.round(v * f) / f;
+};
+const optionalRound = (n: unknown, d = 1) => {
+  if (n === null || n === undefined || n === "") return undefined;
+  const value = Number(n);
+  return Number.isFinite(value) ? round(value, d) : undefined;
 };
 
 // ============ Nutritionix ============
@@ -70,6 +77,10 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
         nf_protein?: number;
         nf_total_carbohydrate?: number;
         nf_total_fat?: number;
+        nf_dietary_fiber?: number;
+        nf_sugars?: number;
+        nf_saturated_fat?: number;
+        nf_sodium?: number;
         nix_item_id?: string;
         photo?: { thumb?: string };
       }>;
@@ -98,6 +109,13 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
         estimated: !hasMacros,
         category: "restaurant",
         imageUrl: b.photo?.thumb,
+        nutrients: {
+          fiberG: optionalRound(b.nf_dietary_fiber),
+          sugarsG: optionalRound(b.nf_sugars),
+          saturatedFatG: optionalRound(b.nf_saturated_fat),
+          sodiumMg: optionalRound(b.nf_sodium),
+          provenance: "verified",
+        },
       });
     }
 
@@ -106,6 +124,7 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
     for (const c of (data.common ?? []).slice(0, 6)) {
       const n = c.full_nutrients ?? [];
       const get = (id: number) => n.find((x) => x.attr_id === id)?.value ?? 0;
+      const getOptional = (id: number) => n.find((x) => x.attr_id === id)?.value;
       const kcal = get(208);
       if (!kcal) continue;
       out.push({
@@ -120,6 +139,13 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
         verified: true,
         category: "generic",
         imageUrl: c.photo?.thumb,
+        nutrients: {
+          fiberG: optionalRound(getOptional(291)),
+          sugarsG: optionalRound(getOptional(269)),
+          saturatedFatG: optionalRound(getOptional(606)),
+          sodiumMg: optionalRound(getOptional(307)),
+          provenance: "verified",
+        },
       });
     }
 
@@ -162,6 +188,8 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
     for (const f of (data.foods ?? []).slice(0, 15)) {
       const nuts = f.foodNutrients ?? [];
       const getByNum = (num: string) => nuts.find((n) => n.nutrientNumber === num)?.value ?? 0;
+      const getOptionalByNum = (num: string) =>
+        nuts.find((nutrient) => nutrient.nutrientNumber === num)?.value;
       const kcal = getByNum("208");
       if (!kcal) continue;
       const serving =
@@ -179,6 +207,13 @@ async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
         fat: round(getByNum("204")),
         verified: true,
         category: f.dataType === "Branded" ? "grocery" : "generic",
+        nutrients: {
+          fiberG: optionalRound(getOptionalByNum("291")),
+          sugarsG: optionalRound(getOptionalByNum("269")),
+          saturatedFatG: optionalRound(getOptionalByNum("606")),
+          sodiumMg: optionalRound(getOptionalByNum("307")),
+          provenance: "verified",
+        },
       });
     }
     return out;
@@ -215,6 +250,10 @@ async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
       const protein = Number(n["proteins_serving"] ?? n["proteins_100g"] ?? 0);
       const carbs = Number(n["carbohydrates_serving"] ?? n["carbohydrates_100g"] ?? 0);
       const fat = Number(n["fat_serving"] ?? n["fat_100g"] ?? 0);
+      const fiber = optionalRound(n["fiber_serving"] ?? n["fiber_100g"]);
+      const sugars = optionalRound(n["sugars_serving"] ?? n["sugars_100g"]);
+      const saturatedFat = optionalRound(n["saturated-fat_serving"] ?? n["saturated-fat_100g"]);
+      const sodiumG = optionalRound(n["sodium_serving"] ?? n["sodium_100g"]);
       const perServing = n["energy-kcal_serving"] != null;
       if (!kcal) continue;
       out.push({
@@ -230,6 +269,13 @@ async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
         verified: true,
         category: "grocery",
         imageUrl: p.image_thumb_url,
+        nutrients: {
+          fiberG: fiber,
+          sugarsG: sugars,
+          saturatedFatG: saturatedFat,
+          sodiumMg: sodiumG === undefined ? undefined : round(sodiumG * 1000),
+          provenance: "verified",
+        },
       });
     }
     return out;
@@ -310,6 +356,7 @@ export const lookupFoodByBarcode = createServerFn({ method: "POST" })
       );
       const suffix = hasServingNutrition ? "serving" : "100g";
       const value = (key: string) => round(nutrients[`${key}_${suffix}`] ?? 0);
+      const optionalValue = (key: string) => optionalRound(nutrients[`${key}_${suffix}`]);
 
       return {
         ok: true,
@@ -329,6 +376,16 @@ export const lookupFoodByBarcode = createServerFn({ method: "POST" })
           verified: true,
           category: "grocery",
           imageUrl: product.image_front_small_url || product.image_thumb_url,
+          nutrients: {
+            fiberG: optionalValue("fiber"),
+            sugarsG: optionalValue("sugars"),
+            saturatedFatG: optionalValue("saturated-fat"),
+            sodiumMg:
+              optionalValue("sodium") === undefined
+                ? undefined
+                : round((optionalValue("sodium") as number) * 1000),
+            provenance: "verified",
+          },
         },
       };
     } catch (error) {
@@ -350,7 +407,7 @@ function dedupe(results: FoodSearchResult[]): FoodSearchResult[] {
 }
 
 export const searchFoodDatabase = createServerFn({ method: "POST" })
-  .inputValidator((input: { query: string }) => QuerySchema.parse(input))
+  .validator((input: { query: string }) => QuerySchema.parse(input))
   .handler(async ({ data }): Promise<FoodSearchResponse> => {
     const query = data.query.trim();
     if (!query) return { ok: false, reason: "empty_query", results: [] };

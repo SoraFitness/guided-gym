@@ -1,8 +1,9 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { claimScanQuota } from "@/lib/scanQuota.functions";
+import { claimRateLimit } from "@/lib/rateLimit.server";
 
 const OPENROUTER_BODY_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
 const BODY_SCAN_ANALYSIS_VERSION = "body-consistency-v1";
@@ -11,7 +12,37 @@ const Input = z.object({
   submissionId: z.string().uuid(),
 });
 
+const PreviewInput = z.object({
+  photo: z
+    .string()
+    .max(3_500_000)
+    .refine((value) => /^data:image\/(?:jpeg|png|webp);base64,/i.test(value), {
+      message: "Use a JPEG, PNG, or WebP photo.",
+    }),
+});
+
 const Score = z.number().min(0).max(100);
+const PreviewMetrics = z.object({
+  muscle: Score,
+  vTaper: Score,
+  symmetry: Score,
+  potential: Score,
+  shoulders: Score,
+  core: Score,
+});
+const RawBodyScanPreviewSchema = z.object({
+  photoUsable: z.boolean(),
+  photoIssue: z.string().max(240).nullable(),
+  metrics: PreviewMetrics,
+  visibleConditioning: Score,
+  confidence: z.number().min(0).max(1),
+});
+const BodyScanPreviewSchema = z.object({
+  overallScore: z.number().int().min(0).max(100),
+  metrics: PreviewMetrics,
+});
+
+export type BodyScanPreviewResult = z.infer<typeof BodyScanPreviewSchema>;
 const Metric = z.object({
   score: Score,
   insight: z.string().min(1).max(280),
@@ -225,6 +256,31 @@ const bodyScanJsonSchema = {
   ],
 } as const;
 
+const bodyScanPreviewJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    photoUsable: { type: "boolean" },
+    photoIssue: { type: ["string", "null"] },
+    metrics: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        muscle: { type: "number", minimum: 0, maximum: 100 },
+        vTaper: { type: "number", minimum: 0, maximum: 100 },
+        symmetry: { type: "number", minimum: 0, maximum: 100 },
+        potential: { type: "number", minimum: 0, maximum: 100 },
+        shoulders: { type: "number", minimum: 0, maximum: 100 },
+        core: { type: "number", minimum: 0, maximum: 100 },
+      },
+      required: ["muscle", "vTaper", "symmetry", "potential", "shoulders", "core"],
+    },
+    visibleConditioning: { type: "number", minimum: 0, maximum: 100 },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+  required: ["photoUsable", "photoIssue", "metrics", "visibleConditioning", "confidence"],
+} as const;
+
 const SYSTEM_PROMPT = `You are Ascendr's supportive visual physique coach. Analyze only what is visibly present in the supplied full-body photo.
 
 Return a subjective, photo-dependent fitness assessment. Pose, lighting, clothing, camera angle, muscle pump, hydration, and image quality can materially change the result.
@@ -261,6 +317,24 @@ const USER_PROMPT = `Assess this full-body photo and return:
 Also provide a short overall summary, 2-4 strongest visible areas, a prioritized 3-5 step sustainable action plan, and the required comparison object. Make every insight photo-specific, explain what is visibly driving each score, and avoid generic filler.`;
 
 const BASELINE_COMPARISON_PROMPT = `There is no previous Body Scan. Set comparison.status to baseline, comparison.direction to unchanged, and briefly explain that this report establishes the baseline.`;
+
+const PREVIEW_SYSTEM_PROMPT = `You are Ascendr's visual physique rater. Analyze only what is visibly supported by the supplied full-body photo.
+
+Return a concise scoring preview, not a medical or health assessment.
+
+Hard rules:
+- Never identify the person or infer age, ethnicity, nationality, sex, gender, health, medical conditions, personality, intelligence, or lifestyle.
+- Never insult, shame, sexualize, or use degrading language.
+- Score the current visible physique in this specific photo. Pose, lighting, clothing, camera angle, muscle pump, and image quality can affect the result.
+- Use the full 0-100 range. Do not default most people to the 70s and do not inflate scores to be encouraging.
+- Muscle measures overall visible muscular development. V-Taper measures visible shoulder-to-waist shape. Symmetry measures visible balance and proportions. Potential measures realistic improvement upside. Shoulders and Core measure their visibly supported development.
+- visibleConditioning measures visible muscular definition relative to visible adiposity. It is not a body-fat percentage or a health judgment. Less visible definition and more visible adiposity must produce a lower conditioning score; clear muscular definition must produce a higher one.
+- Scores must be internally consistent with the photo. Potential can be encouraging, but it must not inflate the current-physique factors.
+- If there is no single clearly visible full body, the person is substantially cropped or obscured, the photo is too dark or blurry, or the image is nude or not fitness-appropriate, set photoUsable to false and explain the retake needed in photoIssue.
+
+Return JSON only.`;
+
+const PREVIEW_USER_PROMPT = `Score this photo for a locked Body Scan preview. Return photoUsable, photoIssue, confidence, visibleConditioning, and these six 0-100 metrics: muscle, vTaper, symmetry, potential, shoulders, and core. Judge only the current visible physique and avoid generous score clustering.`;
 
 const PREVIOUS_SCAN_COMPARISON_PROMPT = `Two labeled photos follow. Analyze the CURRENT PHOTO for the report and compare it with the PREVIOUS PHOTO. Be conservative: set comparison.status to change_detected only when a genuine visible physique change is supported despite differences in photo conditions. Otherwise set it to no_reliable_change with direction unchanged. The comparison confidence is confidence in the change judgment, not general photo quality.`;
 
@@ -605,6 +679,135 @@ interface PreviousBodyScan {
   fingerprint: string | null;
 }
 
+const PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
+const previewCache = new Map<string, { result: BodyScanPreviewResult; expiresAt: number }>();
+
+async function previewFingerprint(photo: string) {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(photo));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function parsePreviewModelJson(text: string) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const object = text.match(/\{[\s\S]*\}/)?.[0];
+  const parsed = JSON.parse((fenced ?? object ?? text).trim());
+  return RawBodyScanPreviewSchema.parse({
+    ...parsed,
+    photoIssue: shortenText(isRecord(parsed) ? parsed.photoIssue : null, 240),
+  });
+}
+
+function buildBodyScanPreview(
+  raw: z.infer<typeof RawBodyScanPreviewSchema>,
+): BodyScanPreviewResult {
+  const metrics = {
+    muscle: Math.round(raw.metrics.muscle),
+    vTaper: Math.round(raw.metrics.vTaper),
+    symmetry: Math.round(raw.metrics.symmetry),
+    potential: Math.round(raw.metrics.potential),
+    shoulders: Math.round(raw.metrics.shoulders),
+    core: Math.round(raw.metrics.core),
+  };
+  const overallScore = Math.round(
+    metrics.muscle * 0.2 +
+      metrics.vTaper * 0.13 +
+      metrics.symmetry * 0.13 +
+      metrics.potential * 0.08 +
+      metrics.shoulders * 0.13 +
+      metrics.core * 0.13 +
+      raw.visibleConditioning * 0.2,
+  );
+  return BodyScanPreviewSchema.parse({ overallScore, metrics });
+}
+
+export const analyzeBodyScanPreviewPhoto = createServerOnlyFn(
+  async (photo: string): Promise<BodyScanPreviewResult> => {
+    const key = process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
+    if (!key) throw new Error("Body Scan preview is not configured.");
+
+    const fingerprint = await previewFingerprint(photo);
+    const cached = previewCache.get(fingerprint);
+    if (cached && cached.expiresAt > Date.now()) return cached.result;
+    if (cached) previewCache.delete(fingerprint);
+    try {
+      claimRateLimit("body-scan-preview", { limit: 12, windowMs: 15 * 60 * 1_000 });
+    } catch {
+      throw new Error("Too many preview attempts. Wait a few minutes and try again.");
+    }
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(90_000),
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          "X-Title": "Ascendr Body Scan Preview",
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_BODY_SCAN_MODEL,
+          temperature: 0,
+          max_tokens: 500,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "ascendr_body_scan_preview",
+              strict: true,
+              schema: bodyScanPreviewJsonSchema,
+            },
+          },
+          messages: [
+            { role: "system", content: PREVIEW_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: PREVIEW_USER_PROMPT },
+                { type: "image_url", image_url: { url: photo } },
+              ],
+            },
+          ],
+        }),
+      });
+
+      const payload = (await response.json()) as OpenRouterResponse;
+      if (!response.ok) throw new Error(payload.error?.message ?? `OpenRouter ${response.status}`);
+      const raw = parsePreviewModelJson(contentText(payload));
+      if (!raw.photoUsable) {
+        throw new Error(
+          `PHOTO_QUALITY:${raw.photoIssue || "Use a clear, uncropped full-body photo and try again."}`,
+        );
+      }
+      const result = buildBodyScanPreview(raw);
+      previewCache.set(fingerprint, { result, expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS });
+      if (previewCache.size > 100) {
+        const oldestKey = previewCache.keys().next().value;
+        if (typeof oldestKey === "string") previewCache.delete(oldestKey);
+      }
+      return result;
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Unknown error";
+      if (rawMessage.startsWith("PHOTO_QUALITY:")) {
+        throw new Error(rawMessage.replace("PHOTO_QUALITY:", ""));
+      }
+      if (rawMessage.startsWith("Too many preview attempts")) throw error;
+      const timedOut =
+        error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+      if (timedOut) throw new Error("The preview took too long. Please try again.");
+      if (error instanceof SyntaxError || error instanceof z.ZodError) {
+        throw new Error("The preview was incomplete. Please try that photo again.");
+      }
+      console.error("Body Scan preview failed:", rawMessage);
+      throw new Error("Body Scan preview couldn't be completed. Please try again.");
+    }
+  },
+);
+
+export const analyzeBodyScanPreview = createServerFn({ method: "POST" })
+  .validator(PreviewInput)
+  .handler(async ({ data }): Promise<BodyScanPreviewResult> => {
+    return analyzeBodyScanPreviewPhoto(data.photo);
+  });
+
 function previousBodyScan(
   row: { id: string; result: Json },
   userId: string,
@@ -717,7 +920,7 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
         .map((previousRow) => previousBodyScan(previousRow, userId))
         .filter((scan): scan is PreviousBodyScan => scan !== null);
       let duplicate = previousScans.find((scan) => scan.fingerprint === fingerprint) ?? null;
-      let previous = previousScans[0] ?? null;
+      let previous: PreviousBodyScan | null = previousScans[0] ?? null;
       let previousSignedUrl: string | null = null;
 
       if (!duplicate && previous) {

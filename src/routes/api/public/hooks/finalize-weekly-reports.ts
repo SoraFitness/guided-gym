@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { generateText } from "ai";
 
 // Sunday-evening cron: finalize last week's report for every user that logged
@@ -11,17 +12,37 @@ function startOfWeekUTC(ref: Date): Date {
   d.setUTCDate(d.getUTCDate() - dow);
   return d;
 }
-function toISO(d: Date) { return d.toISOString().slice(0, 10); }
+function toISO(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function secretsMatch(provided: string, expected: string) {
+  const length = Math.max(provided.length, expected.length);
+  let mismatch = provided.length ^ expected.length;
+  for (let index = 0; index < length; index += 1) {
+    mismatch |= (provided.charCodeAt(index) || 0) ^ (expected.charCodeAt(index) || 0);
+  }
+  return mismatch === 0;
+}
 
 export const Route = createFileRoute("/api/public/hooks/finalize-weekly-reports")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const url = process.env.SUPABASE_URL;
-        const anon = process.env.SUPABASE_PUBLISHABLE_KEY;
-        const provided = request.headers.get("apikey");
-        if (!url || !anon || !provided || provided !== anon) {
+        const secret = process.env.CRON_SECRET;
+        const authorization = request.headers.get("authorization");
+        const provided = authorization?.startsWith("Bearer ")
+          ? authorization.slice("Bearer ".length)
+          : request.headers.get("x-cron-secret");
+        if (!secret) {
+          return new Response("Weekly report finalization is not configured", { status: 503 });
+        }
+        if (!provided || !secretsMatch(provided, secret)) {
           return new Response("Unauthorized", { status: 401 });
+        }
+
+        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          return new Response("Weekly report finalization is not configured", { status: 503 });
         }
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -37,13 +58,34 @@ export const Route = createFileRoute("/api/public/hooks/finalize-weekly-reports"
 
         // Active users in past week
         const [w, f, wt, a] = await Promise.all([
-          supabaseAdmin.from("workout_logs").select("user_id").gte("performed_on", wsISO).lte("performed_on", weISO),
-          supabaseAdmin.from("food_logs").select("user_id").gte("logged_on", wsISO).lte("logged_on", weISO),
-          supabaseAdmin.from("weight_logs").select("user_id").gte("logged_on", wsISO).lte("logged_on", weISO),
-          supabaseAdmin.from("daily_activity").select("user_id").gte("activity_on", wsISO).lte("activity_on", weISO),
+          supabaseAdmin
+            .from("workout_logs")
+            .select("user_id")
+            .gte("performed_on", wsISO)
+            .lte("performed_on", weISO),
+          supabaseAdmin
+            .from("food_logs")
+            .select("user_id")
+            .gte("logged_on", wsISO)
+            .lte("logged_on", weISO),
+          supabaseAdmin
+            .from("weight_logs")
+            .select("user_id")
+            .gte("logged_on", wsISO)
+            .lte("logged_on", weISO),
+          supabaseAdmin
+            .from("daily_activity")
+            .select("user_id")
+            .gte("activity_on", wsISO)
+            .lte("activity_on", weISO),
         ]);
         const userIds = new Set<string>();
-        for (const r of [...(w.data ?? []), ...(f.data ?? []), ...(wt.data ?? []), ...(a.data ?? [])]) {
+        for (const r of [
+          ...(w.data ?? []),
+          ...(f.data ?? []),
+          ...(wt.data ?? []),
+          ...(a.data ?? []),
+        ]) {
           if (r.user_id) userIds.add(r.user_id as string);
         }
 
@@ -56,36 +98,80 @@ export const Route = createFileRoute("/api/public/hooks/finalize-weekly-reports"
             results.push({ userId, ok: false, error: e instanceof Error ? e.message : String(e) });
           }
         }
-        return Response.json({ processed: results.length, results, weekStart: wsISO });
+        return Response.json({
+          processed: results.length,
+          succeeded: results.filter((result) => result.ok).length,
+          failed: results.filter((result) => !result.ok).length,
+          weekStart: wsISO,
+        });
       },
     },
   },
 });
 
 interface Goals {
-  weekly_workout_target: number; daily_calorie_target: number;
-  daily_protein_g_target: number; daily_step_target: number;
-  goal_weight_kg: number | null; starting_weight_kg: number | null;
+  weekly_workout_target: number;
+  daily_calorie_target: number;
+  daily_protein_g_target: number;
+  daily_step_target: number;
+  goal_weight_kg: number | null;
+  starting_weight_kg: number | null;
 }
-const DEF: Goals = { weekly_workout_target: 4, daily_calorie_target: 2200, daily_protein_g_target: 140, daily_step_target: 8000, goal_weight_kg: null, starting_weight_kg: null };
+const DEF: Goals = {
+  weekly_workout_target: 4,
+  daily_calorie_target: 2200,
+  daily_protein_g_target: 140,
+  daily_step_target: 8000,
+  goal_weight_kg: null,
+  starting_weight_kg: null,
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function finalizeForUser(supa: any, userId: string, weekStart: string, weekEnd: string) {
   const { data: g } = await supa.from("user_goals").select("*").eq("user_id", userId).maybeSingle();
-  const goals: Goals = g ? {
-    weekly_workout_target: Number(g.weekly_workout_target ?? DEF.weekly_workout_target),
-    daily_calorie_target: Number(g.daily_calorie_target ?? DEF.daily_calorie_target),
-    daily_protein_g_target: Number(g.daily_protein_g_target ?? DEF.daily_protein_g_target),
-    daily_step_target: Number(g.daily_step_target ?? DEF.daily_step_target),
-    goal_weight_kg: g.goal_weight_kg !== null && g.goal_weight_kg !== undefined ? Number(g.goal_weight_kg) : null,
-    starting_weight_kg: g.starting_weight_kg !== null && g.starting_weight_kg !== undefined ? Number(g.starting_weight_kg) : null,
-  } : { ...DEF };
+  const goals: Goals = g
+    ? {
+        weekly_workout_target: Number(g.weekly_workout_target ?? DEF.weekly_workout_target),
+        daily_calorie_target: Number(g.daily_calorie_target ?? DEF.daily_calorie_target),
+        daily_protein_g_target: Number(g.daily_protein_g_target ?? DEF.daily_protein_g_target),
+        daily_step_target: Number(g.daily_step_target ?? DEF.daily_step_target),
+        goal_weight_kg:
+          g.goal_weight_kg !== null && g.goal_weight_kg !== undefined
+            ? Number(g.goal_weight_kg)
+            : null,
+        starting_weight_kg:
+          g.starting_weight_kg !== null && g.starting_weight_kg !== undefined
+            ? Number(g.starting_weight_kg)
+            : null,
+      }
+    : { ...DEF };
 
   const [wk, fd, wt, ac] = await Promise.all([
-    supa.from("workout_logs").select("name,performed_on,total_sets,total_reps,total_volume_kg,muscle_groups,is_pr,pr_note").eq("user_id", userId).gte("performed_on", weekStart).lte("performed_on", weekEnd),
-    supa.from("food_logs").select("logged_on,calories,protein_g").eq("user_id", userId).gte("logged_on", weekStart).lte("logged_on", weekEnd),
-    supa.from("weight_logs").select("logged_on,weight_kg").eq("user_id", userId).gte("logged_on", weekStart).lte("logged_on", weekEnd).order("logged_on", { ascending: true }),
-    supa.from("daily_activity").select("activity_on,steps,recovery_score").eq("user_id", userId).gte("activity_on", weekStart).lte("activity_on", weekEnd),
+    supa
+      .from("workout_logs")
+      .select("name,performed_on,total_sets,total_reps,total_volume_kg,muscle_groups,is_pr,pr_note")
+      .eq("user_id", userId)
+      .gte("performed_on", weekStart)
+      .lte("performed_on", weekEnd),
+    supa
+      .from("food_logs")
+      .select("logged_on,calories,protein_g")
+      .eq("user_id", userId)
+      .gte("logged_on", weekStart)
+      .lte("logged_on", weekEnd),
+    supa
+      .from("weight_logs")
+      .select("logged_on,weight_kg")
+      .eq("user_id", userId)
+      .gte("logged_on", weekStart)
+      .lte("logged_on", weekEnd)
+      .order("logged_on", { ascending: true }),
+    supa
+      .from("daily_activity")
+      .select("activity_on,steps,recovery_score")
+      .eq("user_id", userId)
+      .gte("activity_on", weekStart)
+      .lte("activity_on", weekEnd),
   ]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wkRows = (wk.data ?? []) as any[];
@@ -101,65 +187,109 @@ async function finalizeForUser(supa: any, userId: string, weekStart: string, wee
   const totalReps = wkRows.reduce((s, r) => s + Number(r.total_reps ?? 0), 0);
   const totalVolumeKg = +wkRows.reduce((s, r) => s + Number(r.total_volume_kg ?? 0), 0).toFixed(1);
   const muscleCounts = new Map<string, number>();
-  for (const r of wkRows) for (const m of (r.muscle_groups ?? [])) muscleCounts.set(m, (muscleCounts.get(m) ?? 0) + 1);
-  const topMuscle = [...muscleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
+  for (const r of wkRows)
+    for (const m of r.muscle_groups ?? []) muscleCounts.set(m, (muscleCounts.get(m) ?? 0) + 1);
+  const topMuscle = [...muscleCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([n]) => n);
   const prs = wkRows.filter((r) => r.is_pr).map((r) => ({ name: r.name, note: r.pr_note }));
 
-  const calByDay = new Map<string, number>(); const proByDay = new Map<string, number>();
+  const calByDay = new Map<string, number>();
+  const proByDay = new Map<string, number>();
   for (const f of fdRows) {
     calByDay.set(f.logged_on, (calByDay.get(f.logged_on) ?? 0) + Number(f.calories ?? 0));
     proByDay.set(f.logged_on, (proByDay.get(f.logged_on) ?? 0) + Number(f.protein_g ?? 0));
   }
   const loggedDays = calByDay.size;
   const calVals = [...calByDay.values()];
-  const averageCalories = calVals.length ? Math.round(calVals.reduce((s, v) => s + v, 0) / calVals.length) : 0;
-  const averageProteinG = loggedDays ? Math.round([...proByDay.values()].reduce((s, v) => s + v, 0) / loggedDays) : 0;
-  const proteinHitDays = [...proByDay.values()].filter((g) => g >= goals.daily_protein_g_target).length;
+  const averageCalories = calVals.length
+    ? Math.round(calVals.reduce((s, v) => s + v, 0) / calVals.length)
+    : 0;
+  const averageProteinG = loggedDays
+    ? Math.round([...proByDay.values()].reduce((s, v) => s + v, 0) / loggedDays)
+    : 0;
+  const proteinHitDays = [...proByDay.values()].filter(
+    (g) => g >= goals.daily_protein_g_target,
+  ).length;
   const calTarget = goals.daily_calorie_target || 1;
   const adVals = calVals.map((c) => Math.max(0, 1 - Math.abs(c - calTarget) / calTarget));
-  const calorieAdherence = adVals.length ? Math.round(adVals.reduce((s, v) => s + v, 0) / adVals.length * 100) : 0;
+  const calorieAdherence = adVals.length
+    ? Math.round((adVals.reduce((s, v) => s + v, 0) / adVals.length) * 100)
+    : 0;
 
   const startingWeightKg = wtRows.length ? Number(wtRows[0].weight_kg) : null;
   const endingWeightKg = wtRows.length ? Number(wtRows[wtRows.length - 1].weight_kg) : null;
-  const weightChangeKg = startingWeightKg !== null && endingWeightKg !== null ? +(endingWeightKg - startingWeightKg).toFixed(1) : null;
+  const weightChangeKg =
+    startingWeightKg !== null && endingWeightKg !== null
+      ? +(endingWeightKg - startingWeightKg).toFixed(1)
+      : null;
 
-  const stepDays = new Map<string, number>(); const recScores: number[] = [];
-  for (const a of acRows) { stepDays.set(a.activity_on, Number(a.steps ?? 0)); if (a.recovery_score) recScores.push(Number(a.recovery_score)); }
+  const stepDays = new Map<string, number>();
+  const recScores: number[] = [];
+  for (const a of acRows) {
+    stepDays.set(a.activity_on, Number(a.steps ?? 0));
+    if (a.recovery_score) recScores.push(Number(a.recovery_score));
+  }
   const activityHitDays = [...stepDays.values()].filter((s) => s >= goals.daily_step_target).length;
 
-  const consistencyScore = Math.round((
-    Math.min(1, workoutsCompleted / (goals.weekly_workout_target || 1)) * 0.3 +
-    Math.min(1, loggedDays / 7) * 0.2 +
-    Math.min(1, proteinHitDays / 7) * 0.2 +
-    (calorieAdherence / 100) * 0.15 +
-    Math.min(1, activityHitDays / 7) * 0.1 +
-    (recScores.length ? Math.min(1, recScores.reduce((s, v) => s + v, 0) / recScores.length / 100) : 0) * 0.05
-  ) * 100);
+  const consistencyScore = Math.round(
+    (Math.min(1, workoutsCompleted / (goals.weekly_workout_target || 1)) * 0.3 +
+      Math.min(1, loggedDays / 7) * 0.2 +
+      Math.min(1, proteinHitDays / 7) * 0.2 +
+      (calorieAdherence / 100) * 0.15 +
+      Math.min(1, activityHitDays / 7) * 0.1 +
+      (recScores.length
+        ? Math.min(1, recScores.reduce((s, v) => s + v, 0) / recScores.length / 100)
+        : 0) *
+        0.05) *
+      100,
+  );
 
   // Achievements
-  const achievements: { id: string; label: string; icon: string }[] = [{ id: "week_done", label: "Week completed", icon: "trophy" }];
-  if (workoutsCompleted >= 3) achievements.push({ id: "w3", label: "3 workouts this week", icon: "dumbbell" });
-  if (workoutsCompleted >= 5) achievements.push({ id: "w5", label: "5 workouts this week", icon: "flame" });
-  if (proteinHitDays >= 5) achievements.push({ id: "p5", label: "Protein goal hit 5+ days", icon: "drumstick" });
-  if (loggedDays >= 7) achievements.push({ id: "log7", label: "7-day food logging streak", icon: "notebook" });
-  if (prs.length > 0) achievements.push({ id: "pr", label: `New PR — ${prs[0].name}`, icon: "medal" });
+  const achievements: { id: string; label: string; icon: string }[] = [
+    { id: "week_done", label: "Week completed", icon: "trophy" },
+  ];
+  if (workoutsCompleted >= 3)
+    achievements.push({ id: "w3", label: "3 workouts this week", icon: "dumbbell" });
+  if (workoutsCompleted >= 5)
+    achievements.push({ id: "w5", label: "5 workouts this week", icon: "flame" });
+  if (proteinHitDays >= 5)
+    achievements.push({ id: "p5", label: "Protein goal hit 5+ days", icon: "drumstick" });
+  if (loggedDays >= 7)
+    achievements.push({ id: "log7", label: "7-day food logging streak", icon: "notebook" });
+  if (prs.length > 0)
+    achievements.push({ id: "pr", label: `New PR — ${prs[0].name}`, icon: "medal" });
 
   // AI summary
   let aiSummary = `You completed ${workoutsCompleted}/${goals.weekly_workout_target} workouts and hit your protein goal ${proteinHitDays}/7 days. Keep building consistency next week.`;
   try {
-    const key = process.env.LOVABLE_API_KEY;
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const key = lovableKey || openRouterKey;
     if (key) {
-      const gateway = createLovableAiGatewayProvider(key);
+      const gateway = lovableKey
+        ? createLovableAiGatewayProvider(lovableKey)
+        : createOpenRouterProvider(openRouterKey as string);
       const result = await generateText({
         model: gateway("google/gemini-3-flash-preview"),
         messages: [
-          { role: "system", content: "You are a supportive, realistic fitness coach. 4-6 sentences. No medical claims. No shaming. Plain text." },
-          { role: "user", content: `Week ${weekStart}-${weekEnd}. Workouts ${workoutsCompleted}/${goals.weekly_workout_target}. Avg cal ${averageCalories}/${goals.daily_calorie_target}. Protein hit ${proteinHitDays}/7. Weight change ${weightChangeKg ?? "—"} kg. Consistency ${consistencyScore}/100. Write a recap and one focus for next week.` },
+          {
+            role: "system",
+            content:
+              "You are a supportive, realistic fitness coach. 4-6 sentences. No medical claims. No shaming. Plain text.",
+          },
+          {
+            role: "user",
+            content: `Week ${weekStart}-${weekEnd}. Workouts ${workoutsCompleted}/${goals.weekly_workout_target}. Avg cal ${averageCalories}/${goals.daily_calorie_target}. Protein hit ${proteinHitDays}/7. Weight change ${weightChangeKg ?? "—"} kg. Consistency ${consistencyScore}/100. Write a recap and one focus for next week.`,
+          },
         ],
       });
       if (result.text?.trim()) aiSummary = result.text.trim();
     }
-  } catch { /* keep fallback */ }
+  } catch {
+    /* keep fallback */
+  }
 
   const nextWeekPlan = {
     workouts: Math.min(6, Math.max(goals.weekly_workout_target, workoutsCompleted + 1)),
@@ -170,17 +300,34 @@ async function finalizeForUser(supa: any, userId: string, weekStart: string, wee
     notes: "",
   };
 
-  await supa.from("weekly_reports").upsert({
-    user_id: userId, week_start: weekStart, week_end: weekEnd,
-    overall_score: consistencyScore, consistency_score: consistencyScore,
-    workouts_completed: workoutsCompleted, planned_workouts: goals.weekly_workout_target,
-    total_sets: totalSets, total_reps: totalReps, total_volume_kg: totalVolumeKg,
-    average_calories: averageCalories, average_protein_g: averageProteinG,
-    protein_hit_days: proteinHitDays, calorie_adherence: calorieAdherence,
-    starting_weight_kg: startingWeightKg, ending_weight_kg: endingWeightKg, weight_change_kg: weightChangeKg,
-    top_muscle_groups: topMuscle, ai_summary: aiSummary, achievements, next_week_plan: nextWeekPlan,
-    is_finalized: true, finalized_at: new Date().toISOString(),
-  }, { onConflict: "user_id,week_start" });
+  await supa.from("weekly_reports").upsert(
+    {
+      user_id: userId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      overall_score: consistencyScore,
+      consistency_score: consistencyScore,
+      workouts_completed: workoutsCompleted,
+      planned_workouts: goals.weekly_workout_target,
+      total_sets: totalSets,
+      total_reps: totalReps,
+      total_volume_kg: totalVolumeKg,
+      average_calories: averageCalories,
+      average_protein_g: averageProteinG,
+      protein_hit_days: proteinHitDays,
+      calorie_adherence: calorieAdherence,
+      starting_weight_kg: startingWeightKg,
+      ending_weight_kg: endingWeightKg,
+      weight_change_kg: weightChangeKg,
+      top_muscle_groups: topMuscle,
+      ai_summary: aiSummary,
+      achievements,
+      next_week_plan: nextWeekPlan,
+      is_finalized: true,
+      finalized_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,week_start" },
+  );
 
   await supa.from("notifications").insert({
     user_id: userId,

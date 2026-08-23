@@ -16,6 +16,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { entryFood, loadLog, loadGoals, type LogEntry, type Meal } from "./foods";
+import type { NutrientDetails } from "./nutritionQuality";
 import { replaceEntries, setNutritionGoals } from "./nutritionStore";
 import {
   getCompletedWorkouts,
@@ -95,6 +96,7 @@ function foodEntryToRow(e: LogEntry, userId: string) {
     protein_g: round1(f.protein * e.servings),
     carbs_g: round1(f.carbs * e.servings),
     fat_g: round1(f.fat * e.servings),
+    nutrition_details: (f.nutrients ?? {}) as unknown as Json,
     entry: e as unknown as Json,
   };
 }
@@ -108,6 +110,7 @@ function rowToFoodEntry(row: {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  nutrition_details: Json | null;
   logged_at: string | null;
   logged_on: string;
   created_at: string;
@@ -130,6 +133,10 @@ function rowToFoodEntry(row: {
       carbs: Number(row.carbs_g),
       fat: Number(row.fat_g),
       source: "manual",
+      nutrients:
+        row.nutrition_details && typeof row.nutrition_details === "object"
+          ? (row.nutrition_details as NutrientDetails)
+          : undefined,
     },
   };
 }

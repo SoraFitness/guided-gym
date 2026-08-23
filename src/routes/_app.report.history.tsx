@@ -27,7 +27,11 @@ function HistoryPage() {
   return (
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-center gap-3 mb-5">
-        <Link to="/report" className="size-9 rounded-full bg-surface grid place-items-center">
+        <Link
+          to="/report"
+          aria-label="Back to current report"
+          className="size-9 rounded-full bg-surface grid place-items-center"
+        >
           <ArrowLeft className="size-4" />
         </Link>
         <h1 className="font-bold text-lg">Report history</h1>

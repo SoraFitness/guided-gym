@@ -18,7 +18,7 @@ function IndexRedirect() {
     if (checkpoint && !getSubscription().active) {
       navigate({
         to: "/paywall",
-        search: checkpoint.source ? { source: checkpoint.source } : {},
+        search: { source: checkpoint.source ?? undefined },
         replace: true,
       });
       return;

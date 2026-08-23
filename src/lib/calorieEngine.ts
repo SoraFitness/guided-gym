@@ -47,8 +47,8 @@ export const SPLIT_RATIOS: Record<DeficitSplit, { food: number; exercise: number
 // ---------- Unit conversions ----------
 export const lbsToKg = (lb: number) => lb / 2.2046226218;
 export const kgToLbs = (kg: number) => kg * 2.2046226218;
-export const inToCm  = (inches: number) => inches * 2.54;
-export const cmToIn  = (cm: number) => cm / 2.54;
+export const inToCm = (inches: number) => inches * 2.54;
+export const cmToIn = (cm: number) => cm / 2.54;
 export const cmToFtIn = (cm: number) => {
   const total = Math.round(cm / 2.54);
   return { ft: Math.floor(total / 12), in: total % 12, totalIn: total };
@@ -56,8 +56,16 @@ export const cmToFtIn = (cm: number) => {
 
 // ---------- BMR / TDEE ----------
 export function bmrMifflin({
-  gender, weightKg, heightCm, age,
-}: { gender: Gender; weightKg: number; heightCm: number; age: number }): number {
+  gender,
+  weightKg,
+  heightCm,
+  age,
+}: {
+  gender: Gender;
+  weightKg: number;
+  heightCm: number;
+  age: number;
+}): number {
   const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
   if (gender === "male") return base + 5;
   if (gender === "female") return base - 161;
@@ -76,8 +84,10 @@ export const weightDeltaKg = (currentKg: number, goalKg: number) => currentKg - 
 export const estimatedTotalDeficitKcal = (deltaKg: number) => deltaKg * KCAL_PER_KG_FAT;
 
 export function daysBetween(from: Date, to: Date): number {
-  const a = new Date(from); a.setHours(0, 0, 0, 0);
-  const b = new Date(to); b.setHours(0, 0, 0, 0);
+  const a = new Date(from);
+  a.setHours(0, 0, 0, 0);
+  const b = new Date(to);
+  b.setHours(0, 0, 0, 0);
   return Math.max(1, Math.round((b.getTime() - a.getTime()) / 86_400_000));
 }
 
@@ -121,15 +131,15 @@ export interface PlanInput {
 export interface PlanResult {
   bmrKcal: number;
   formulaMaintenanceKcal: number;
-  maintenanceKcal: number;        // = observed if provided, else formula
+  maintenanceKcal: number; // = observed if provided, else formula
   recommendedIntakeKcal: number;
-  dailyDeficitKcal: number;       // positive = deficit (loss), negative = surplus (gain), 0 = maintain
-  foodDeficitKcal: number;        // intake reduction (>=0)
+  dailyDeficitKcal: number; // positive = deficit (loss), negative = surplus (gain), 0 = maintain
+  foodDeficitKcal: number; // intake reduction (>=0)
   exerciseBurnTargetKcal: number; // daily burn target (>=0)
-  weeklyChangeKg: number;         // negative = loss
+  weeklyChangeKg: number; // negative = loss
   weeklyChangeLb: number;
-  estimatedGoalDate: Date;        // when goal will actually be hit at recommended pace
-  targetDate: Date;               // what the user asked for
+  estimatedGoalDate: Date; // when goal will actually be hit at recommended pace
+  targetDate: Date; // what the user asked for
   daysToTarget: number;
   isAggressive: boolean;
   isUnsafe: boolean;
@@ -147,7 +157,10 @@ export interface PlanResult {
   };
 }
 
-function effectiveGoalKind(goalType: Goal, deltaKg: number): "lose" | "gain" | "maintain" | "recomp" {
+function effectiveGoalKind(
+  goalType: Goal,
+  deltaKg: number,
+): "lose" | "gain" | "maintain" | "recomp" {
   if (goalType === "recomp") return "recomp";
   if (goalType === "maintain") return "maintain";
   if (goalType === "build_muscle") return "gain";
@@ -160,16 +173,25 @@ function effectiveGoalKind(goalType: Goal, deltaKg: number): "lose" | "gain" | "
 
 export function computePlan(input: PlanInput): PlanResult {
   const {
-    gender, age, heightCm, currentWeightKg, goalWeightKg,
-    goalType, activity, targetDate, splitPreset, bulkPace = "lean",
+    gender,
+    age,
+    heightCm,
+    currentWeightKg,
+    goalWeightKg,
+    goalType,
+    activity,
+    targetDate,
+    splitPreset,
+    bulkPace = "lean",
     observedMaintenanceKcal,
   } = input;
 
   const bmr = bmrMifflin({ gender, weightKg: currentWeightKg, heightCm, age });
   const formulaMaintenance = tdee(bmr, activity);
-  const maintenance = observedMaintenanceKcal && observedMaintenanceKcal > 0
-    ? observedMaintenanceKcal
-    : formulaMaintenance;
+  const maintenance =
+    observedMaintenanceKcal && observedMaintenanceKcal > 0
+      ? observedMaintenanceKcal
+      : formulaMaintenance;
 
   const deltaKg = weightDeltaKg(currentWeightKg, goalWeightKg);
   const kind = effectiveGoalKind(goalType, deltaKg);
@@ -216,7 +238,7 @@ export function computePlan(input: PlanInput): PlanResult {
     if (weeklyChangeKg > maxGain) {
       isAggressive = true;
       warnings.push(
-        `Projected gain (${(kgToLbs(weeklyChangeKg)).toFixed(2)} lb/wk) is faster than recommended. Most of this will be fat.`,
+        `Projected gain (${kgToLbs(weeklyChangeKg).toFixed(2)} lb/wk) is faster than recommended. Most of this will be fat.`,
       );
     }
   } else {
@@ -314,8 +336,11 @@ export function macrosFromPlan(plan: PlanResult, currentWeightKg: number): Macro
   const kcal = plan.recommendedIntakeKcal;
   // Protein per kg scales with goal
   const proteinPerKg =
-    plan.effectiveGoal === "lose" || plan.effectiveGoal === "recomp" ? 2.2 :
-    plan.effectiveGoal === "gain" ? 2.0 : 1.8;
+    plan.effectiveGoal === "lose" || plan.effectiveGoal === "recomp"
+      ? 2.2
+      : plan.effectiveGoal === "gain"
+        ? 2.0
+        : 1.8;
   const protein = Math.round(currentWeightKg * proteinPerKg);
   const fatPct = plan.effectiveGoal === "gain" ? 0.25 : 0.28;
   const fat = Math.round((kcal * fatPct) / 9);

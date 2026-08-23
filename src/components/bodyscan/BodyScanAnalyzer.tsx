@@ -19,7 +19,11 @@ export function BodyScanAnalyzer({ image }: { image: string }) {
   return (
     <div className="px-5 pt-8">
       <div className="relative aspect-[3/4] rounded-[28px] overflow-hidden bg-black border border-white/5">
-        <img src={image} alt="Analyzing" className="absolute inset-0 h-full w-full object-cover opacity-80" />
+        <img
+          src={image}
+          alt="Analyzing"
+          className="absolute inset-0 h-full w-full object-cover opacity-80"
+        />
         <div className="absolute inset-0 bg-black/30" />
 
         {/* scan line */}

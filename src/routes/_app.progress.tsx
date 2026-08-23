@@ -1,11 +1,37 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Flame, Clock, Trophy, TrendingUp, Dumbbell, ChevronRight, Activity } from "lucide-react";
-import { useMemo } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  Flame,
+  Clock,
+  Trophy,
+  TrendingUp,
+  Dumbbell,
+  ChevronRight,
+  Activity,
+  ScanLine,
+  UserRound,
+  Sparkles,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
 import { GoalPanel } from "@/components/GoalPanel";
 import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
+import { MuscleHeatmap } from "@/components/analytics/MuscleHeatmap";
+import {
+  computeMuscleInsights,
+  muscleMetricLabel,
+  type CanonicalMuscle,
+  type MuscleScanMetric,
+  type MuscleInsight,
+} from "@/lib/muscleAnalytics";
+import { useProfile } from "@/lib/profile";
+import { useAuthSession } from "@/lib/authSession";
+import { getScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
+import { parseBodyScanResult, type BodyScanAiResult } from "@/lib/bodyScan.functions";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/progress")({
   head: () => ({ meta: [{ title: "Progress — Ascendr" }] }),
@@ -15,10 +41,43 @@ export const Route = createFileRoute("/_app/progress")({
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function ProgressPage() {
+  const { profile } = useProfile();
+  const session = useAuthSession();
   const history = useCompletedWorkouts();
   const log = useWorkoutLog();
   const progress = useProgress();
   const prs = useMemo(() => computePRs(history), [history]);
+  const listScans = useServerFn(listScanSubmissions);
+  const getScan = useServerFn(getScanSubmission);
+  const scanHistoryQuery = useQuery({
+    queryKey: ["scan-submissions", "body", "progress"],
+    queryFn: () => listScans({ data: { scanType: "body" } }),
+    enabled: session !== "loading" && Boolean(session),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const latestScanId = scanHistoryQuery.data?.[0]?.id;
+  const scanDetailQuery = useQuery({
+    queryKey: ["scan-submission", "body", latestScanId, "progress"],
+    queryFn: () => getScan({ data: { id: latestScanId as string, scanType: "body" } }),
+    enabled: Boolean(latestScanId),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const scanResult = useMemo(
+    () => (scanDetailQuery.data ? parseBodyScanResult(scanDetailQuery.data.analysis) : null),
+    [scanDetailQuery.data],
+  );
+  const muscleInsights = useMemo(
+    () =>
+      computeMuscleInsights({
+        history,
+        experience: profile?.experience,
+        focusAreas: profile?.focusAreas,
+        scanScores: scanResult ? bodyScanMetrics(scanResult) : undefined,
+      }),
+    [history, profile?.experience, profile?.focusAreas, scanResult],
+  );
 
   const week = useMemo(() => {
     const now = new Date();
@@ -72,21 +131,41 @@ function ProgressPage() {
             Training consistency, volume, records, and physique changes.
           </p>
         </div>
-        <Link
-          to="/workout/history"
-          aria-label="Workout history"
-          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface text-muted-foreground transition active:scale-95"
-        >
-          <Clock className="size-5" />
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            to="/workout/history"
+            aria-label="Workout history"
+            className="grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface text-muted-foreground transition active:scale-95"
+          >
+            <Clock className="size-5" />
+          </Link>
+          <Link
+            to="/profile"
+            aria-label="Open profile"
+            className="grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface text-neon transition active:scale-95"
+          >
+            <UserRound className="size-5" />
+          </Link>
+        </div>
       </header>
 
-      <div className="mt-5">
-        <GoalPanel />
-      </div>
+      <MuscleIntelligence
+        insights={muscleInsights}
+        hasScan={Boolean(scanResult)}
+        scanLoading={scanHistoryQuery.isLoading || scanDetailQuery.isLoading}
+      />
+
+      <PhysiqueMomentum
+        result={scanResult}
+        loading={scanHistoryQuery.isLoading || scanDetailQuery.isLoading}
+      />
 
       <div className="mt-6">
         <WeeklyReportCard />
+      </div>
+
+      <div className="mt-4">
+        <GoalPanel />
       </div>
 
       <div className="mt-4">
@@ -229,6 +308,278 @@ function ProgressPage() {
       </section>
     </div>
   );
+}
+
+function PhysiqueMomentum({
+  result,
+  loading,
+}: {
+  result: BodyScanAiResult | null;
+  loading: boolean;
+}) {
+  const score = result?.overallScore ?? 0;
+  const comparison = result?.comparison;
+  const delta = comparison?.scoreDeltas?.overallScore;
+  const circumference = 2 * Math.PI * 34;
+  const dashOffset = circumference - (circumference * score) / 100;
+  const metrics = result
+    ? [
+        { label: "Muscle", score: result.muscleDevelopment.score },
+        { label: "V-taper", score: result.vTaper.score },
+        { label: "Symmetry", score: result.symmetry.score },
+      ]
+    : [];
+
+  return (
+    <section className="relative mt-4 overflow-hidden rounded-[28px] border border-analytics-violet/20 bg-gradient-to-br from-analytics-violet/[0.16] via-surface to-surface p-4 shadow-[0_24px_55px_-38px_oklch(0.62_0.16_300/0.8)]">
+      <div className="pointer-events-none absolute -bottom-16 -right-14 size-56 rounded-full border border-analytics-violet/10" />
+      <div className="pointer-events-none absolute -bottom-24 -right-8 size-52 rounded-full bg-analytics-violet/[0.08] blur-3xl" />
+      <div className="relative flex items-start gap-3">
+        <div className="relative grid size-[78px] shrink-0 place-items-center">
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80" aria-hidden="true">
+            <circle
+              cx="40"
+              cy="40"
+              r="34"
+              fill="none"
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="5"
+            />
+            <circle
+              cx="40"
+              cy="40"
+              r="34"
+              fill="none"
+              stroke="var(--analytics-violet)"
+              strokeLinecap="round"
+              strokeWidth="5"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              className="transition-[stroke-dashoffset] duration-700"
+            />
+          </svg>
+          <div className="text-center">
+            <strong className="block text-[24px] font-extrabold leading-none tabular-nums">
+              {result ? score : "—"}
+            </strong>
+            <span className="mt-1 block text-[7px] font-black uppercase tracking-wider text-muted-foreground">
+              scan score
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-analytics-violet">
+            Body momentum
+          </p>
+          <h2 className="mt-1 text-[18px] font-extrabold tracking-[-0.025em]">
+            {loading
+              ? "Checking your latest scan…"
+              : result
+                ? "A clearer body-progress story."
+                : "Set your physique baseline."}
+          </h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            {loading
+              ? "Your scan data is loading securely."
+              : result
+                ? (comparison?.summary ??
+                  "Your latest scan anchors the visual side of your progress.")
+                : "Pair training data with a private Body Scan—then measure visual changes with clear evidence."}
+          </p>
+        </div>
+      </div>
+
+      {result ? (
+        <>
+          <div className="relative mt-4 grid grid-cols-3 gap-2">
+            {metrics.map((metric) => (
+              <div
+                key={metric.label}
+                className="rounded-2xl border border-white/[0.065] bg-black/20 px-2.5 py-2.5"
+              >
+                <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  {metric.label}
+                </p>
+                <p className="mt-1 text-[17px] font-extrabold tabular-nums">
+                  {metric.score}
+                  <span className="ml-0.5 text-[9px] font-semibold text-muted-foreground">
+                    /100
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+          {typeof delta === "number" && (
+            <p className="relative mt-3 inline-flex rounded-full border border-analytics-violet/20 bg-analytics-violet/10 px-2.5 py-1 text-[9px] font-bold text-analytics-violet">
+              {delta > 0 ? "+" : ""}
+              {delta} overall since your matched baseline
+            </p>
+          )}
+          <Link
+            to="/scan/body"
+            className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full bg-white text-[10px] font-extrabold text-black transition active:scale-[0.98]"
+          >
+            Explore body progress <ChevronRight className="size-3.5" />
+          </Link>
+        </>
+      ) : !loading ? (
+        <Link
+          to="/scan/body"
+          className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full bg-analytics-violet text-[10px] font-extrabold text-black transition active:scale-[0.98]"
+        >
+          Create body baseline <ScanLine className="size-3.5" />
+        </Link>
+      ) : null}
+    </section>
+  );
+}
+
+function MuscleIntelligence({
+  insights,
+  hasScan,
+  scanLoading,
+}: {
+  insights: MuscleInsight[];
+  hasScan: boolean;
+  scanLoading: boolean;
+}) {
+  const [mode, setMode] = useState<"training" | "physique">("training");
+  const [selected, setSelected] = useState<CanonicalMuscle>(insights[0]?.muscle ?? "shoulders");
+  const selectedInsight = insights.find((item) => item.muscle === selected) ?? insights[0];
+  const ranked = useMemo(
+    () =>
+      [...insights].sort((a, b) =>
+        mode === "training" ? b.priority - a.priority : (b.scanScore ?? -1) - (a.scanScore ?? -1),
+      ),
+    [insights, mode],
+  );
+
+  return (
+    <section className="premium-panel relative mt-5 overflow-hidden rounded-[30px] p-4 sm:p-5">
+      <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-analytics-teal/[0.07] blur-3xl" />
+      <div className="relative flex items-start justify-between gap-4">
+        <div>
+          <p className="data-kicker text-neon">Muscle intelligence</p>
+          <h2 className="mt-1 text-xl font-extrabold">Each muscle, individually ranked.</h2>
+          <p className="mt-1 max-w-[280px] text-[10px] leading-relaxed text-muted-foreground">
+            Know what to train next—and keep physique development in its own honest view.
+          </p>
+        </div>
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-neon/10 text-neon">
+          <Sparkles className="size-[18px]" />
+        </span>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-2 gap-1 rounded-[18px] border border-white/[0.06] bg-black/25 p-1">
+        {(["training", "physique"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setMode(value)}
+            className={cn(
+              "tap rounded-[14px] px-3 text-[10px] font-extrabold transition",
+              mode === value
+                ? "bg-white text-black shadow-lg"
+                : "text-muted-foreground hover:text-white",
+            )}
+          >
+            {value === "training" ? "Train next" : "Physique"}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative mt-4">
+        <MuscleHeatmap insights={insights} mode={mode} selected={selected} onSelect={setSelected} />
+      </div>
+
+      {selectedInsight && (
+        <div className="relative mt-4 rounded-[21px] border border-white/[0.07] bg-white/[0.035] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                Selected region
+              </p>
+              <h3 className="mt-1 text-lg font-extrabold">{selectedInsight.label}</h3>
+            </div>
+            <strong className="text-right text-2xl font-extrabold tabular-nums text-neon">
+              {mode === "training"
+                ? `${selectedInsight.priority}%`
+                : selectedInsight.scanScore == null
+                  ? "—"
+                  : `${Math.round(selectedInsight.scanScore)}`}
+              <span className="block text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+                {mode === "training" ? "priority" : "scan score"}
+              </span>
+            </strong>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            {mode === "training"
+              ? `${selectedInsight.readiness}% estimated readiness · ${selectedInsight.sets7d} of ${selectedInsight.targetSets} planned weekly sets. ${selectedInsight.status}.`
+              : selectedInsight.scanScore == null
+                ? "Not visible in the latest scan. Ascendr will not invent a development score without clear evidence."
+                : `${muscleMetricLabel(selectedInsight, "physique")} · ${selectedInsight.scanVisibility === "partial" ? "Partially visible" : "Clearly visible"} in the latest scan.`}
+          </p>
+        </div>
+      )}
+
+      <div className="relative mt-4 space-y-2">
+        {ranked.slice(0, 4).map((insight, index) => (
+          <button
+            key={insight.muscle}
+            type="button"
+            onClick={() => setSelected(insight.muscle)}
+            className="tap flex w-full items-center gap-3 rounded-2xl border border-white/[0.055] bg-black/15 px-3 py-2.5 text-left transition hover:border-white/10"
+          >
+            <span className="w-5 text-[11px] font-extrabold text-white/30">{index + 1}</span>
+            <span className="min-w-0 flex-1 text-[11px] font-bold">{insight.label}</span>
+            <span className="text-[10px] font-semibold text-muted-foreground">
+              {mode === "training" ? insight.status : muscleMetricLabel(insight, mode)}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {mode === "physique" && !hasScan && (
+        <div className="relative mt-4 rounded-[20px] border border-dashed border-white/10 bg-black/15 p-4 text-center">
+          <ScanLine className="mx-auto size-5 text-neon" />
+          <p className="mt-2 text-[11px] font-bold">
+            {scanLoading ? "Checking your latest scan…" : "No physique scan yet"}
+          </p>
+          {!scanLoading && (
+            <Link
+              to="/scan/body"
+              className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-neon px-5 text-[10px] font-extrabold text-neon-foreground"
+            >
+              Open Body Scan
+            </Link>
+          )}
+        </div>
+      )}
+      {mode === "physique" && hasScan && (
+        <Link
+          to="/scan/body"
+          className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 text-[10px] font-extrabold text-white/75"
+        >
+          View full scan report <ChevronRight className="size-3.5" />
+        </Link>
+      )}
+    </section>
+  );
+}
+
+function bodyScanMetrics(result: BodyScanAiResult) {
+  const groups = result.muscleGroups;
+  return {
+    shoulders: groups.upperBody.shoulders,
+    chest: groups.upperBody.chest,
+    back: groups.upperBody.back,
+    arms: groups.upperBody.arms,
+    core: groups.core.core,
+    glutes: groups.lowerBody.glutes,
+    quads: groups.lowerBody.quads,
+    hamstrings: groups.lowerBody.hamstrings,
+    calves: groups.lowerBody.calves,
+  } satisfies Partial<Record<CanonicalMuscle, MuscleScanMetric>>;
 }
 
 function StatCard({

@@ -2,13 +2,7 @@ import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import type { BodyScanResult } from "@/lib/bodyScan";
 
-export function BodyScoreCard({
-  scan,
-  image,
-}: {
-  scan: BodyScanResult;
-  image?: string;
-}) {
+export function BodyScoreCard({ scan, image }: { scan: BodyScanResult; image?: string }) {
   return (
     <div className="relative overflow-hidden rounded-[28px] border border-white/5 bg-black aspect-[3/4]">
       {image ? (

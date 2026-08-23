@@ -1,9 +1,5 @@
 // Browser-side image compression — resizes to fit within maxDim and re-encodes as JPEG.
-export async function compressImage(
-  file: File,
-  maxDim = 1600,
-  quality = 0.85,
-): Promise<Blob> {
+export async function compressImage(file: File, maxDim = 1600, quality = 0.85): Promise<Blob> {
   const bitmap = await createImageBitmap(file).catch(() => null);
   let width: number;
   let height: number;

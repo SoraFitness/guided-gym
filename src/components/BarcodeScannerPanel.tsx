@@ -113,9 +113,20 @@ export function BarcodeScannerPanel({ onResult }: { onResult: (result: LookupRes
     let active = true;
     let detected = false;
     let controls: IScannerControls | null = null;
-    const reader = createBarcodeReader();
     setStatus("requesting");
     setMessage("");
+
+    if (!window.isSecureContext) {
+      setStatus("camera-error");
+      setMessage(
+        "Live camera scanning needs a secure HTTPS link. You can still enter the digits or upload a barcode photo below.",
+      );
+      return () => {
+        active = false;
+      };
+    }
+
+    const reader = createBarcodeReader();
 
     void reader
       .decodeFromConstraints(

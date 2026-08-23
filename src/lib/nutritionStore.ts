@@ -1,9 +1,15 @@
 import { useEffect, useSyncExternalStore } from "react";
 import {
-  loadLog, saveLog, loadGoals, saveGoals as saveGoalsRaw,
-  entriesOn, macrosFor,
-  type LogEntry, type NutritionGoals,
+  loadLog,
+  saveLog,
+  loadGoals,
+  saveGoals as saveGoalsRaw,
+  entriesOn,
+  macrosFor,
+  type LogEntry,
+  type NutritionGoals,
 } from "./foods";
+import { createClientId } from "./clientId";
 
 const EVT = "fitness:nutrition-change";
 
@@ -18,7 +24,11 @@ function emit() {
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const invalidate = () => { entriesCache = null; goalsCache = null; cb(); };
+  const invalidate = () => {
+    entriesCache = null;
+    goalsCache = null;
+    cb();
+  };
   const onStorage = (e: StorageEvent) => {
     if (!e.key || e.key === "fitness:foodlog" || e.key === "fitness:goals") invalidate();
   };
@@ -43,7 +53,7 @@ export function setNutritionGoals(g: NutritionGoals) {
 export function addEntry(entry: Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string }) {
   const list = loadLog();
   list.push({
-    id: crypto.randomUUID(),
+    id: createClientId(),
     loggedAt: entry.loggedAt ?? new Date().toISOString(),
     meal: entry.meal,
     servings: entry.servings,
@@ -75,7 +85,10 @@ export function useGoals(): NutritionGoals {
 }
 
 export interface DailyNutritionTotals {
-  kcal: number; protein: number; carbs: number; fat: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
   remaining: number;
   progress: { kcal: number; protein: number; carbs: number; fat: number };
   itemCount: number;

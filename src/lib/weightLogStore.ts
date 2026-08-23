@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 import type { PlanResult } from "./calorieEngine";
 import { KCAL_PER_KG_FAT } from "./calorieEngine";
+import { createClientId } from "./clientId";
 
 export interface WeightEntry {
   id: string;
@@ -35,8 +36,13 @@ function emit() {
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const invalidate = () => { cache = null; cb(); };
-  const onStorage = (e: StorageEvent) => { if (!e.key || e.key === KEY) invalidate(); };
+  const invalidate = () => {
+    cache = null;
+    cb();
+  };
+  const onStorage = (e: StorageEvent) => {
+    if (!e.key || e.key === KEY) invalidate();
+  };
   window.addEventListener(EVT, invalidate);
   window.addEventListener("storage", onStorage);
   return () => {
@@ -57,7 +63,7 @@ export function logWeight(kg: number, date: Date = new Date()) {
   const isoDay = date.toISOString().slice(0, 10);
   // Replace any existing entry for the same day
   const filtered = list.filter((e) => e.date.slice(0, 10) !== isoDay);
-  filtered.push({ id: crypto.randomUUID(), kg, date: date.toISOString() });
+  filtered.push({ id: createClientId(), kg, date: date.toISOString() });
   write(filtered);
   emit();
 }
@@ -115,13 +121,17 @@ export function recalibrateMaintenance(
       enoughData: false,
       daysOfData: sortedW.length,
       confidence: "none",
-      suggestion: "Log your weight a few times this week so we can fine-tune your maintenance estimate.",
+      suggestion:
+        "Log your weight a few times this week so we can fine-tune your maintenance estimate.",
     };
   }
 
   const first = sortedW[0];
   const last = sortedW[sortedW.length - 1];
-  const spanDays = Math.max(1, (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000);
+  const spanDays = Math.max(
+    1,
+    (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000,
+  );
 
   if (spanDays < 7) {
     return {

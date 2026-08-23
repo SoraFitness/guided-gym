@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from "react";
+import { createClientId } from "./clientId";
 
 export type WeightUnit = "lb" | "kg";
 
 export interface SetLog {
   setNumber: number;
   plannedReps?: string;
+  plannedDurationSec?: number;
   actualReps: number;
+  actualDurationSec?: number;
   weight: number;
   unit: WeightUnit;
   completed: boolean;
@@ -121,6 +124,18 @@ function parsePlannedReps(reps?: string): number {
   return m ? parseInt(m[0], 10) : 10;
 }
 
+export function parseDurationSeconds(time?: string): number | undefined {
+  if (!time) return undefined;
+  const match = time
+    .trim()
+    .toLowerCase()
+    .match(/(\d+(?:\.\d+)?)\s*(min|mins|minute|minutes|m|sec|secs|second|seconds|s)\b/);
+  if (!match) return undefined;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.round(value * (match[2].startsWith("m") ? 60 : 1));
+}
+
 export function getPreferredUnit(): WeightUnit {
   if (typeof window === "undefined") return "lb";
   const v = localStorage.getItem(UNIT_KEY);
@@ -135,13 +150,15 @@ export function setPreferredUnit(u: WeightUnit) {
 function makeEmptySet(
   setNumber: number,
   plannedReps: string | undefined,
+  plannedDurationSec: number | undefined,
   unit: WeightUnit,
   isExtra: boolean,
 ): SetLog {
   return {
     setNumber,
     plannedReps,
-    actualReps: parsePlannedReps(plannedReps),
+    plannedDurationSec,
+    actualReps: plannedDurationSec ? 0 : parsePlannedReps(plannedReps),
     weight: 0,
     unit,
     completed: false,
@@ -196,6 +213,7 @@ export interface SeedExercise {
   name: string;
   sets: number;
   reps?: string;
+  time?: string;
   muscleGroup: string;
 }
 
@@ -210,17 +228,17 @@ export function startSession(
   }
   const unit = getPreferredUnit();
   const exLogs: ExerciseLog[] = (exercises ?? []).map((e) => ({
-    id: crypto.randomUUID(),
+    id: createClientId(),
     exerciseId: e.id,
     exerciseName: e.name,
     muscleGroup: e.muscleGroup,
     isBodyweight: isBodyweightExercise(e.name),
     sets: Array.from({ length: Math.max(1, e.sets) }).map((_, i) =>
-      makeEmptySet(i + 1, e.reps, unit, false),
+      makeEmptySet(i + 1, e.reps, parseDurationSeconds(e.time), unit, false),
     ),
   }));
   const next: WorkoutSession = {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     workoutId,
     workoutTitle: workoutTitle ?? "",
     startedAt: new Date().toISOString(),
@@ -252,13 +270,13 @@ export function addExerciseToSession(exercise: SeedExercise): ExerciseLog | null
   const cur = readSession();
   if (!cur || cur.status !== "active") return null;
   const exerciseLog: ExerciseLog = {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     exerciseId: exercise.id,
     exerciseName: exercise.name,
     muscleGroup: exercise.muscleGroup,
     isBodyweight: isBodyweightExercise(exercise.name),
     sets: Array.from({ length: Math.max(1, exercise.sets) }).map((_, index) =>
-      makeEmptySet(index + 1, exercise.reps, cur.unit, false),
+      makeEmptySet(index + 1, exercise.reps, parseDurationSeconds(exercise.time), cur.unit, false),
     ),
   };
   writeSession({ ...cur, exercises: [...cur.exercises, exerciseLog] });
@@ -296,7 +314,13 @@ export function addExtraSet(exerciseLogId: string) {
     exercises: cur.exercises.map((e) => {
       if (e.id !== exerciseLogId) return e;
       const lastSet = e.sets[e.sets.length - 1];
-      const newSet = makeEmptySet(e.sets.length + 1, lastSet?.plannedReps, cur.unit, true);
+      const newSet = makeEmptySet(
+        e.sets.length + 1,
+        lastSet?.plannedReps,
+        lastSet?.plannedDurationSec,
+        cur.unit,
+        true,
+      );
       // copy last weight as a starting point
       if (lastSet) newSet.weight = lastSet.weight;
       return { ...e, sets: [...e.sets, newSet] };

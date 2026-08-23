@@ -1,9 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { createOpenRouterProvider } from "@/lib/openrouter.server";
+import { claimRateLimit } from "@/lib/rateLimit.server";
 
 const Input = z.object({
-  image: z.string().min(32), // data URL
+  image: z
+    .string()
+    .min(32)
+    .max(11_000_000)
+    .refine((value) => /^data:image\/(?:jpeg|png|webp);base64,/i.test(value), {
+      message: "Use a JPEG, PNG, or WebP photo.",
+    }),
 });
 
 const Item = z.object({
@@ -14,6 +22,10 @@ const Item = z.object({
   protein: z.number().min(0),
   carbs: z.number().min(0),
   fat: z.number().min(0),
+  fiber: z.number().min(0),
+  sugars: z.number().min(0),
+  saturated_fat: z.number().min(0),
+  sodium: z.number().min(0),
 });
 
 const ResultSchema = z.object({
@@ -31,6 +43,10 @@ export interface FoodScanItem {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
+  sugars: number;
+  saturated_fat: number;
+  sodium: number;
 }
 export interface FoodScanResult {
   meal_name: string;
@@ -50,7 +66,8 @@ const PROMPT = [
   "For each item: give a concise common name, a realistic estimated portion",
   "(grams, cups, pieces, slices, oz — whatever is most natural), and",
   "nutrition values that match standard USDA / common nutrition database",
-  "entries for that portion. Round all macros to whole integers.",
+  "entries for that portion. Include calories, protein, carbs, fat, fibre, total sugars,",
+  "saturated fat, and sodium in milligrams. Round estimates to practical label-style values.",
   "",
   "Confidence rules:",
   "- Per-item confidence reflects how certain you are about identity AND portion.",
@@ -63,14 +80,18 @@ const PROMPT = [
 ].join("\n");
 
 export const analyzeFoodImage = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => Input.parse(d))
+  .validator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<FoodScanResponse> => {
-    const key = process.env.LOVABLE_API_KEY;
+    claimRateLimit("food-photo", { limit: 10, windowMs: 60 * 60 * 1_000 });
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const key = lovableKey || openRouterKey;
     if (!key) return { ok: false, reason: "no_key" };
 
     try {
-      const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
-      const gateway = createLovableAiGatewayProvider(key);
+      const gateway = lovableKey
+        ? (await import("./ai-gateway.server")).createLovableAiGatewayProvider(lovableKey)
+        : createOpenRouterProvider(openRouterKey as string);
 
       const { experimental_output: output } = await generateText({
         model: gateway("google/gemini-2.5-flash"),
@@ -94,6 +115,10 @@ export const analyzeFoodImage = createServerFn({ method: "POST" })
         protein: Math.max(0, Math.round(i.protein)),
         carbs: Math.max(0, Math.round(i.carbs)),
         fat: Math.max(0, Math.round(i.fat)),
+        fiber: Math.max(0, Math.round(i.fiber * 10) / 10),
+        sugars: Math.max(0, Math.round(i.sugars * 10) / 10),
+        saturated_fat: Math.max(0, Math.round(i.saturated_fat * 10) / 10),
+        sodium: Math.max(0, Math.round(i.sodium)),
       }));
 
       if (items.length === 0) return { ok: false, reason: "unrecognized" };
@@ -109,8 +134,7 @@ export const analyzeFoodImage = createServerFn({ method: "POST" })
       );
 
       const minConf = Math.min(...items.map((i) => i.confidence));
-      const needs_user_confirmation =
-        output.confidence < 0.7 || minConf < 0.7;
+      const needs_user_confirmation = output.confidence < 0.7 || minConf < 0.7;
 
       return {
         ok: true,

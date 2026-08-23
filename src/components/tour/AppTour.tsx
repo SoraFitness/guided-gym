@@ -49,8 +49,7 @@ export function AppTour({ open, steps, onClose }: Props) {
   // track viewport size
   useLayoutEffect(() => {
     if (!open) return;
-    const update = () =>
-      setViewport({ w: window.innerWidth, h: window.innerHeight });
+    const update = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
@@ -69,9 +68,7 @@ export function AppTour({ open, steps, onClose }: Props) {
         setRect(null);
         return;
       }
-      const el = document.querySelector<HTMLElement>(
-        `[data-tour="${step.targetId}"]`,
-      );
+      const el = document.querySelector<HTMLElement>(`[data-tour="${step.targetId}"]`);
       if (!el) {
         if (tries++ < 30) {
           raf = window.requestAnimationFrame(measure);
@@ -172,10 +169,7 @@ export function AppTour({ open, steps, onClose }: Props) {
     }
     // clamp horizontally so card stays on-screen
     const centerX = rect.left + rect.width / 2;
-    tipLeft = Math.min(
-      Math.max(16, centerX - tipW / 2),
-      viewport.w - tipW - 16,
-    );
+    tipLeft = Math.min(Math.max(16, centerX - tipW / 2), viewport.w - tipW - 16);
     // clamp vertically
     tipTop = Math.max(16, Math.min(viewport.h - tipH - 16, tipTop));
   }
@@ -211,12 +205,7 @@ export function AppTour({ open, steps, onClose }: Props) {
             )}
           </mask>
         </defs>
-        <rect
-          width="100%"
-          height="100%"
-          fill="rgba(2,4,8,0.78)"
-          mask="url(#tour-mask)"
-        />
+        <rect width="100%" height="100%" fill="rgba(2,4,8,0.78)" mask="url(#tour-mask)" />
       </svg>
 
       {/* highlight ring around target */}
@@ -232,8 +221,7 @@ export function AppTour({ open, steps, onClose }: Props) {
           }}
           transition={{ type: "spring", stiffness: 240, damping: 28 }}
           style={{
-            boxShadow:
-              "0 0 0 2px oklch(0.92 0.21 130), 0 0 60px 8px oklch(0.92 0.21 130 / 0.35)",
+            boxShadow: "0 0 0 2px oklch(0.92 0.21 130), 0 0 60px 8px oklch(0.92 0.21 130 / 0.35)",
           }}
         />
       )}
@@ -280,9 +268,7 @@ export function AppTour({ open, steps, onClose }: Props) {
                   <div className="text-[10px] uppercase tracking-widest text-neon font-bold">
                     Step {index + 1} of {N}
                   </div>
-                  <h3 className="mt-0.5 text-lg font-extrabold leading-tight">
-                    {step.title}
-                  </h3>
+                  <h3 className="mt-0.5 text-lg font-extrabold leading-tight">{step.title}</h3>
                 </div>
                 <button
                   onClick={handleSkip}
@@ -293,9 +279,7 @@ export function AppTour({ open, steps, onClose }: Props) {
                 </button>
               </div>
 
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-                {step.body}
-              </p>
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{step.body}</p>
 
               {/* progress dots */}
               <div className="mt-4 flex items-center gap-1">
@@ -307,8 +291,8 @@ export function AppTour({ open, steps, onClose }: Props) {
                       i === index
                         ? "w-6 bg-neon"
                         : i < index
-                        ? "w-2 bg-neon/50"
-                        : "w-2 bg-white/15",
+                          ? "w-2 bg-neon/50"
+                          : "w-2 bg-white/15",
                     )}
                   />
                 ))}

@@ -129,8 +129,8 @@ function HistoryDetail() {
   const weightStep = draft.unit === "kg" ? 2.5 : 5;
 
   return (
-    <div className="min-h-dvh bg-background pb-32">
-      <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+    <div className="mx-auto min-h-dvh w-full min-w-0 max-w-md overflow-x-clip bg-background page-pb-safe">
+      <div className="flex min-w-0 items-center gap-3 px-4 pb-3 page-pt-safe sm:px-5">
         <Link
           to="/workout/history"
           className="size-10 rounded-full bg-white/[0.06] grid place-items-center"
@@ -150,7 +150,7 @@ function HistoryDetail() {
         </div>
       </div>
 
-      <div className="px-5 grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 px-4 min-[380px]:grid-cols-4 sm:px-5">
         <Stat icon={<Clock className="size-3" />} label="min" value={`${draft.durationMin}`} />
         <Stat icon={<Dumbbell className="size-3" />} label="sets" value={`${totals.sets}`} />
         <Stat label="reps" value={`${totals.reps}`} />
@@ -161,7 +161,7 @@ function HistoryDetail() {
         />
       </div>
 
-      <div className="px-5 mt-5 flex flex-col gap-4">
+      <div className="mt-5 flex min-w-0 flex-col gap-4 px-4 sm:px-5">
         {draft.exercises.map((e) => (
           <div key={e.id} className="rounded-3xl bg-surface border border-white/[0.05] p-4">
             <div className="flex items-center justify-between">
@@ -176,7 +176,7 @@ function HistoryDetail() {
               )}
             </div>
 
-            <div className="mt-3 grid grid-cols-[28px_1fr_1fr_36px_36px] gap-2 px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="mt-3 grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 text-[9px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[10px] min-[380px]:tracking-wider">
               <span>#</span>
               <span>Reps</span>
               <span>Weight ({draft.unit})</span>
@@ -189,7 +189,7 @@ function HistoryDetail() {
                 <div
                   key={s.setNumber}
                   className={
-                    "grid grid-cols-[28px_1fr_1fr_36px_36px] gap-2 items-center p-2 rounded-2xl border " +
+                    "grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] items-center gap-1.5 rounded-2xl border p-1.5 min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:p-2 " +
                     (s.completed
                       ? "bg-neon/10 border-neon/30"
                       : "bg-white/[0.03] border-white/[0.05]")
@@ -243,7 +243,7 @@ function HistoryDetail() {
         ))}
       </div>
 
-      <div className="px-5 mt-4 rounded-3xl bg-surface border border-white/[0.05] p-4">
+      <div className="mx-4 mt-4 rounded-3xl border border-white/[0.05] bg-surface p-4 sm:mx-5">
         <div className="flex items-center gap-2 mb-2">
           <StickyNote className="size-4 text-neon" />
           <div className="text-sm font-bold">Workout notes</div>
@@ -261,7 +261,7 @@ function HistoryDetail() {
         />
       </div>
 
-      <div className="px-5 mt-6 flex flex-col gap-2">
+      <div className="mt-6 flex flex-col gap-2 px-4 sm:px-5">
         <button
           onClick={save}
           disabled={!dirty}
@@ -304,7 +304,9 @@ function NumberInput({
         type="number"
         inputMode={decimals ? "decimal" : "numeric"}
         value={value || ""}
-        onChange={(e) => onChange(decimals ? parseFloat(e.target.value) || 0 : parseInt(e.target.value || "0", 10))}
+        onChange={(e) =>
+          onChange(decimals ? parseFloat(e.target.value) || 0 : parseInt(e.target.value || "0", 10))
+        }
         className="flex-1 bg-transparent outline-none text-center text-sm font-bold tabular-nums w-full"
       />
       <button
@@ -318,19 +320,11 @@ function NumberInput({
   );
 }
 
-function Stat({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-}) {
+function Stat({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-surface border border-white/[0.05] p-3 text-center">
+    <div className="min-w-0 rounded-2xl border border-white/[0.05] bg-surface p-2.5 text-center sm:p-3">
       <div className="text-base font-extrabold tabular-nums">{value}</div>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-center">
+      <div className="flex items-center justify-center gap-1 truncate text-[9px] uppercase tracking-wide text-muted-foreground">
         {icon} {label}
       </div>
     </div>

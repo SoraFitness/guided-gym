@@ -232,7 +232,7 @@ function NewBodyScan() {
             <button
               type="button"
               onClick={() => navigate({ to: "/scan/body" })}
-              className="grid size-10 place-items-center rounded-full bg-surface"
+              className="grid h-[44px] w-[44px] place-items-center rounded-full bg-surface"
               aria-label="Back"
             >
               <ArrowLeft className="size-5" />

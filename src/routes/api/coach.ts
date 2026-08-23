@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "@/lib/openrouter.server";
+import { assertRequestSize, claimRateLimit, rateLimitResponse } from "@/lib/rateLimit.server";
 
 type Body = {
   messages: UIMessage[];
@@ -55,6 +56,12 @@ export const Route = createFileRoute("/api/coach")({
         const key = process.env.OPENROUTER_API_KEY;
         if (!key) return new Response("Missing OPENROUTER_API_KEY", { status: 500 });
 
+        try {
+          assertRequestSize(request, 256_000);
+        } catch (error) {
+          return rateLimitResponse(error) ?? new Response("Invalid request", { status: 400 });
+        }
+
         let body: Body;
         try {
           body = (await request.json()) as Body;
@@ -62,7 +69,14 @@ export const Route = createFileRoute("/api/coach")({
           return new Response("Invalid body", { status: 400 });
         }
         const { messages, threadId, userContext } = body;
-        if (!Array.isArray(messages) || !threadId) {
+        if (
+          !Array.isArray(messages) ||
+          messages.length === 0 ||
+          messages.length > 50 ||
+          typeof threadId !== "string" ||
+          threadId.length > 128 ||
+          !/^[a-zA-Z0-9_-]+$/.test(threadId)
+        ) {
           return new Response("Missing messages/threadId", { status: 400 });
         }
 
@@ -93,6 +107,16 @@ export const Route = createFileRoute("/api/coach")({
           userId = claims.claims.sub as string;
         } else if (!guestMode) {
           return new Response("Unauthorized", { status: 401 });
+        }
+
+        try {
+          claimRateLimit(guestMode ? "coach-guest" : "coach-user", {
+            limit: guestMode ? 8 : 40,
+            windowMs: 15 * 60 * 1_000,
+            identity: userId ?? undefined,
+          });
+        } catch (error) {
+          return rateLimitResponse(error) ?? new Response("Too many requests", { status: 429 });
         }
 
         const lastUser = [...messages].reverse().find((m) => m.role === "user");

@@ -4,6 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Loader2, ScanLine } from "lucide-react";
 import { BodyScanReport } from "@/components/scans/BodyScanReport";
 import { parseBodyScanResult } from "@/lib/bodyScan.functions";
+import {
+  BODY_SCAN_DEMO_DATE,
+  BODY_SCAN_DEMO_PHOTO,
+  BODY_SCAN_DEMO_RESULT,
+} from "@/lib/bodyScanDemo";
 import { getScanSubmission } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/scan/body/$id")({
@@ -15,10 +20,27 @@ function BodyScanDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const getSubmission = useServerFn(getScanSubmission);
+  const demo = id === "demo";
   const detailQuery = useQuery({
     queryKey: ["scan-submission", "body", id],
     queryFn: () => getSubmission({ data: { id, scanType: "body" } }),
+    enabled: !demo,
+    retry: false,
   });
+
+  if (demo) {
+    return (
+      <BodyScanReport
+        photo={BODY_SCAN_DEMO_PHOTO}
+        result={BODY_SCAN_DEMO_RESULT}
+        createdAt={BODY_SCAN_DEMO_DATE}
+        demo
+        onBack={() => navigate({ to: "/scan/body" })}
+        onReset={() => navigate({ to: "/scan/body/new", search: { pending: undefined } })}
+        onHistory={() => navigate({ to: "/scan/body" })}
+      />
+    );
+  }
 
   if (detailQuery.isLoading) return <ReportLoading label="Loading your Body Scan" />;
 
@@ -33,7 +55,7 @@ function BodyScanDetail() {
       result={result}
       createdAt={detailQuery.data.analyzedAt ?? detailQuery.data.createdAt}
       onBack={() => navigate({ to: "/scan/body" })}
-      onReset={() => navigate({ to: "/scan/body/new" })}
+      onReset={() => navigate({ to: "/scan/body/new", search: { pending: undefined } })}
       onHistory={() => navigate({ to: "/scan/body" })}
     />
   );
@@ -55,7 +77,7 @@ function ReportLoading({ label }: { label: string }) {
 
 function ReportUnavailable({ label }: { label: string }) {
   return (
-    <main className="mx-auto min-h-dvh max-w-md px-5 pt-5">
+    <main className="mx-auto min-h-dvh max-w-md px-4 page-pt-safe page-pb-safe sm:px-5">
       <Link
         to="/scan/body"
         className="grid size-10 place-items-center rounded-full bg-surface"
@@ -73,6 +95,7 @@ function ReportUnavailable({ label }: { label: string }) {
         </p>
         <Link
           to="/scan/body/new"
+          search={{ pending: undefined }}
           className="mt-6 flex h-12 items-center justify-center rounded-2xl bg-neon text-sm font-bold text-neon-foreground"
         >
           Start a new Body Scan

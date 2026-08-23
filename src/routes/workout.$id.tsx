@@ -106,7 +106,7 @@ function WorkoutDetail() {
   };
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col">
+    <div className="mx-auto flex min-h-dvh w-full min-w-0 max-w-[480px] flex-col overflow-x-clip bg-background">
       <div className="relative h-[42vh] min-h-[320px] bg-gradient-to-br from-neon/30 via-surface-2 to-background overflow-hidden">
         {w.image && (
           <img
@@ -124,7 +124,7 @@ function WorkoutDetail() {
               "radial-gradient(60% 50% at 50% 40%, oklch(0.92 0.21 130 / 0.5), transparent 70%)",
           }}
         />
-        <div className="absolute inset-x-0 top-0 z-20 p-5 flex items-center justify-between">
+        <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pb-4 page-pt-safe sm:px-5">
           <Link
             to="/workouts"
             className="size-10 rounded-full bg-black/40 backdrop-blur grid place-items-center"
@@ -170,7 +170,7 @@ function WorkoutDetail() {
         </div>
       </div>
 
-      <div className="flex-1 px-5 pt-6 pb-32">
+      <div className="flex-1 px-4 pb-32 pt-6 sm:px-5">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{w.category}</span>
           <span>·</span>
@@ -223,13 +223,15 @@ function WorkoutDetail() {
         </ol>
       </div>
 
-      <div className="fixed bottom-0 inset-x-0 pointer-events-none px-5 pb-8 pt-4 bg-gradient-to-t from-background via-background to-transparent">
-        <button
-          onClick={() => startSessionNav()}
-          className="pointer-events-auto w-full h-14 rounded-full bg-neon text-neon-foreground font-semibold text-base glow-neon active:scale-[0.98] transition flex items-center justify-center gap-2"
-        >
-          <Play className="size-5 fill-current" /> Let's workout
-        </button>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 bg-gradient-to-t from-background via-background to-transparent px-4 pt-4 page-pb-safe sm:px-5">
+        <div className="mx-auto w-full max-w-md">
+          <button
+            onClick={() => startSessionNav()}
+            className="pointer-events-auto flex h-14 w-full items-center justify-center gap-2 rounded-full bg-neon text-base font-semibold text-neon-foreground glow-neon transition active:scale-[0.98]"
+          >
+            <Play className="size-5 fill-current" /> Let's workout
+          </button>
+        </div>
       </div>
     </div>
   );

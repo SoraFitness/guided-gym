@@ -9,6 +9,8 @@ import {
   SkipForward,
   X,
   Timer,
+  Pause,
+  Play,
   Plus,
   Minus,
   StickyNote,
@@ -18,6 +20,7 @@ import {
   Trophy,
   Flame,
   Dumbbell,
+  TrendingUp,
   History as HistoryIcon,
   ListPlus,
   Search,
@@ -39,6 +42,8 @@ import {
   updateSession,
   updateSet,
   useActiveSession,
+  useCompletedWorkouts,
+  parseDurationSeconds,
   type CompletedWorkout,
   type ExerciseLog,
   type SetLog,
@@ -50,6 +55,14 @@ import { getExerciseDemoInfo } from "@/lib/exerciseCoaching";
 import { resolveDemoModelGender } from "@/lib/demoModel";
 import { EXERCISE_LIBRARY, type ExerciseLibraryItem } from "@/lib/workoutCatalog";
 import { cn } from "@/lib/utils";
+import { createClientId } from "@/lib/clientId";
+import {
+  getProgressionTarget,
+  getWorkoutMomentum,
+  progressionPatch,
+  type ProgressionTarget,
+  type WorkoutMomentum,
+} from "@/lib/trainingIntelligence";
 
 export const Route = createFileRoute("/workout/$id/session")({
   head: ({ params }) => ({
@@ -79,12 +92,19 @@ function fmt(sec: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function formatDurationShort(seconds: number | undefined) {
+  if (!seconds) return "Timed";
+  if (seconds % 60 === 0) return `${seconds / 60} min`;
+  return `${seconds} sec`;
+}
+
 type Phase = "exercise" | "rest" | "complete";
 
 function SessionPage() {
   const w = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
   const { profile } = useProfile();
+  const completedHistory = useCompletedWorkouts();
 
   // Seed session synchronously so first render has data.
   useState(() => {
@@ -97,6 +117,7 @@ function SessionPage() {
         name: e.name,
         sets: e.sets,
         reps: e.reps,
+        time: e.time,
         muscleGroup: e.muscleGroup,
       })),
     );
@@ -108,6 +129,7 @@ function SessionPage() {
   const [restLeft, setRestLeft] = useState(45);
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [appliedProgressionFor, setAppliedProgressionFor] = useState<string | null>(null);
   const restTimer = useRef<number | null>(null);
 
   const activeForThis =
@@ -154,6 +176,24 @@ function SessionPage() {
 
   const demo = getExerciseDemoInfo(ex, profile?.experience, profile?.goal);
   const gender = resolveDemoModelGender(profile);
+  const timedDurationSeconds = parseDurationSeconds(ex.time) ?? exLog?.sets[0]?.plannedDurationSec;
+  const isTimedExercise = timedDurationSeconds != null;
+  const progressionTarget = useMemo(
+    () =>
+      exLog && !isTimedExercise
+        ? getProgressionTarget(exLog, completedHistory, activeForThis?.unit ?? "lb")
+        : null,
+    [activeForThis?.unit, completedHistory, exLog, isTimedExercise],
+  );
+
+  const applyProgressionTarget = useCallback(() => {
+    if (!exLog || !progressionTarget) return;
+    const patch = progressionPatch(progressionTarget);
+    exLog.sets
+      .filter((set) => !set.completed)
+      .forEach((set) => updateSet(exLog.id, set.setNumber, patch));
+    setAppliedProgressionFor(exLog.id);
+  }, [exLog, progressionTarget]);
 
   // ----- rest timer -----
   const startRest = useCallback((seconds: number) => {
@@ -196,7 +236,7 @@ function SessionPage() {
     const completion = plannedTotal ? Math.min(1, sum.totalSets / plannedTotal) : 1;
     const calories = Math.round(w.calories * Math.max(0.3, completion));
     const completed: CompletedWorkout = {
-      id: crypto.randomUUID(),
+      id: createClientId(),
       workoutId: w.id,
       workoutTitle: w.title,
       startedAt: session.startedAt,
@@ -261,9 +301,9 @@ function SessionPage() {
   const nextExLog = activeForThis.exercises[Math.min(idx + 1, activeForThis.exercises.length - 1)];
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col pb-32">
+    <div className="mx-auto flex min-h-dvh w-full min-w-0 max-w-[480px] flex-col overflow-x-clip bg-background page-pb-safe">
       {/* header */}
-      <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2 px-4 pb-3 page-pt-safe min-[380px]:gap-3 sm:px-5">
         <button
           onClick={handleExit}
           className="size-10 rounded-full bg-white/[0.06] grid place-items-center"
@@ -316,6 +356,12 @@ function SessionPage() {
             {/* exercise hero */}
             <div className="px-5 mt-4">
               <h1 className="text-2xl font-extrabold leading-tight">{ex.name}</h1>
+              <p className="mt-1.5 max-w-[38ch] text-[11px] font-medium leading-relaxed text-white/65">
+                <span className="mr-1 font-black uppercase tracking-[0.12em] text-neon">
+                  Form cue
+                </span>
+                {demo.trainerCue}
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
                 <Chip className="bg-white/10 font-bold px-2.5 py-1">
                   {ex.reps ? `${ex.reps} reps` : ex.time}
@@ -326,6 +372,24 @@ function SessionPage() {
                 {exLog.isBodyweight && <Chip className="bg-neon/15 text-neon">Bodyweight</Chip>}
               </div>
             </div>
+
+            <LiveSetBoard
+              nextSet={nextIncomplete}
+              totalSets={exLog.sets.length}
+              completedCount={completedCount}
+              unit={activeForThis.unit}
+              isBodyweight={exLog.isBodyweight}
+              durationSeconds={timedDurationSeconds}
+              rest={ex.rest}
+            />
+
+            {progressionTarget && (
+              <ProgressionTargetCard
+                target={progressionTarget}
+                applied={appliedProgressionFor === exLog.id}
+                onApply={applyProgressionTarget}
+              />
+            )}
 
             {/* 3D viewer */}
             <div className="px-5 mt-4">
@@ -347,18 +411,21 @@ function SessionPage() {
               unit={activeForThis.unit}
               onComplete={handleCompleteSet}
               onAddSet={() => addExtraSet(exLog.id)}
+              timedDurationSeconds={timedDurationSeconds}
             />
 
             {/* actions */}
             <div className="px-5 mt-5 flex flex-col gap-2">
-              <button
-                onClick={() => nextIncomplete && handleCompleteSet(nextIncomplete.setNumber)}
-                disabled={!nextIncomplete}
-                className="w-full h-14 rounded-full bg-neon text-neon-foreground font-bold text-base glow-neon active:scale-[0.98] transition flex items-center justify-center gap-2 disabled:opacity-40"
-              >
-                <Check className="size-5" />
-                {nextIncomplete ? `Complete Set ${nextIncomplete.setNumber}` : "All sets done"}
-              </button>
+              {!isTimedExercise && (
+                <button
+                  onClick={() => nextIncomplete && handleCompleteSet(nextIncomplete.setNumber)}
+                  disabled={!nextIncomplete}
+                  className="w-full h-14 rounded-full bg-neon text-neon-foreground font-bold text-base glow-neon active:scale-[0.98] transition flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <Check className="size-5" />
+                  {nextIncomplete ? `Complete Set ${nextIncomplete.setNumber}` : "All sets done"}
+                </button>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => startRest(parseRest(ex.rest))}
@@ -384,7 +451,9 @@ function SessionPage() {
                 Completed {completedCount} of {exLog.sets.length} sets ·{" "}
                 {completedCount > exLog.sets.length - 1 || exLog.sets.some((s) => s.isExtraSet)
                   ? "extra sets included"
-                  : "tap + Add Set for more"}
+                  : isTimedExercise
+                    ? "timer completes each interval and starts your rest"
+                    : "tap + Add Set for more"}
               </div>
             </div>
           </motion.div>
@@ -398,8 +467,12 @@ function SessionPage() {
             nextSetsTotal={nextIncomplete ? exLog.sets.length : nextExLog.sets.length}
             nextReps={
               nextIncomplete
-                ? `${nextIncomplete.actualReps} reps`
-                : `${nextExLog.sets[0]?.plannedReps ?? "10"} reps`
+                ? isTimedExercise
+                  ? `${formatDurationShort(timedDurationSeconds)} timer`
+                  : `${nextIncomplete.actualReps} reps`
+                : nextExLog.sets[0]?.plannedDurationSec
+                  ? `${formatDurationShort(nextExLog.sets[0].plannedDurationSec)} timer`
+                  : `${nextExLog.sets[0]?.plannedReps ?? "10"} reps`
             }
             isNextExercise={!nextIncomplete}
             onAdjust={(d) => setRestLeft((r) => Math.max(5, r + d))}
@@ -478,7 +551,7 @@ function ExercisePicker({
         initial={{ y: 40 }}
         animate={{ y: 0 }}
         exit={{ y: 40 }}
-        className="max-h-[88dvh] w-full overflow-hidden rounded-t-[30px] border border-white/[0.08] bg-background"
+        className="max-h-[88dvh] w-full overflow-hidden rounded-t-[30px] border border-white/[0.08] bg-background page-pb-safe"
       >
         <div className="px-5 pb-3 pt-4">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
@@ -561,18 +634,188 @@ function ExercisePicker({
 
 /* ============================= Set tracker ============================= */
 
+function LiveSetBoard({
+  nextSet,
+  totalSets,
+  completedCount,
+  unit,
+  isBodyweight,
+  durationSeconds,
+  rest,
+}: {
+  nextSet: SetLog | undefined;
+  totalSets: number;
+  completedCount: number;
+  unit: WeightUnit;
+  isBodyweight: boolean;
+  durationSeconds?: number;
+  rest: string | undefined;
+}) {
+  const completed = !nextSet;
+  const isTimed = durationSeconds != null;
+  const repTarget = nextSet?.actualReps ?? 0;
+  const loadTarget = isBodyweight
+    ? "BW"
+    : nextSet?.weight
+      ? `${nextSet.weight} ${unit}`
+      : "Set load";
+
+  return (
+    <section className="mx-5 mt-4 overflow-hidden rounded-[23px] border border-neon/20 bg-gradient-to-br from-neon/[0.13] via-neon/[0.045] to-white/[0.025] p-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[8px] font-black uppercase tracking-[0.18em] text-neon">
+            Live set board
+          </p>
+          <h2 className="mt-1 text-[15px] font-extrabold">
+            {completed ? "Exercise complete" : `Set ${nextSet.setNumber} is up next`}
+          </h2>
+        </div>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[9px] font-bold tabular-nums text-white/75">
+          {completedCount}/{totalSets} logged
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <LiveSetMetric
+          label={isTimed ? "Timer" : "Target"}
+          value={
+            completed
+              ? "Done"
+              : isTimed
+                ? formatDurationShort(durationSeconds)
+                : `${repTarget} reps`
+          }
+        />
+        <LiveSetMetric label="Load" value={completed ? "—" : loadTarget} />
+        <LiveSetMetric label="Rest" value={completed ? "—" : rest || "45s"} />
+      </div>
+
+      <div
+        className="mt-3 flex items-center gap-1.5"
+        aria-label={`${completedCount} of ${totalSets} sets complete`}
+      >
+        {Array.from({ length: totalSets }, (_, index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-1.5 flex-1 rounded-full transition-colors",
+              index < completedCount
+                ? "bg-neon"
+                : index === completedCount
+                  ? "bg-white/65"
+                  : "bg-white/[0.10]",
+            )}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LiveSetMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/[0.065] bg-black/20 px-2.5 py-2">
+      <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-[11px] font-extrabold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function ProgressionTargetCard({
+  target,
+  applied,
+  onApply,
+}: {
+  target: ProgressionTarget;
+  applied: boolean;
+  onApply: () => void;
+}) {
+  const formatSet = (weight: number, reps: number) =>
+    weight > 0 ? `${weight} ${target.lastUnit} × ${reps}` : `BW × ${reps}`;
+  const sourceDate = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
+    new Date(target.sourceDate),
+  );
+
+  return (
+    <section className="relative mx-5 mt-3 overflow-hidden rounded-[23px] border border-analytics-violet/25 bg-gradient-to-br from-analytics-violet/[0.15] via-surface to-surface p-3.5 shadow-[0_18px_38px_-30px_var(--analytics-violet)]">
+      <div className="pointer-events-none absolute -right-10 -top-10 size-28 rounded-full bg-analytics-violet/15 blur-2xl" />
+      <div className="relative flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-2xl border border-analytics-violet/25 bg-analytics-violet/15 text-analytics-violet">
+          <TrendingUp className="size-[17px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[8px] font-black uppercase tracking-[0.17em] text-analytics-violet">
+            Smart progression
+          </p>
+          <h2 className="mt-1 text-[14px] font-extrabold leading-tight">{target.title}</h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{target.detail}</p>
+        </div>
+      </div>
+
+      <div className="relative mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2">
+          <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+            Last logged · {sourceDate}
+          </p>
+          <p className="mt-1 text-[12px] font-extrabold tabular-nums">
+            {formatSet(target.lastWeight, target.lastReps)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-analytics-violet/20 bg-analytics-violet/[0.09] px-3 py-2">
+          <p className="text-[8px] font-bold uppercase tracking-wider text-analytics-violet">
+            Today&apos;s target
+          </p>
+          <p className="mt-1 text-[12px] font-extrabold tabular-nums">
+            {formatSet(target.targetWeight, target.targetReps)}
+          </p>
+        </div>
+      </div>
+
+      {applied ? (
+        <div className="relative mt-3 flex h-10 items-center justify-center gap-1.5 rounded-full border border-neon/20 bg-neon/10 text-[10px] font-extrabold text-neon">
+          <Check className="size-3.5" /> Target applied to remaining sets
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onApply}
+          className="relative mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-white text-[10px] font-extrabold text-black transition active:scale-[0.98]"
+        >
+          Apply target to remaining sets <TrendingUp className="size-3.5" />
+        </button>
+      )}
+    </section>
+  );
+}
+
 function SetTracker({
   exLog,
   unit,
   onComplete,
   onAddSet,
+  timedDurationSeconds,
 }: {
   exLog: ExerciseLog;
   unit: WeightUnit;
   onComplete: (setNumber: number) => void;
   onAddSet: () => void;
+  timedDurationSeconds?: number;
 }) {
   const [openNotesFor, setOpenNotesFor] = useState<number | null>(null);
+
+  if (timedDurationSeconds != null) {
+    return (
+      <TimedSetTracker
+        exLog={exLog}
+        durationSeconds={timedDurationSeconds}
+        onComplete={onComplete}
+        onAddSet={onAddSet}
+      />
+    );
+  }
 
   return (
     <div className="px-5 mt-5">
@@ -584,7 +827,7 @@ function SetTracker({
       </div>
 
       {/* column headers */}
-      <div className="grid grid-cols-[28px_1fr_1fr_36px_36px] gap-2 px-2 pb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 pb-1.5 text-[9px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[10px] min-[380px]:tracking-wider">
         <span>#</span>
         <span>Reps</span>
         <span>Weight ({unit})</span>
@@ -613,6 +856,170 @@ function SetTracker({
         <Plus className="size-4" /> Add Set
       </button>
     </div>
+  );
+}
+
+function TimedSetTracker({
+  exLog,
+  durationSeconds,
+  onComplete,
+  onAddSet,
+}: {
+  exLog: ExerciseLog;
+  durationSeconds: number;
+  onComplete: (setNumber: number) => void;
+  onAddSet: () => void;
+}) {
+  const nextSet = exLog.sets.find((set) => !set.completed);
+  const initialSeconds = nextSet?.plannedDurationSec ?? durationSeconds;
+  const completedCount = exLog.sets.filter((set) => set.completed).length;
+  const [targetSeconds, setTargetSeconds] = useState(initialSeconds);
+  const [remainingSeconds, setRemainingSeconds] = useState(initialSeconds);
+  const [running, setRunning] = useState(false);
+  const remainingRef = useRef(initialSeconds);
+
+  useEffect(() => {
+    setRunning(false);
+    setTargetSeconds(initialSeconds);
+    setRemainingSeconds(initialSeconds);
+    remainingRef.current = initialSeconds;
+  }, [initialSeconds, nextSet?.setNumber]);
+
+  useEffect(() => {
+    const setNumber = nextSet?.setNumber;
+    if (!running || !setNumber) return;
+    const interval = window.setInterval(() => {
+      const nextRemaining = Math.max(0, remainingRef.current - 1);
+      remainingRef.current = nextRemaining;
+      setRemainingSeconds(nextRemaining);
+      if (nextRemaining === 0) {
+        window.clearInterval(interval);
+        setRunning(false);
+        updateSet(exLog.id, setNumber, { actualDurationSec: targetSeconds, actualReps: 0 });
+        onComplete(setNumber);
+      }
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [exLog.id, nextSet?.setNumber, onComplete, running, targetSeconds]);
+
+  const progress =
+    targetSeconds > 0 ? ((targetSeconds - remainingSeconds) / targetSeconds) * 100 : 0;
+  const addFiveSeconds = () => {
+    setTargetSeconds((current) => current + 5);
+    remainingRef.current += 5;
+    setRemainingSeconds(remainingRef.current);
+  };
+
+  return (
+    <section className="px-5 mt-5">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-analytics-teal">
+            Timed interval
+          </p>
+          <h3 className="mt-0.5 text-sm font-extrabold">
+            {nextSet
+              ? `Set ${nextSet.setNumber} of ${exLog.sets.length}`
+              : "All intervals complete"}
+          </h3>
+        </div>
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-2.5 py-1 text-[9px] font-bold tabular-nums text-muted-foreground">
+          {completedCount}/{exLog.sets.length} done
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-[24px] border border-analytics-teal/20 bg-[radial-gradient(circle_at_50%_0%,oklch(0.78_0.14_185/0.13),transparent_54%),linear-gradient(145deg,oklch(0.15_0.012_255),oklch(0.1_0.009_255))] p-4">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[8px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+              {running
+                ? "Timer running"
+                : remainingSeconds === 0
+                  ? "Interval complete"
+                  : "Ready when you are"}
+            </p>
+            <strong
+              aria-live="polite"
+              className="mt-1 block text-[43px] font-extrabold leading-none tracking-[-0.06em] tabular-nums"
+            >
+              {fmt(remainingSeconds)}
+            </strong>
+          </div>
+          <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-3 py-2 text-right">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+              Target
+            </p>
+            <p className="mt-0.5 text-sm font-extrabold tabular-nums text-analytics-teal">
+              {formatDurationShort(targetSeconds)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+          <span
+            className="block h-full rounded-full bg-gradient-to-r from-analytics-teal to-neon transition-[width] duration-300"
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+          <button
+            type="button"
+            onClick={() => setRunning((current) => !current)}
+            disabled={!nextSet || remainingSeconds === 0}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-neon text-[12px] font-extrabold text-neon-foreground transition active:scale-[0.98] disabled:opacity-40"
+          >
+            {running ? <Pause className="size-4" /> : <Play className="size-4" />}
+            {running ? "Pause" : remainingSeconds === 0 ? "Complete" : "Start timer"}
+          </button>
+          <button
+            type="button"
+            onClick={addFiveSeconds}
+            disabled={!nextSet}
+            className="flex h-12 items-center justify-center gap-1.5 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-4 text-[11px] font-extrabold text-white/80 transition active:scale-[0.98] disabled:opacity-40"
+          >
+            <Plus className="size-3.5 text-analytics-teal" /> 5 sec
+          </button>
+        </div>
+        <p className="mt-3 text-center text-[9px] leading-relaxed text-muted-foreground">
+          The timer marks this set complete and starts your programmed rest automatically.
+        </p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        {exLog.sets.map((set) => {
+          const isActive = set.setNumber === nextSet?.setNumber;
+          return (
+            <div
+              key={set.setNumber}
+              className={cn(
+                "rounded-2xl border px-2 py-2 text-center",
+                set.completed
+                  ? "border-neon/20 bg-neon/10 text-neon"
+                  : isActive
+                    ? "border-analytics-teal/30 bg-analytics-teal/10 text-analytics-teal"
+                    : "border-white/[0.06] bg-white/[0.025] text-muted-foreground",
+              )}
+            >
+              <p className="text-[8px] font-black uppercase tracking-wider">Set {set.setNumber}</p>
+              <p className="mt-1 text-[10px] font-extrabold tabular-nums">
+                {set.completed
+                  ? "Done"
+                  : formatDurationShort(set.plannedDurationSec ?? durationSeconds)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={onAddSet}
+        className="mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-[11px] font-semibold text-muted-foreground transition hover:border-analytics-teal/40 hover:text-foreground"
+      >
+        <Plus className="size-4" /> Add {formatDurationShort(durationSeconds)} interval
+      </button>
+    </section>
   );
 }
 
@@ -646,7 +1053,7 @@ function SetRow({
         (set.completed ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-white/[0.05]")
       }
     >
-      <div className="grid grid-cols-[28px_1fr_1fr_36px_36px] gap-2 items-center p-2">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] items-center gap-1.5 p-1.5 min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:p-2">
         <div className="text-center text-[11px] font-bold tabular-nums">
           {set.setNumber}
           {set.isExtraSet && <div className="text-[8px] text-neon font-bold">+1</div>}
@@ -830,7 +1237,7 @@ function RestScreen({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.22 }}
-      className="flex-1 flex flex-col items-center px-5 mt-6"
+      className="mt-6 flex flex-1 flex-col items-center px-4 sm:px-5"
     >
       <div className="text-xs uppercase tracking-widest text-neon font-bold">Rest</div>
 
@@ -912,14 +1319,14 @@ function RestScreen({
 
 function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: string | null }) {
   // Read saved record so totals reflect actual logged sets.
-  const saved =
-    typeof window !== "undefined" && savedId
-      ? (
-          JSON.parse(
-            localStorage.getItem("fitness:completedWorkouts:v2") || "[]",
-          ) as CompletedWorkout[]
-        ).find((w) => w.id === savedId)
-      : undefined;
+  const savedHistory =
+    typeof window !== "undefined"
+      ? (JSON.parse(
+          localStorage.getItem("fitness:completedWorkouts:v2") || "[]",
+        ) as CompletedWorkout[])
+      : [];
+  const saved = savedId ? savedHistory.find((entry) => entry.id === savedId) : undefined;
+  const momentum = saved ? getWorkoutMomentum(saved, savedHistory) : null;
 
   const totals = saved
     ? {
@@ -957,62 +1364,153 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
           : null;
       })
       .filter(Boolean) ?? [];
+  const completedSets =
+    saved?.exercises.reduce(
+      (count, exercise) => count + exercise.sets.filter((set) => set.completed).length,
+      0,
+    ) ?? 0;
+  const plannedSets =
+    saved?.exercises.reduce((count, exercise) => count + exercise.sets.length, 0) ?? 0;
+  const completedTimedSeconds =
+    saved?.exercises.reduce(
+      (seconds, exercise) =>
+        seconds +
+        exercise.sets
+          .filter((set) => set.completed)
+          .reduce(
+            (setSeconds, set) =>
+              setSeconds + (set.actualDurationSec ?? set.plannedDurationSec ?? 0),
+            0,
+          ),
+      0,
+    ) ?? 0;
+  const needsWeightReview = Boolean(
+    saved?.exercises.some((exercise) =>
+      exercise.sets.some(
+        (set) =>
+          set.completed && !exercise.isBodyweight && !set.plannedDurationSec && set.weight <= 0,
+      ),
+    ),
+  );
+  const isFullWorkout = plannedSets === 0 || completedSets >= plannedSets;
+  const completionLabel = plannedSets ? `${completedSets}/${plannedSets}` : `${completedSets}`;
+  const recordCopy = needsWeightReview
+    ? {
+        eyebrow: "Strength details",
+        title: "Add the load you used",
+        body: "A quick weight entry makes your next progression target more personal.",
+      }
+    : loggedWeights.length > 0
+      ? {
+          eyebrow: "Strength record",
+          title: `${loggedWeights.length} weighted exercise${loggedWeights.length === 1 ? "" : "s"} saved`,
+          body: "Your real working weights are ready for your next-session target.",
+        }
+      : completedTimedSeconds > 0
+        ? {
+            eyebrow: "Interval captured",
+            title: "Your timer work is saved",
+            body: "Ascendr will use this as a benchmark the next time you repeat the session.",
+          }
+        : {
+            eyebrow: "Session captured",
+            title: "Your training is saved",
+            body: "Repeat this session to unlock a like-for-like performance comparison.",
+          };
 
   return (
-    <div className="min-h-dvh bg-background px-5 py-8 pb-24">
+    <div className="relative min-h-dvh overflow-hidden bg-background px-4 page-pt-safe page-pb-safe sm:px-5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_50%_-6%,oklch(0.92_0.21_130/0.18),transparent_52%),linear-gradient(180deg,oklch(0.16_0.015_255),transparent_70%)]" />
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md mx-auto"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 240, damping: 24 }}
+        className="relative mx-auto max-w-md"
       >
-        <div className="text-center">
-          <div className="mx-auto size-20 rounded-full bg-neon/20 grid place-items-center">
-            <Trophy className="size-9 text-neon" />
+        <section className="relative overflow-hidden rounded-[32px] border border-white/[0.09] bg-[linear-gradient(145deg,oklch(1_0_0/0.075),oklch(0.14_0.012_255/0.9)_48%,oklch(0.12_0.01_255/0.92))] px-4 pb-4 pt-5 shadow-[0_30px_80px_-45px_oklch(0_0_0/0.95)]">
+          <div className="pointer-events-none absolute -right-10 -top-12 size-44 rounded-full border border-neon/15" />
+          <div className="pointer-events-none absolute -right-2 -top-4 size-24 rounded-full bg-neon/10 blur-2xl" />
+          <div className="relative text-center">
+            <span className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-neon/25 bg-neon/10 px-3 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-neon">
+              <Check className="size-3" strokeWidth={3} />{" "}
+              {isFullWorkout ? "Session complete" : "Session saved"}
+            </span>
+            <div className="mx-auto mt-4 grid size-[74px] place-items-center rounded-[26px] border border-neon/25 bg-neon/[0.14] text-neon shadow-[0_0_42px_-16px_var(--color-neon)]">
+              <Trophy className="size-8" />
+            </div>
+            <h1 className="mt-4 text-balance text-[29px] font-extrabold leading-[1.02] tracking-[-0.045em]">
+              {isFullWorkout ? "Workout complete." : "Your session is saved."}
+            </h1>
+            <p className="mt-2 text-[11px] font-medium text-white/60">{workout.title}</p>
+            {!isFullWorkout && (
+              <p className="mx-auto mt-2 max-w-[31ch] text-[10px] leading-relaxed text-muted-foreground">
+                You logged {completedSets} training block{completedSets === 1 ? "" : "s"}. Every
+                completed set still counts toward your trend.
+              </p>
+            )}
           </div>
-          <h1 className="mt-5 text-3xl font-extrabold">Workout complete</h1>
-          <p className="mt-2 text-muted-foreground text-sm">{workout.title}</p>
-        </div>
 
-        <div className="mt-6 grid grid-cols-3 gap-2">
-          <Stat label="Minutes" value={`${totals.duration}`} />
-          <Stat label="Exercises" value={`${totals.exercises}`} />
-          <Stat
-            label="Calories"
-            value={`${totals.calories}`}
-            icon={<Flame className="size-3 text-neon" />}
-          />
-          <Stat label="Sets" value={`${totals.sets}`} />
-          <Stat label="Reps" value={`${totals.reps}`} />
-          <Stat
-            label={`Volume (${totals.unit})`}
-            value={totals.volume.toLocaleString()}
-            icon={<Dumbbell className="size-3 text-neon" />}
-          />
-        </div>
+          <div className="relative mt-5 grid grid-cols-3 gap-2">
+            <CompletionMetric label="Time" value={`${totals.duration}m`} />
+            <CompletionMetric label="Logged" value={completionLabel} />
+            <CompletionMetric
+              label="Energy"
+              value={`${totals.calories}`}
+              suffix="kcal"
+              icon={<Flame className="size-3 text-neon" />}
+            />
+          </div>
+
+          {(completedTimedSeconds > 0 || totals.reps > 0 || totals.volume > 0) && (
+            <div className="relative mt-3 flex flex-wrap justify-center gap-2">
+              {completedTimedSeconds > 0 && (
+                <CompletionPill icon={<Timer className="size-3" />}>
+                  {formatCompletionTime(completedTimedSeconds)} timer work
+                </CompletionPill>
+              )}
+              {totals.reps > 0 && (
+                <CompletionPill icon={<Check className="size-3" />}>
+                  {totals.reps} reps logged
+                </CompletionPill>
+              )}
+              {totals.volume > 0 && (
+                <CompletionPill icon={<Dumbbell className="size-3" />}>
+                  {totals.volume.toLocaleString()} {totals.unit} volume
+                </CompletionPill>
+              )}
+            </div>
+          )}
+        </section>
 
         {totals.best && (
-          <div className="mt-4 rounded-3xl bg-gradient-to-br from-neon/15 to-transparent border border-neon/20 p-4">
-            <div className="text-[10px] uppercase tracking-wider text-neon font-bold">Best set</div>
-            <div className="mt-1 font-bold">{totals.best.exerciseName}</div>
-            <div className="text-sm text-muted-foreground">
+          <div className="mt-4 rounded-[25px] border border-neon/20 bg-gradient-to-br from-neon/[0.14] to-surface p-4">
+            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+              Best set
+            </div>
+            <div className="mt-1 font-extrabold">{totals.best.exerciseName}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
               {totals.best.weight} {totals.best.unit} × {totals.best.reps} reps
             </div>
           </div>
         )}
 
-        <div className="mt-4 rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+        {momentum && <PerformanceReplay momentum={momentum} />}
+
+        <div className="mt-4 rounded-[25px] border border-white/[0.07] bg-white/[0.025] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-neon">
-                Weights recorded
+              <div className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+                {recordCopy.eyebrow}
               </div>
-              <div className="mt-1 text-sm font-bold">
-                {loggedWeights.length
-                  ? `${loggedWeights.length} weighted exercise${loggedWeights.length === 1 ? "" : "s"} saved`
-                  : "Add weights before you leave"}
-              </div>
+              <div className="mt-1 text-[15px] font-extrabold">{recordCopy.title}</div>
             </div>
-            <Dumbbell className="size-5 text-neon" />
+            <span className="grid size-9 place-items-center rounded-2xl bg-neon/10 text-neon">
+              {needsWeightReview ? (
+                <Dumbbell className="size-4" />
+              ) : (
+                <Check className="size-4" strokeWidth={3} />
+              )}
+            </span>
           </div>
           {loggedWeights.length > 0 && (
             <div className="mt-3 grid gap-1.5">
@@ -1032,62 +1530,183 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
             </div>
           )}
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-            Review any missed reps or weights now. Changes are included in your workout history and
-            synced to your account.
+            {recordCopy.body}
           </p>
         </div>
 
-        <div className="mt-6 flex flex-col gap-2">
-          {savedId && (
+        <div className="mt-5 flex flex-col gap-2">
+          {savedId && needsWeightReview && (
             <Link
               to="/workout/history/$id"
               params={{ id: savedId }}
-              className="h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-extrabold text-neon-foreground glow-neon transition active:scale-[0.98]"
             >
-              <HistoryIcon className="size-4" /> Review & save weights
+              <Dumbbell className="size-4" /> Add load details
             </Link>
           )}
-          <Link
-            to="/home"
-            className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] font-semibold text-sm flex items-center justify-center gap-2"
-          >
-            <Home className="size-4" /> Back to home
-          </Link>
-          <Link
-            to="/workout/$id/session"
-            params={{ id: workout.id }}
-            className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] font-semibold text-sm flex items-center justify-center gap-2"
-            onClick={() =>
-              restartSession(
-                workout.id,
-                workout.title,
-                workout.exercises.map((e) => ({
-                  id: e.id,
-                  name: e.name,
-                  sets: e.sets,
-                  reps: e.reps,
-                  muscleGroup: e.muscleGroup,
-                })),
-              )
-            }
-          >
-            <RotateCcw className="size-4" /> Do it again
-          </Link>
+          {!needsWeightReview && (
+            <Link
+              to="/progress"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-extrabold text-neon-foreground glow-neon transition active:scale-[0.98]"
+            >
+              <TrendingUp className="size-4" /> See your progress
+            </Link>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              to="/home"
+              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.045] text-[11px] font-bold text-white/85 transition active:scale-[0.98]"
+            >
+              <Home className="size-3.5" /> Home
+            </Link>
+            <Link
+              to="/workout/$id/session"
+              params={{ id: workout.id }}
+              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.045] text-[11px] font-bold text-white/85 transition active:scale-[0.98]"
+              onClick={() =>
+                restartSession(
+                  workout.id,
+                  workout.title,
+                  workout.exercises.map((e) => ({
+                    id: e.id,
+                    name: e.name,
+                    sets: e.sets,
+                    reps: e.reps,
+                    time: e.time,
+                    muscleGroup: e.muscleGroup,
+                  })),
+                )
+              }
+            >
+              <RotateCcw className="size-3.5" /> Do it again
+            </Link>
+          </div>
+          {savedId && !needsWeightReview && (
+            <Link
+              to="/workout/history/$id"
+              params={{ id: savedId }}
+              className="flex h-10 items-center justify-center gap-1.5 text-[10px] font-bold text-muted-foreground transition hover:text-white"
+            >
+              <HistoryIcon className="size-3.5" /> Review workout record
+            </Link>
+          )}
         </div>
       </motion.div>
     </div>
   );
 }
 
-function Stat({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+function PerformanceReplay({ momentum }: { momentum: WorkoutMomentum }) {
   return (
-    <div className="rounded-2xl bg-surface border border-white/[0.05] p-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1 justify-center">
+    <section className="relative mt-4 overflow-hidden rounded-3xl border border-analytics-violet/20 bg-gradient-to-br from-analytics-violet/[0.15] via-surface to-surface p-4">
+      <div className="pointer-events-none absolute -right-10 -top-12 size-32 rounded-full bg-analytics-violet/15 blur-2xl" />
+      <div className="relative flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl border border-analytics-violet/25 bg-analytics-violet/15 text-analytics-violet">
+          <TrendingUp className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[9px] font-black uppercase tracking-[0.17em] text-analytics-violet">
+            Performance replay
+          </p>
+          <h2 className="mt-1 text-[16px] font-extrabold leading-tight">{momentum.headline}</h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            {momentum.detail}
+          </p>
+        </div>
+      </div>
+
+      {momentum.comparison && (
+        <div className="relative mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+              Last session
+            </p>
+            <p className="mt-1 text-[15px] font-extrabold tabular-nums">
+              {momentum.comparison.previous.toLocaleString()}
+              {momentum.comparison.unit && (
+                <span className="ml-1 text-[9px] text-muted-foreground">
+                  {momentum.comparison.unit}
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-analytics-violet/20 bg-analytics-violet/[0.09] px-3 py-2.5">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-analytics-violet">
+              Today · {momentum.comparison.changePercent > 0 ? "+" : ""}
+              {momentum.comparison.changePercent}% {momentum.comparison.label.toLowerCase()}
+            </p>
+            <p className="mt-1 text-[15px] font-extrabold tabular-nums">
+              {momentum.comparison.current.toLocaleString()}
+              {momentum.comparison.unit && (
+                <span className="ml-1 text-[9px] text-muted-foreground">
+                  {momentum.comparison.unit}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {momentum.personalRecords.length > 0 && (
+        <div className="relative mt-3 space-y-1.5">
+          {momentum.personalRecords.map((record) => (
+            <div
+              key={record.exerciseName}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-neon/15 bg-neon/[0.08] px-3 py-2 text-[10px]"
+            >
+              <span className="flex min-w-0 items-center gap-1.5 font-bold text-neon">
+                <Trophy className="size-3.5 shrink-0" />
+                <span className="truncate">{record.exerciseName}</span>
+              </span>
+              <span className="shrink-0 font-extrabold tabular-nums">{record.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CompletionMetric({
+  label,
+  value,
+  suffix,
+  icon,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-2 py-2.5 text-center">
+      <div className="flex items-center justify-center gap-1 text-[8px] font-bold uppercase tracking-[0.13em] text-muted-foreground">
         {icon} {label}
       </div>
-      <div className="mt-1 text-xl font-extrabold tabular-nums text-center">{value}</div>
+      <div className="mt-1 text-[19px] font-extrabold leading-none tabular-nums">
+        {value}
+        {suffix && (
+          <span className="ml-1 text-[8px] font-bold text-muted-foreground">{suffix}</span>
+        )}
+      </div>
     </div>
   );
+}
+
+function CompletionPill({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-black/20 px-3 py-1.5 text-[9px] font-bold text-white/70">
+      <span className="text-neon">{icon}</span>
+      {children}
+    </span>
+  );
+}
+
+function formatCompletionTime(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 void ChevronDown;

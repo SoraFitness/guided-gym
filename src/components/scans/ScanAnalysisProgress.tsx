@@ -11,7 +11,7 @@ interface ScanAnalysisProgressProps {
 const previewSteps = [
   "Preparing your photo",
   "Checking image clarity",
-  "Creating your private preview",
+  "Estimating your physique rating",
   "Locking personalized insights",
   "Ready for the next step",
 ] as const;
@@ -86,7 +86,7 @@ export function ScanAnalysisProgress({
         transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-end px-5 pb-10">
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-end px-4 page-pb-safe sm:px-5">
         <div className="rounded-[30px] border border-white/10 bg-black/70 p-5 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -153,7 +153,7 @@ export function ScanAnalysisProgress({
             )}
             <p className="text-[10px] leading-relaxed text-white/45">
               {preview
-                ? "This onboarding preview stays on this device. The full AI scan runs only after you subscribe."
+                ? "This limited AI check creates your photo-specific score. Detailed factor numbers, body-fat insights, and your full report stay locked until you subscribe."
                 : nearlyTimedOut
                   ? "Still connected. If the provider times out, your private photo stays saved for a one-tap retry."
                   : takingLonger

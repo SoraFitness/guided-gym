@@ -16,6 +16,7 @@ import {
   History,
   Loader2,
   Plus,
+  Gauge,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -31,12 +32,14 @@ import {
   type EquipmentSetup,
   type FocusArea,
   type Goal,
+  type Profile,
 } from "@/lib/profile";
 import {
   getWorkout,
   workoutCatalogSize,
   workoutRecommendationService,
   type Category,
+  type Workout,
 } from "@/lib/workouts";
 import {
   weeklyScheduleService,
@@ -60,6 +63,12 @@ import {
   type SavedWorkoutPlan,
   type WorkoutPlanInput,
 } from "@/lib/workoutPlanStore";
+import {
+  canonicalMuscleWeights,
+  computeMuscleInsights,
+  type CanonicalMuscle,
+  type MuscleInsight,
+} from "@/lib/muscleAnalytics";
 
 export const Route = createFileRoute("/_app/workouts")({
   head: () => ({ meta: [{ title: "Workouts — Ascendr" }] }),
@@ -200,6 +209,16 @@ function RecommendedView() {
   const { profile } = useProfile();
   const [showPlanBuilder, setShowPlanBuilder] = useState(false);
   const savedPlans = useSavedWorkoutPlans();
+  const history = useCompletedWorkouts();
+  const muscleInsights = useMemo(
+    () =>
+      computeMuscleInsights({
+        history,
+        experience: profile?.experience,
+        focusAreas: profile?.focusAreas,
+      }),
+    [history, profile?.experience, profile?.focusAreas],
+  );
   if (!profile) return null;
   const activePlan = getActiveWorkoutPlan(savedPlans, profile);
   const activeIds = new Set(activePlan?.workoutIds ?? []);
@@ -213,6 +232,8 @@ function RecommendedView() {
   return (
     <div>
       {activePlan && <SavedPlanSummary plan={activePlan} />}
+
+      {topPick && <AdaptiveSessionBrief workout={topPick} insights={muscleInsights} />}
 
       <div className="mb-3 flex items-end justify-between gap-3 px-1">
         <div>
@@ -291,6 +312,99 @@ function RecommendedView() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function AdaptiveSessionBrief({
+  workout,
+  insights,
+}: {
+  workout: Workout;
+  insights: MuscleInsight[];
+}) {
+  const sessionMuscles = useMemo(() => {
+    const ids = new Set<CanonicalMuscle>();
+    for (const exercise of workout.exercises) {
+      for (const muscle of Object.keys(
+        canonicalMuscleWeights(exercise.muscleGroup),
+      ) as CanonicalMuscle[]) {
+        ids.add(muscle);
+      }
+    }
+    const byId = new Map(insights.map((insight) => [insight.muscle, insight]));
+    const resolved = [...ids].map((id) => byId.get(id)).filter(Boolean) as MuscleInsight[];
+    return resolved.length ? resolved : insights.slice(0, 3);
+  }, [insights, workout.exercises]);
+  const readiness = Math.round(
+    sessionMuscles.reduce((total, insight) => total + insight.readiness, 0) /
+      Math.max(1, sessionMuscles.length),
+  );
+  const readyCount = sessionMuscles.filter(
+    (insight) => insight.status === "Ready" || insight.status === "Needs volume",
+  ).length;
+
+  return (
+    <section className="relative mb-5 overflow-hidden rounded-[27px] border border-analytics-teal/20 bg-gradient-to-br from-analytics-teal/[0.16] via-surface to-surface p-4 shadow-[0_24px_54px_-38px_oklch(0.72_0.11_190/0.75)]">
+      <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full border border-analytics-teal/15" />
+      <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-analytics-teal/10 blur-3xl" />
+      <div className="relative flex items-start gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-analytics-teal/20 bg-analytics-teal/10 text-analytics-teal">
+          <Gauge className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-analytics-teal">
+              Adaptive session brief
+            </p>
+            <span className="rounded-full border border-white/10 bg-black/15 px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/65">
+              Estimate
+            </span>
+          </div>
+          <h2 className="mt-1 text-[17px] font-extrabold tracking-[-0.025em]">
+            {readiness >= 75 ? "Good fit for today." : "Adjust the pace, keep the plan."}
+          </h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            {readyCount} of {sessionMuscles.length} session regions are ready for productive work.
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <strong className="text-[28px] font-extrabold leading-none tabular-nums text-analytics-teal">
+            {readiness}
+          </strong>
+          <span className="mt-1 block text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+            readiness
+          </span>
+        </div>
+      </div>
+
+      <div className="relative mt-4 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+        {sessionMuscles.slice(0, 4).map((insight) => (
+          <div
+            key={insight.muscle}
+            className="min-w-[104px] flex-1 rounded-2xl border border-white/[0.065] bg-black/20 px-3 py-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-[10px] font-bold">{insight.label}</span>
+              <span className="text-[11px] font-extrabold tabular-nums text-analytics-teal">
+                {insight.readiness}%
+              </span>
+            </div>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.08]">
+              <span
+                className="block h-full rounded-full bg-analytics-teal"
+                style={{ width: `${insight.readiness}%` }}
+              />
+            </div>
+            <p className="mt-1.5 truncate text-[8px] font-semibold text-muted-foreground">
+              {insight.status}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="relative mt-3 text-[8px] leading-relaxed text-muted-foreground">
+        Readiness is a training estimate from your logged work—not a medical recovery measurement.
+      </p>
+    </section>
   );
 }
 
@@ -414,7 +528,7 @@ function WorkoutPlanBuilder({
         initial={{ y: 32, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 32, opacity: 0 }}
-        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[30px] border border-white/[0.08] bg-background px-5 pb-8 pt-4 sm:max-w-md sm:rounded-[30px]"
+        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[30px] border border-white/[0.08] bg-background px-4 pt-4 page-pb-safe sm:max-w-md sm:rounded-[30px] sm:px-5"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
         <div className="flex items-center gap-3">
@@ -907,12 +1021,9 @@ function WeeklyScheduleView() {
         />
       ) : (
         <MonthlyTrainingCalendar
-          schedule={schedule}
+          profile={profile}
+          activeWorkoutIds={activePlan?.workoutIds ?? []}
           completedWorkouts={completedWorkouts}
-          onChooseScheduledDay={(index) => {
-            setActiveDayIndex(index);
-            setCalendarMode("week");
-          }}
         />
       )}
     </div>
@@ -927,19 +1038,26 @@ function localDateISO(date: Date) {
 }
 
 function MonthlyTrainingCalendar({
-  schedule,
+  profile,
+  activeWorkoutIds,
   completedWorkouts,
-  onChooseScheduledDay,
 }: {
-  schedule: WeeklyScheduleDay[];
+  profile: Profile;
+  activeWorkoutIds: string[];
   completedWorkouts: ReturnType<typeof useCompletedWorkouts>;
-  onChooseScheduledDay: (index: number) => void;
 }) {
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const plannedByDate = new Map(schedule.map((day, index) => [day.dateISO, { day, index }]));
+  const monthSchedule = useMemo(
+    () => weeklyScheduleService.generateMonthSchedule(profile, visibleMonth, activeWorkoutIds),
+    [profile, visibleMonth, activeWorkoutIds],
+  );
+  const plannedByDate = useMemo(
+    () => new Map(monthSchedule.map((day) => [day.dateISO, day])),
+    [monthSchedule],
+  );
   const completedByDate = useMemo(() => {
     const map = new Map<string, number>();
     completedWorkouts.forEach((workout) => {
@@ -948,6 +1066,7 @@ function MonthlyTrainingCalendar({
     });
     return map;
   }, [completedWorkouts]);
+  const [selectedDateISO, setSelectedDateISO] = useState(() => localDateISO(new Date()));
   const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
   const mondayOffset = (first.getDay() + 6) % 7;
   const gridStart = new Date(first);
@@ -961,6 +1080,34 @@ function MonthlyTrainingCalendar({
   const completedThisMonth = [...completedByDate.entries()]
     .filter(([date]) => date.startsWith(monthKey))
     .reduce((sum, [, count]) => sum + count, 0);
+  const plannedThisMonth = monthSchedule.filter(
+    (day) => day.dateISO.startsWith(monthKey) && !day.isRestDay,
+  );
+  const selectedDay = useMemo(
+    () => plannedByDate.get(selectedDateISO),
+    [plannedByDate, selectedDateISO],
+  );
+  const todayISO = localDateISO(new Date());
+
+  useEffect(() => {
+    if (selectedDay?.dateISO.startsWith(monthKey)) return;
+    const nextTrainingDay =
+      plannedThisMonth.find((day) => !day.isRestDay && day.dateISO >= todayISO) ??
+      plannedThisMonth[0];
+    setSelectedDateISO(nextTrainingDay?.dateISO ?? `${monthKey}-01`);
+  }, [monthKey, plannedThisMonth, selectedDay, todayISO]);
+
+  const selectedWorkout = selectedDay?.workoutId ? getWorkout(selectedDay.workoutId) : undefined;
+  const selectedCompleted = selectedDay
+    ? selectedDay.isCompleted || (completedByDate.get(selectedDay.dateISO) ?? 0) > 0
+    : false;
+  const selectedDateLabel = selectedDay
+    ? new Date(`${selectedDay.dateISO}T12:00:00`).toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      })
+    : "";
 
   return (
     <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-4">
@@ -980,7 +1127,7 @@ function MonthlyTrainingCalendar({
             {visibleMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
           </p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {completedThisMonth} workout{completedThisMonth === 1 ? "" : "s"} completed
+            {plannedThisMonth.length} planned Â· {completedThisMonth} complete
           </p>
         </div>
         <button
@@ -1003,30 +1150,35 @@ function MonthlyTrainingCalendar({
       <div className="mt-2 grid grid-cols-7 gap-1">
         {cells.map((date) => {
           const dateISO = localDateISO(date);
-          const planned = plannedByDate.get(dateISO);
+          const plannedDay = plannedByDate.get(dateISO);
           const completedCount = completedByDate.get(dateISO) ?? 0;
           const outside = date.getMonth() !== visibleMonth.getMonth();
           const today = dateISO === localDateISO(new Date());
+          const selected = dateISO === selectedDateISO;
+          const hasWorkout = Boolean(plannedDay && !plannedDay.isRestDay);
           return (
             <button
               key={dateISO}
               type="button"
-              disabled={!planned}
-              onClick={() => planned && onChooseScheduledDay(planned.index)}
-              aria-label={`${date.toLocaleDateString()}${completedCount ? `, ${completedCount} completed workout` : ""}${planned && !planned.day.isRestDay ? ", workout planned" : ""}`}
+              disabled={outside}
+              onClick={() => setSelectedDateISO(dateISO)}
+              aria-current={selected ? "date" : undefined}
+              aria-label={`${date.toLocaleDateString()}${completedCount ? `, ${completedCount} completed workout` : ""}${hasWorkout ? `, ${plannedDay?.splitLabel} planned` : ", rest day"}`}
               className={cn(
-                "relative flex aspect-square flex-col items-center justify-center rounded-xl border text-[11px] font-semibold tabular-nums",
-                outside && "opacity-25",
-                today ? "border-neon/60 text-neon" : "border-transparent",
-                planned && !planned.day.isRestDay && "bg-neon/[0.07]",
+                "relative flex aspect-square flex-col items-center justify-center rounded-xl border text-[11px] font-semibold tabular-nums transition",
+                outside && "cursor-default opacity-25",
+                selected
+                  ? "border-neon bg-neon/15 text-neon shadow-[0_0_18px_-10px_var(--neon)]"
+                  : today
+                    ? "border-neon/60 text-neon"
+                    : "border-transparent",
+                hasWorkout && !selected && "bg-neon/[0.07]",
                 completedCount > 0 && "bg-emerald-400/[0.09] text-emerald-200",
               )}
             >
               {date.getDate()}
               <span className="absolute bottom-1 flex gap-0.5">
-                {planned && !planned.day.isRestDay && (
-                  <span className="size-1 rounded-full bg-neon" />
-                )}
+                {hasWorkout && <span className="size-1 rounded-full bg-neon" />}
                 {completedCount > 0 && <span className="size-1 rounded-full bg-emerald-300" />}
               </span>
             </button>
@@ -1050,6 +1202,96 @@ function MonthlyTrainingCalendar({
           <History className="size-3" /> Full history
         </Link>
       </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        {selectedDay && (
+          <motion.div
+            key={selectedDay.dateISO}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="mt-4 overflow-hidden rounded-[20px] border border-neon/25 bg-gradient-to-br from-neon/[0.12] via-white/[0.035] to-white/[0.02] p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+                  {selectedDateLabel}
+                </p>
+                <h3 className="mt-1 text-lg font-extrabold leading-tight">
+                  {selectedDay.isRestDay ? "Recovery day" : selectedDay.workoutTitle}
+                </h3>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-1 text-[9px] font-bold uppercase",
+                  selectedCompleted
+                    ? "bg-emerald-400/15 text-emerald-300"
+                    : selectedDay.isToday
+                      ? "bg-neon text-neon-foreground"
+                      : "bg-white/[0.07] text-muted-foreground",
+                )}
+              >
+                {selectedCompleted ? "Complete" : selectedDay.isToday ? "Today" : "Planned"}
+              </span>
+            </div>
+
+            {selectedDay.isRestDay ? (
+              <>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  Reset, move lightly, and come back ready for your next session.
+                </p>
+                <Link
+                  to="/workout/$id"
+                  params={{ id: "mobility-recovery" }}
+                  className="mt-3 inline-flex h-10 items-center rounded-full border border-white/[0.08] bg-white/[0.05] px-4 text-[11px] font-semibold"
+                >
+                  Open mobility session
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  {selectedWorkout?.title ?? selectedDay.focus}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Pill icon={Clock}>{selectedDay.duration} min</Pill>
+                  <Pill icon={Dumbbell}>{selectedDay.difficulty}</Pill>
+                  {selectedDay.exercises.slice(0, 2).map((exercise) => (
+                    <span
+                      key={exercise}
+                      className="max-w-32 truncate rounded-full border border-white/[0.06] bg-black/15 px-2 py-1 text-[10px] text-muted-foreground"
+                    >
+                      {exercise}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  {selectedDay.workoutId && (
+                    <Link
+                      to="/workout/$id/session"
+                      params={{ id: selectedDay.workoutId }}
+                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-neon text-[12px] font-bold text-neon-foreground shadow-[0_0_20px_-10px_var(--neon)] transition active:scale-[0.98]"
+                    >
+                      <Play className="size-3.5 fill-current" /> Start this workout
+                    </Link>
+                  )}
+                  {selectedDay.workoutId && (
+                    <Link
+                      to="/workout/$id"
+                      params={{ id: selectedDay.workoutId }}
+                      aria-label={`View ${selectedDay.workoutTitle} details`}
+                      className="grid size-11 shrink-0 place-items-center rounded-full border border-white/[0.08] bg-white/[0.05]"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Link>
+                  )}
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

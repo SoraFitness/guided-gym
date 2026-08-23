@@ -59,7 +59,10 @@ export function previousScan(id: string): BodyScanResult | null {
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const invalidate = () => { cache = null; cb(); };
+  const invalidate = () => {
+    cache = null;
+    cb();
+  };
   const onStorage = (e: StorageEvent) => {
     if (!e.key || e.key === KEY) invalidate();
   };

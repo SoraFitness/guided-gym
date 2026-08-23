@@ -5,7 +5,7 @@ import type { FoodSearchResult } from "./foodSearch.functions";
 // We keep a normalized snapshot independent of the API source so it survives
 // even if the upstream provider returns different results next time.
 export interface StoredFood {
-  id: string;            // stable, same as search result id (preset:..., nutritionix:..., usda:..., off:..., custom:<uuid>)
+  id: string; // stable, same as search result id (preset:..., nutritionix:..., usda:..., off:..., custom:<uuid>)
   source: FoodSearchResult["source"] | "custom";
   brand?: string;
   name: string;
@@ -17,23 +17,29 @@ export interface StoredFood {
   verified: boolean;
   category?: FoodSearchResult["category"];
   imageUrl?: string;
-  lastUsedAt?: string;   // ISO, recent list only
+  nutrients?: FoodSearchResult["nutrients"];
+  lastUsedAt?: string; // ISO, recent list only
 }
 
 const RECENT_KEY = "fitness:foodrecent";
-const FAV_KEY    = "fitness:foodfavs";
+const FAV_KEY = "fitness:foodfavs";
 const MAX_RECENT = 20;
 const EVT = "fitness:foodhistory-change";
 
 function read(key: string): StoredFood[] {
   if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  } catch {
+    return [];
+  }
 }
 function write(key: string, list: StoredFood[]) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 function emit() {
-  recentCache = null; favCache = null;
+  recentCache = null;
+  favCache = null;
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVT));
 }
 
@@ -42,7 +48,11 @@ let favCache: StoredFood[] | null = null;
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const invalidate = () => { recentCache = null; favCache = null; cb(); };
+  const invalidate = () => {
+    recentCache = null;
+    favCache = null;
+    cb();
+  };
   const onStorage = (e: StorageEvent) => {
     if (!e.key || e.key === RECENT_KEY || e.key === FAV_KEY) invalidate();
   };
@@ -55,7 +65,7 @@ function subscribe(cb: () => void) {
 }
 
 const getRecent = () => (recentCache ??= read(RECENT_KEY));
-const getFavs   = () => (favCache    ??= read(FAV_KEY));
+const getFavs = () => (favCache ??= read(FAV_KEY));
 const empty: StoredFood[] = [];
 
 export function useRecentFoods(): StoredFood[] {
@@ -119,5 +129,6 @@ export function resultToStored(r: FoodSearchResult): StoredFood {
     verified: r.verified,
     category: r.category,
     imageUrl: r.imageUrl,
+    nutrients: r.nutrients,
   };
 }

@@ -16,10 +16,26 @@ export function QuickLogFab() {
       <div className="fixed right-4 bottom-28 z-30 flex flex-col items-end gap-2">
         {open && (
           <>
-            <FabAction icon={<Footprints className="size-4" />} label="Activity" onClick={() => pick("activity")} />
-            <FabAction icon={<Scale className="size-4" />} label="Weight" onClick={() => pick("weight")} />
-            <FabAction icon={<Apple className="size-4" />} label="Meal" onClick={() => pick("meal")} />
-            <FabAction icon={<Dumbbell className="size-4" />} label="Workout" onClick={() => pick("workout")} />
+            <FabAction
+              icon={<Footprints className="size-4" />}
+              label="Activity"
+              onClick={() => pick("activity")}
+            />
+            <FabAction
+              icon={<Scale className="size-4" />}
+              label="Weight"
+              onClick={() => pick("weight")}
+            />
+            <FabAction
+              icon={<Apple className="size-4" />}
+              label="Meal"
+              onClick={() => pick("meal")}
+            />
+            <FabAction
+              icon={<Dumbbell className="size-4" />}
+              label="Workout"
+              onClick={() => pick("workout")}
+            />
           </>
         )}
         <button
@@ -35,7 +51,15 @@ export function QuickLogFab() {
   );
 }
 
-function FabAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function FabAction({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}

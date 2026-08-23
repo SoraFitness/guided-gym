@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "./openrouter.server";
+import { claimRateLimit } from "./rateLimit.server";
 import { workouts } from "./workouts";
 import type { SavedWorkoutPlan, WorkoutPlanInput } from "./workoutPlanStore";
 import { getWorkoutSplitOption } from "./workoutSplits";
@@ -126,6 +127,7 @@ function fallbackPlan(input: WorkoutPlanInput, candidates: ReturnType<typeof bui
 export const generateWorkoutPlan = createServerFn({ method: "POST" })
   .validator(InputSchema)
   .handler(async ({ data }): Promise<WorkoutPlanGenerationResult> => {
+    claimRateLimit("workout-plan", { limit: 12, windowMs: 15 * 60 * 1_000 });
     const input = data as WorkoutPlanInput;
     const candidates = buildCandidates(input);
     const fallback = fallbackPlan(input, candidates);
@@ -149,7 +151,7 @@ export const generateWorkoutPlan = createServerFn({ method: "POST" })
           model: provider(OPENROUTER_COACH_MODEL),
           output: Output.object({ schema: ModelPlanSchema }),
           system:
-            "You are Ascendr's fitness programming engine. Select only provided workout IDs. Build a balanced, realistic weekly plan. Follow the requested workout split when provided, avoid training the same primary muscles hard on consecutive days, and respect experience, equipment, time, limitations, and requested focus. Do not make medical claims.",
+            "You are Ascendr's fitness programming engine. Select only provided workout IDs. Build a balanced, realistic weekly plan. When workoutSplit is 'auto' or omitted, choose the most appropriate training structure from the user's days per week, goals, experience, current training frequency, equipment, time, limitations, focus areas, and recovery needs. Follow an explicit workout split when one is provided. Avoid training the same primary muscles hard on consecutive days. Do not make medical claims.",
           prompt: JSON.stringify({ request: input, candidates: candidateData }),
         });
         const allowed = new Set(candidateData.map((candidate) => candidate.id));

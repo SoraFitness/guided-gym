@@ -23,6 +23,7 @@ import { buildCoachContext } from "@/lib/coachContext";
 import { getCoachThread, clearCoachThread, importCoachMessages } from "@/lib/coach.functions";
 import { useAuthSession, type AuthSession } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
+import { createClientId } from "@/lib/clientId";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,10 +86,7 @@ function CoachPage() {
 function getGuestThreadId() {
   const existing = localStorage.getItem(GUEST_THREAD_KEY);
   if (existing) return existing;
-  const id =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? `guest-${crypto.randomUUID()}`
-      : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const id = `guest-${createClientId()}`;
   localStorage.setItem(GUEST_THREAD_KEY, id);
   return id;
 }

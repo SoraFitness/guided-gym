@@ -84,6 +84,7 @@ export function WorkoutCardSpotlight({ w }: { w: Workout }) {
           <img
             src={w.image}
             alt={w.title}
+            loading="lazy"
             className="absolute inset-0 size-full object-cover"
             style={{ objectPosition: w.imagePosition }}
           />

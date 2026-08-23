@@ -127,6 +127,7 @@ export interface Profile {
   equipmentItems?: string[];
   referralSource?: "tiktok" | "instagram" | "youtube" | "friend" | "appstore" | "google" | "other";
   referralCode?: string;
+  onboardingMotivation?: "feel_confident" | "have_energy" | "stay_consistent" | "get_stronger";
   completedAt: string;
 }
 
@@ -266,6 +267,7 @@ function migrate(raw: Record<string, unknown>): Profile {
       defaultEquipmentItems((raw.equipment as EquipmentSetup) ?? equipMap(raw.location)),
     referralSource: raw.referralSource as Profile["referralSource"],
     referralCode: raw.referralCode as string | undefined,
+    onboardingMotivation: raw.onboardingMotivation as Profile["onboardingMotivation"],
     completedAt: (raw.completedAt as string) ?? new Date().toISOString(),
   };
 }

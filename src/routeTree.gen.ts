@@ -15,6 +15,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
 import { Route as ApiCoachRouteImport } from './routes/api/coach'
+import { Route as AdminOnboardingRouteImport } from './routes/admin.onboarding'
 import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
 import { Route as AppTermsRouteImport } from './routes/_app.terms'
 import { Route as AppProgressRouteImport } from './routes/_app.progress'
@@ -74,6 +75,11 @@ const WorkoutIdRoute = WorkoutIdRouteImport.update({
 const ApiCoachRoute = ApiCoachRouteImport.update({
   id: '/api/coach',
   path: '/api/coach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
+  id: '/admin/onboarding',
+  path: '/admin/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/progress': typeof AppProgressRoute
   '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -287,6 +294,7 @@ export interface FileRoutesByTo {
   '/progress': typeof AppProgressRoute
   '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -327,6 +335,7 @@ export interface FileRoutesById {
   '/_app/progress': typeof AppProgressRoute
   '/_app/terms': typeof AppTermsRoute
   '/_app/workouts': typeof AppWorkoutsRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/_app/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/progress'
     | '/terms'
     | '/workouts'
+    | '/admin/onboarding'
     | '/api/coach'
     | '/workout/$id'
     | '/photos/$photoId'
@@ -404,6 +414,7 @@ export interface FileRouteTypes {
     | '/progress'
     | '/terms'
     | '/workouts'
+    | '/admin/onboarding'
     | '/api/coach'
     | '/workout/$id'
     | '/photos/$photoId'
@@ -443,6 +454,7 @@ export interface FileRouteTypes {
     | '/_app/progress'
     | '/_app/terms'
     | '/_app/workouts'
+    | '/admin/onboarding'
     | '/api/coach'
     | '/workout/$id'
     | '/_app/photos/$photoId'
@@ -470,6 +482,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
   PaywallRoute: typeof PaywallRoute
+  AdminOnboardingRoute: typeof AdminOnboardingRoute
   ApiCoachRoute: typeof ApiCoachRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
   WorkoutHistoryIdRoute: typeof WorkoutHistoryIdRoute
@@ -519,6 +532,13 @@ declare module '@tanstack/react-router' {
       path: '/api/coach'
       fullPath: '/api/coach'
       preLoaderRoute: typeof ApiCoachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/onboarding': {
+      id: '/admin/onboarding'
+      path: '/admin/onboarding'
+      fullPath: '/admin/onboarding'
+      preLoaderRoute: typeof AdminOnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/workouts': {
@@ -830,6 +850,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
   PaywallRoute: PaywallRoute,
+  AdminOnboardingRoute: AdminOnboardingRoute,
   ApiCoachRoute: ApiCoachRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
   WorkoutHistoryIdRoute: WorkoutHistoryIdRoute,

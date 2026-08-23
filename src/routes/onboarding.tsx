@@ -36,10 +36,10 @@ import {
   LockKeyhole,
   Loader2,
   ScanLine,
-  ScanFace,
 } from "lucide-react";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
+import { LockedBodyScanPreview } from "@/components/scans/LockedBodyScanPreview";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import {
   useProfile,
@@ -68,12 +68,10 @@ import { suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
 import { workoutRecommendationService } from "@/lib/workouts";
 import { weeklyScheduleService } from "@/lib/weeklySchedule";
-import {
-  getWorkoutSplitOption,
-  WORKOUT_SPLIT_OPTIONS,
-  type WorkoutSplitId,
-} from "@/lib/workoutSplits";
+import { getWorkoutSplitOption, type WorkoutSplitId } from "@/lib/workoutSplits";
 import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
+import { analyzeBodyScanPreview, type BodyScanPreviewResult } from "@/lib/bodyScan.functions";
+import { compressImage } from "@/lib/imageCompress";
 import {
   saveWorkoutPlan,
   type SavedWorkoutPlan,
@@ -81,13 +79,23 @@ import {
 } from "@/lib/workoutPlanStore";
 import { cn } from "@/lib/utils";
 import { savePendingBodyScan } from "@/lib/pendingBodyScan";
-import { savePendingFaceScan } from "@/lib/pendingFaceScan";
 import {
   getOnboardingPaywallCheckpoint,
   ONBOARDING_PROGRESS_STORAGE_KEY,
   saveOnboardingPaywallCheckpoint,
 } from "@/lib/onboardingResume";
 import { getSubscription } from "@/lib/subscription";
+import { createClientId } from "@/lib/clientId";
+import {
+  buildOnboardingResponseSnapshot,
+  captureBrowserAttribution,
+  getOnboardingVisitorId,
+  ONBOARDING_FLOW_VERSION,
+} from "@/lib/onboardingAnalytics";
+import {
+  captureOnboardingCompleted,
+  captureOnboardingStarted,
+} from "@/lib/onboardingInsights.functions";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
@@ -100,6 +108,7 @@ export const Route = createFileRoute("/onboarding")({
 });
 
 type ReferralSource = NonNullable<Profile["referralSource"]>;
+type OnboardingMotivation = NonNullable<Profile["onboardingMotivation"]>;
 
 type OnboardingLanguage = "en-US" | "es" | "fr" | "de" | "pt-BR" | "it" | "ja" | "ko";
 
@@ -324,6 +333,7 @@ interface Draft {
   nutritionPlan: NutritionPlan;
   units: "metric" | "imperial";
   referralSource?: ReferralSource;
+  motivation?: OnboardingMotivation;
   equipmentItems: string[];
   trainingLimitations: TrainingLimitation[];
   limitationNotes: string;
@@ -369,6 +379,7 @@ const DEFAULT_DRAFT: Draft = {
   nutritionPlan: "muscle_gain",
   units: "metric",
   referralSource: undefined,
+  motivation: undefined,
   equipmentItems: ["Dumbbells"],
   trainingLimitations: [],
   limitationNotes: "",
@@ -394,7 +405,7 @@ function buildSmartOnboardingPlan(profile: Profile, input: WorkoutPlanInput): Sa
   const goals = getProfileGoals(profile);
   const goalLabels = goals.map((goal) => GOAL_LABELS[goal]);
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     name: `${split.shortName} · ${goalLabels[0]}${goalLabels.length > 1 ? ` +${goalLabels.length - 1}` : ""}`.slice(
       0,
       50,
@@ -408,7 +419,7 @@ function buildSmartOnboardingPlan(profile: Profile, input: WorkoutPlanInput): Sa
 }
 
 function profileFromDraft(draft: Draft, personalizedName: string): Profile {
-  const { trainingLimitations, limitationNotes, ...profileDraft } = draft;
+  const { trainingLimitations, limitationNotes, motivation, ...profileDraft } = draft;
   const safeTrainingLimitations = trainingLimitations ?? [];
   const namedLimitations = safeTrainingLimitations
     .filter((limitation) => limitation !== "other")
@@ -430,6 +441,7 @@ function profileFromDraft(draft: Draft, personalizedName: string): Profile {
     goal: draft.goals[0] ?? draft.goal,
     goals: draft.goals.length ? draft.goals : [draft.goal],
     injuries: limitationsSummary,
+    onboardingMotivation: motivation,
     completedAt: new Date().toISOString(),
   };
 }
@@ -450,12 +462,13 @@ function planInputFromProfile(profile: Profile): WorkoutPlanInput {
 }
 
 const ONBOARDING_NAME_STORAGE_KEY = "ascendr_onboarding_name";
-const TOTAL = 13; // welcome + 12 onboarding steps
+const TOTAL = 6;
 
 interface StoredOnboardingProgress {
   draft: Partial<Draft>;
   step: number;
   genderSelected: boolean;
+  flowVersion?: string;
 }
 
 function readStoredOnboardingProgress(): StoredOnboardingProgress | null {
@@ -464,6 +477,7 @@ function readStoredOnboardingProgress(): StoredOnboardingProgress | null {
     const raw = localStorage.getItem(ONBOARDING_PROGRESS_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredOnboardingProgress>;
+    if (parsed.flowVersion !== ONBOARDING_FLOW_VERSION) return null;
     return {
       draft: parsed.draft && typeof parsed.draft === "object" ? parsed.draft : {},
       step:
@@ -507,6 +521,8 @@ function Onboarding() {
   const navigate = useNavigate();
   const { setProfile } = useProfile();
   const generatePlan = useServerFn(generateWorkoutPlan);
+  const recordOnboardingStart = useServerFn(captureOnboardingStarted);
+  const recordOnboardingCompletion = useServerFn(captureOnboardingCompleted);
   const [restoredProgress] = useState(() => readStoredOnboardingProgress());
   const [step, setStep] = useState(restoredProgress?.step ?? 0);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -519,6 +535,9 @@ function Onboarding() {
       return {
         ...DEFAULT_DRAFT,
         ...restoredProgress?.draft,
+        // Never restore a manual split from an older onboarding session.
+        // The completed profile is handed to the plan generator in auto mode.
+        workoutSplit: "auto",
         name:
           restoredProgress?.draft.name?.slice(0, 32) ??
           localStorage.getItem(ONBOARDING_NAME_STORAGE_KEY)?.slice(0, 32) ??
@@ -538,6 +557,13 @@ function Onboarding() {
   });
   const [languageOpen, setLanguageOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [analyticsSession] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return {
+      visitorId: getOnboardingVisitorId(),
+      attribution: captureBrowserAttribution(),
+    };
+  });
 
   const update = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
   const welcomeCopy = WELCOME_COPY[language];
@@ -549,6 +575,19 @@ function Onboarding() {
     document.documentElement.lang = language === "en-US" ? "en" : language.split("-")[0];
     localStorage.setItem("ascendr_onboarding_language", language);
   }, [language]);
+
+  useEffect(() => {
+    if (!analyticsSession) return;
+    void recordOnboardingStart({
+      data: {
+        visitorId: analyticsSession.visitorId,
+        flowVersion: ONBOARDING_FLOW_VERSION,
+        attribution: analyticsSession.attribution,
+      },
+    }).catch(() => {
+      // Analytics should never interrupt someone who is starting their plan.
+    });
+  }, [analyticsSession, recordOnboardingStart]);
 
   useEffect(() => {
     try {
@@ -564,7 +603,12 @@ function Onboarding() {
 
   useEffect(() => {
     try {
-      const progress: StoredOnboardingProgress = { draft: d, step, genderSelected };
+      const progress: StoredOnboardingProgress = {
+        draft: d,
+        step,
+        genderSelected,
+        flowVersion: ONBOARDING_FLOW_VERSION,
+      };
       localStorage.setItem(ONBOARDING_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
     } catch {
       // Keep the live flow usable if storage is restricted.
@@ -576,7 +620,7 @@ function Onboarding() {
     if (!checkpoint || getSubscription().active) return;
     navigate({
       to: "/paywall",
-      search: checkpoint.source ? { source: checkpoint.source } : {},
+      search: { source: checkpoint.source ?? undefined },
       replace: true,
     });
   }, [navigate]);
@@ -586,13 +630,15 @@ function Onboarding() {
       case 0:
         return true;
       case 1:
-        return genderSelected;
-      case 2:
-        return d.name.trim().length >= 2;
-      case 4:
-        return d.goals.length > 0;
-      case 7:
-        return d.currentWeightKg > 0 && d.heightCm > 0 && d.age > 0 && d.goalWeightKg > 0;
+        return d.name.trim().length >= 2 && d.goals.length > 0;
+      case 3:
+        return (
+          genderSelected &&
+          d.currentWeightKg > 0 &&
+          d.heightCm > 0 &&
+          d.age > 0 &&
+          d.goalWeightKg > 0
+        );
       default:
         return true;
     }
@@ -617,6 +663,34 @@ function Onboarding() {
     const nutritionGoals = suggestNutrition(profile);
     saveGoals(nutritionGoals);
     setProfile(profile);
+
+    if (analyticsSession) {
+      void recordOnboardingCompletion({
+        data: {
+          visitorId: analyticsSession.visitorId,
+          flowVersion: ONBOARDING_FLOW_VERSION,
+          attribution: captureBrowserAttribution(d.referralSource),
+          responses: buildOnboardingResponseSnapshot({
+            goal: d.goal,
+            goals: d.goals,
+            experience: d.experience,
+            equipment: d.equipment,
+            daysPerWeek: d.daysPerWeek,
+            sessionMinutes: d.sessionMinutes,
+            currentWorkoutsPerWeek: d.currentWorkoutsPerWeek,
+            focusAreas: d.focusAreas,
+            gender: d.gender,
+            activityLevel: d.activityLevel,
+            nutritionPlan: d.nutritionPlan,
+            units: d.units,
+            motivation: d.motivation ?? null,
+            hasTrainingLimitations: d.trainingLimitations.length > 0,
+          }),
+        },
+      }).catch(() => {
+        // Plan creation remains available if analytics is offline or not configured.
+      });
+    }
     setGenerating(true);
 
     const input = planInputFromProfile(profile);
@@ -639,19 +713,6 @@ function Onboarding() {
     setPlanReady(true);
   };
 
-  const unlockScanResults = (scanType: "body" | "face") => {
-    const profile = profileFromDraft(d, personalizedName);
-    const input = planInputFromProfile(profile);
-    saveGoals(suggestNutrition(profile));
-    setProfile(profile);
-    saveWorkoutPlan(buildSmartOnboardingPlan(profile, input));
-    saveOnboardingPaywallCheckpoint(personalizedName, `${scanType}-scan`);
-    navigate({
-      to: "/paywall",
-      search: { source: scanType === "body" ? "body-scan" : "face-scan" },
-    });
-  };
-
   if (generating) {
     return (
       <CustomizingPlan
@@ -659,7 +720,7 @@ function Onboarding() {
         plan={generatedPlan}
         onDone={() => {
           saveOnboardingPaywallCheckpoint(personalizedName, null);
-          navigate({ to: "/paywall", search: {} });
+          navigate({ to: "/paywall", search: { source: undefined } });
         }}
       />
     );
@@ -667,18 +728,11 @@ function Onboarding() {
 
   const stepLabels = [
     "",
-    "Gender",
-    "Name",
-    "Experience",
-    "Goal",
-    "Equipment",
-    "Schedule",
-    "About you",
-    "Activity",
-    "Source",
-    "Commitment",
-    "Body Scan",
-    "Plan",
+    "Your direction",
+    "Your rhythm",
+    "Your baseline",
+    "Your reason",
+    "Your plan",
   ];
 
   return (
@@ -774,14 +828,14 @@ function Onboarding() {
                   <motion.div
                     className="h-full rounded-full bg-neon"
                     initial={false}
-                    animate={{ width: `${((step + 1) / TOTAL) * 100}%` }}
+                    animate={{ width: `${(step / (TOTAL - 1)) * 100}%` }}
                     transition={{ type: "spring", stiffness: 120, damping: 20 }}
                   />
                 </div>
                 <div className="mt-1.5 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>{stepLabels[step]}</span>
                   <span className="tabular-nums">
-                    {step + 1} / {TOTAL}
+                    {step} / {TOTAL - 1}
                   </span>
                 </div>
               </div>
@@ -793,11 +847,7 @@ function Onboarding() {
       <main
         className={cn(
           "flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6",
-          step === 0
-            ? "pb-32 pt-0 sm:pb-36"
-            : step === 11
-              ? "pb-8 pt-4 sm:pb-12 sm:pt-6"
-              : "pb-28 pt-4 sm:pb-36 sm:pt-6",
+          step === 0 ? "pb-32 pt-0 sm:pb-36" : "pb-28 pt-4 sm:pb-36 sm:pt-6",
         )}
       >
         <div className="mx-auto w-full max-w-md">
@@ -812,29 +862,11 @@ function Onboarding() {
             >
               {step === 0 && <Welcome copy={welcomeCopy} />}
               {step === 1 && (
-                <GenderStep
-                  value={genderSelected ? d.gender : null}
-                  onChange={(gender) => {
-                    update("gender", gender);
-                    setGenderSelected(true);
-                  }}
-                />
-              )}
-              {step === 2 && <NameStep value={d.name} onChange={(name) => update("name", name)} />}
-              {step === 3 && (
-                <ExperienceStep
-                  name={personalizedName}
-                  value={d.experience}
-                  currentWorkoutsPerWeek={d.currentWorkoutsPerWeek}
-                  onChange={(g) => update("experience", g)}
-                  onFrequencyChange={(frequency) => update("currentWorkoutsPerWeek", frequency)}
-                />
-              )}
-              {step === 4 && (
-                <GoalStep
-                  name={personalizedName}
-                  value={d.goals}
-                  onChange={(goals) => {
+                <GoalIdentityStep
+                  name={d.name}
+                  goals={d.goals}
+                  onNameChange={(name) => update("name", name)}
+                  onGoalsChange={(goals) => {
                     update("goals", goals);
                     if (goals[0]) {
                       update("goal", goals[0]);
@@ -844,90 +876,77 @@ function Onboarding() {
                   }}
                 />
               )}
-              {step === 5 && (
-                <EquipmentStep
-                  value={d.equipment}
-                  onChange={(equipment) => {
-                    update("equipment", equipment);
-                    update("equipmentItems", equipmentItemsForSetup(equipment));
+              {step === 2 && <TrainingProfileStep name={personalizedName} d={d} update={update} />}
+              {step === 3 && (
+                <BaselineProfileStep
+                  d={d}
+                  update={update}
+                  genderSelected={genderSelected}
+                  onGenderChange={(gender) => {
+                    update("gender", gender);
+                    setGenderSelected(true);
                   }}
                 />
               )}
-              {step === 6 && (
-                <DaysStep
-                  value={d.daysPerWeek}
-                  split={d.workoutSplit}
-                  onChange={(days) => {
-                    update("daysPerWeek", days);
-                    if (!getWorkoutSplitOption(d.workoutSplit).recommendedDays.includes(days)) {
-                      update("workoutSplit", "auto");
-                    }
-                  }}
-                  onSplitChange={(split) => update("workoutSplit", split)}
-                />
-              )}
-              {step === 7 && <BodyStep d={d} update={update} />}
-              {step === 8 && <ActivityStep d={d} update={update} />}
-              {step === 9 && (
-                <ReferralSourceStep
+              {step === 4 && (
+                <WhyNowStep
+                  name={personalizedName}
+                  motivation={d.motivation}
                   value={d.referralSource}
-                  onChange={(v) => update("referralSource", v)}
+                  onMotivationChange={(motivation) => update("motivation", motivation)}
+                  onSourceChange={(source) => update("referralSource", source)}
                 />
               )}
-              {step === 10 && <CommitmentStep name={personalizedName} d={d} />}
-              {step === 11 && <BodyScanTeaserStep onUnlock={unlockScanResults} onSkip={goNext} />}
-              {step === 12 && <ReviewStep d={d} />}
+              {step === 5 && <PlanPreviewStep name={personalizedName} d={d} />}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
 
-      {step !== 11 && (
-        <footer
-          className={cn(
-            "fixed inset-x-0 z-40 bg-gradient-to-t from-background via-background/98 to-transparent px-4 pt-4 sm:px-6 sm:pt-6",
-            step === 0 ? "-bottom-5" : "bottom-0",
-          )}
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-        >
-          <div className="mx-auto w-full max-w-md">
-            <button
-              disabled={!canNext}
-              onClick={goNext}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-full font-semibold transition",
-                step === 0
-                  ? "h-14 text-base sm:h-16 sm:text-lg"
-                  : "h-12 text-sm sm:h-14 sm:text-base",
-                canNext
-                  ? "bg-neon text-neon-foreground glow-neon active:scale-[0.98]"
-                  : "bg-white/[0.05] text-muted-foreground",
-              )}
-            >
-              {step === TOTAL - 1
-                ? "Build My AI Plan"
-                : step === 0
-                  ? welcomeCopy.getStarted
-                  : step === 10
-                    ? "Yes, I'm Ready"
-                    : "Continue"}
-              <ArrowRight className="size-5" />
-            </button>
-            {step === 0 && (
-              <p className="mt-3 text-center text-sm text-muted-foreground">
-                {welcomeCopy.accountPrompt}{" "}
-                <button
-                  type="button"
-                  onClick={() => setSignInOpen(true)}
-                  className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
-                >
-                  {welcomeCopy.signIn}
-                </button>
-              </p>
+      <footer
+        className={cn(
+          "fixed inset-x-0 z-40 bg-gradient-to-t from-background via-background/98 to-transparent px-4 pt-4 sm:px-6 sm:pt-6",
+          step === 0 ? "-bottom-5" : "bottom-0",
+        )}
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className="mx-auto w-full max-w-md">
+          <button
+            disabled={!canNext}
+            onClick={goNext}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-full font-semibold transition",
+              step === 0
+                ? "h-14 text-base sm:h-16 sm:text-lg"
+                : "h-12 text-sm sm:h-14 sm:text-base",
+              canNext
+                ? "bg-neon text-neon-foreground glow-neon active:scale-[0.98]"
+                : "bg-white/[0.05] text-muted-foreground",
             )}
-          </div>
-        </footer>
-      )}
+          >
+            {step === TOTAL - 1
+              ? "Create My Plan"
+              : step === 0
+                ? welcomeCopy.getStarted
+                : step === 4
+                  ? "See My Plan"
+                  : "Continue"}
+            <ArrowRight className="size-5" />
+          </button>
+          {step === 0 && (
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              {welcomeCopy.accountPrompt}{" "}
+              <button
+                type="button"
+                onClick={() => setSignInOpen(true)}
+                className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
+              >
+                {welcomeCopy.signIn}
+              </button>
+            </p>
+          )}
+        </div>
+      </footer>
 
       <AnimatePresence>
         {step === 0 && signInOpen && (
@@ -1012,6 +1031,44 @@ function Welcome({ copy }: { copy: WelcomeCopy }) {
             disablePictureInPicture
             aria-label="Ascendr app preview"
           />
+          <div className="hidden absolute inset-0 bg-[radial-gradient(circle_at_70%_12%,rgba(183,255,62,0.24),transparent_28%),linear-gradient(160deg,#161b18_0%,#090a0a_57%,#101313_100%)]" />
+          <div className="relative hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[7px] font-black uppercase tracking-[0.18em] text-neon">
+                Ascendr
+              </span>
+              <span className="grid size-4 place-items-center rounded-full bg-white/[0.09] text-[7px] font-bold">
+                A
+              </span>
+            </div>
+            <p className="mt-5 text-[8px] text-white/60">Today’s brief</p>
+            <h3 className="mt-1 text-sm font-black leading-tight">Train with direction.</h3>
+            <div className="mt-4 rounded-xl border border-neon/20 bg-neon/[0.1] p-2.5">
+              <div className="flex items-center justify-between text-[7px] font-bold text-neon">
+                <span>READY TO TRAIN</span>
+                <span>82%</span>
+              </div>
+              <p className="mt-2 text-[9px] font-extrabold">Upper strength</p>
+              <p className="mt-1 text-[7px] text-white/55">45 min · Dumbbells</p>
+              <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-white/[0.1]">
+                <div className="h-full w-[82%] rounded-full bg-neon" />
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-1.5">
+              <div className="rounded-lg border border-white/[0.08] bg-black/20 p-2">
+                <p className="text-[6px] font-bold uppercase tracking-wide text-white/45">Fuel</p>
+                <p className="mt-1 text-[10px] font-black">
+                  87<span className="text-[6px] text-neon">/100</span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-white/[0.08] bg-black/20 p-2">
+                <p className="text-[6px] font-bold uppercase tracking-wide text-white/45">Streak</p>
+                <p className="mt-1 text-[10px] font-black">
+                  06<span className="text-[6px] text-neon"> days</span>
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] ring-1 ring-inset ring-white/10" />
           <div className="pointer-events-none absolute left-1/2 top-2.5 h-5 w-[4.5rem] -translate-x-1/2 rounded-full bg-black shadow-[0_1px_0_rgba(255,255,255,0.08)]">
             <span className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-[#111d28] ring-1 ring-blue-500/10" />
@@ -1098,6 +1155,561 @@ function ChoiceCard({
         {active && <Check className="size-3.5" strokeWidth={3} />}
       </span>
     </button>
+  );
+}
+
+const ONBOARDING_GOALS: { id: Goal; icon: typeof Flame; sub: string }[] = [
+  { id: "build_muscle", icon: Dumbbell, sub: "Build a body that feels capable" },
+  { id: "lose_weight", icon: TrendingDown, sub: "Feel lighter and more in control" },
+  { id: "get_stronger", icon: Zap, sub: "Get noticeably stronger" },
+  { id: "recomp", icon: Layers, sub: "Change how your body looks and feels" },
+  { id: "endurance", icon: Activity, sub: "Have more energy for real life" },
+  { id: "overall", icon: Heart, sub: "Build a rhythm that lasts" },
+];
+
+function GoalIdentityStep({
+  name,
+  goals,
+  onNameChange,
+  onGoalsChange,
+}: {
+  name: string;
+  goals: Goal[];
+  onNameChange: (value: string) => void;
+  onGoalsChange: (goals: Goal[]) => void;
+}) {
+  const displayName = formatFirstName(name);
+  const toggleGoal = (goal: Goal) => {
+    if (goals.includes(goal)) {
+      onGoalsChange(goals.filter((item) => item !== goal));
+      return;
+    }
+    onGoalsChange([...goals, goal].slice(-2));
+  };
+
+  return (
+    <div>
+      <div className="relative overflow-hidden rounded-[2rem] border border-neon/20 bg-[radial-gradient(circle_at_100%_0%,rgba(183,255,62,0.2),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.018))] p-5 shadow-[0_18px_50px_-32px_rgba(183,255,62,0.55)]">
+        <div className="absolute -right-8 -top-8 size-28 rounded-full bg-neon/20 blur-3xl" />
+        <p className="relative text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+          This is your starting line
+        </p>
+        <h2 className="relative mt-3 text-[29px] font-black leading-[1.04] tracking-[-0.045em]">
+          You deserve a plan that feels made for your life.
+        </h2>
+        <p className="relative mt-3 max-w-[36ch] text-sm leading-relaxed text-muted-foreground">
+          Tell us what matters most. We’ll turn it into a simple, personal next step.
+        </p>
+      </div>
+
+      <label className="mt-5 block rounded-2xl border border-white/[0.08] bg-white/[0.035] px-4 py-3.5 transition focus-within:border-neon/50 focus-within:bg-neon/[0.035]">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+          First name
+        </span>
+        <div className="mt-2 flex items-center gap-3">
+          <span className="grid size-9 place-items-center rounded-xl bg-neon/10 text-neon">
+            <UserRound className="size-4" />
+          </span>
+          <input
+            value={name}
+            onChange={(event) => onNameChange(event.target.value.slice(0, 32))}
+            placeholder="What should we call you?"
+            maxLength={32}
+            autoComplete="given-name"
+            enterKeyHint="next"
+            className="h-9 min-w-0 flex-1 bg-transparent text-base font-bold outline-none placeholder:font-medium placeholder:text-muted-foreground/55"
+            aria-label="First name"
+          />
+        </div>
+      </label>
+
+      <div className="mt-6 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+            Your direction
+          </p>
+          <h3 className="mt-1 text-xl font-black tracking-[-0.03em]">
+            {displayName ? `${displayName}, what changes first?` : "What changes first?"}
+          </h3>
+        </div>
+        <span className="mb-1 shrink-0 text-[10px] font-semibold text-muted-foreground">
+          Choose up to 2
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        {ONBOARDING_GOALS.map(({ id, icon: Icon, sub }) => {
+          const active = goals.includes(id);
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggleGoal(id)}
+              className={cn(
+                "relative min-h-32 overflow-hidden rounded-2xl border p-3.5 text-left transition active:scale-[0.98]",
+                active
+                  ? "border-neon/70 bg-neon/[0.12] shadow-[0_12px_28px_-20px_rgba(183,255,62,0.9)]"
+                  : "border-white/[0.07] bg-white/[0.035] hover:border-white/[0.15] hover:bg-white/[0.055]",
+              )}
+            >
+              {active && (
+                <span className="absolute right-3 top-3 grid size-5 place-items-center rounded-full bg-neon text-neon-foreground">
+                  <Check className="size-3" strokeWidth={3} />
+                </span>
+              )}
+              <span
+                className={cn(
+                  "grid size-9 place-items-center rounded-xl",
+                  active ? "bg-neon text-neon-foreground" : "bg-white/[0.07] text-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+              </span>
+              <p className="mt-4 text-sm font-extrabold leading-tight">{GOAL_LABELS[id]}</p>
+              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">{sub}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TrainingProfileStep({
+  name,
+  d,
+  update,
+}: {
+  name: string;
+  d: Draft;
+  update: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
+}) {
+  const experienceOptions: { id: ExperienceLevel; label: string; sub: string }[] = [
+    { id: "beginner", label: "Starting fresh", sub: "Keep it simple and build confidence" },
+    { id: "intermediate", label: "I’ve trained before", sub: "Progress with a clear structure" },
+    { id: "advanced", label: "I’m experienced", sub: "Train with purposeful detail" },
+  ];
+  const equipmentOptions: { id: EquipmentSetup; label: string; icon: typeof Home }[] = [
+    { id: "none", label: "Anywhere", icon: Home },
+    { id: "dumbbells", label: "Dumbbells", icon: Dumbbell },
+    { id: "gym", label: "Full gym", icon: Building2 },
+    { id: "mixed", label: "Both", icon: Layers },
+  ];
+
+  return (
+    <div>
+      <StepHeader
+        title={name ? `${name}, let’s make this realistic.` : "Let’s make this realistic."}
+        sub="The best plan is one that still works on a busy week."
+      />
+
+      <section className="rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+          Training background
+        </p>
+        <div className="mt-3 grid gap-2">
+          {experienceOptions.map((option) => {
+            const active = d.experience === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => update("experience", option.id)}
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-3 text-left transition",
+                  active ? "border-neon/65 bg-neon/[0.1]" : "border-white/[0.06] bg-black/15",
+                )}
+              >
+                <span>
+                  <span className="block text-sm font-bold">{option.label}</span>
+                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                    {option.sub}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded-full border",
+                    active ? "border-neon bg-neon text-neon-foreground" : "border-white/20",
+                  )}
+                >
+                  {active && <Check className="size-3" strokeWidth={3} />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-3 rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+              Your weekly rhythm
+            </p>
+            <p className="mt-1 text-sm font-bold">How often can you truly show up?</p>
+          </div>
+          <span className="rounded-full bg-neon/10 px-2.5 py-1 text-[10px] font-bold text-neon">
+            {d.daysPerWeek} days
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-5 gap-1.5">
+          {([2, 3, 4, 5, 6] as const).map((days) => (
+            <button
+              key={days}
+              type="button"
+              onClick={() => update("daysPerWeek", days)}
+              className={cn(
+                "flex h-12 flex-col items-center justify-center rounded-xl border transition",
+                d.daysPerWeek === days
+                  ? "border-neon bg-neon text-neon-foreground"
+                  : "border-white/[0.06] bg-black/20 text-muted-foreground",
+              )}
+            >
+              <span className="text-lg font-black leading-none">{days}</span>
+              <span className="mt-1 text-[8px] font-bold uppercase tracking-wide">days</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold">Time per workout</p>
+          <div className="flex rounded-full border border-white/[0.07] bg-black/20 p-1">
+            {([20, 30, 45, 60] as const).map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                onClick={() => update("sessionMinutes", minutes)}
+                className={cn(
+                  "rounded-full px-2.5 py-1.5 text-[10px] font-bold transition",
+                  d.sessionMinutes === minutes ? "bg-white text-black" : "text-muted-foreground",
+                )}
+              >
+                {minutes}m
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-3 rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+          Where you train
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {equipmentOptions.map(({ id, label, icon: Icon }) => {
+            const active = d.equipment === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  update("equipment", id);
+                  update("equipmentItems", equipmentItemsForSetup(id));
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-2xl border px-3 py-3 text-left text-xs font-bold transition",
+                  active
+                    ? "border-neon/65 bg-neon/[0.1] text-foreground"
+                    : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                )}
+              >
+                <Icon className={cn("size-4", active && "text-neon")} />
+                {label}
+                {active && <Check className="ml-auto size-3.5 text-neon" strokeWidth={3} />}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BaselineProfileStep({
+  d,
+  update,
+  genderSelected,
+  onGenderChange,
+}: {
+  d: Draft;
+  update: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
+  genderSelected: boolean;
+  onGenderChange: (gender: Gender) => void;
+}) {
+  const genders: { id: Gender; label: string; icon: typeof Flame }[] = [
+    { id: "male", label: "Male", icon: Mars },
+    { id: "female", label: "Female", icon: Venus },
+    { id: "other", label: "Skip", icon: UserRound },
+  ];
+  return (
+    <div>
+      <StepHeader
+        title="A few details, then you’re in."
+        sub="These only calibrate your training and nutrition starting point."
+      />
+      <section className="rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-bold">Personalization</p>
+          <span className="text-[10px] text-muted-foreground">Optional to share</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {genders.map(({ id, label, icon: Icon }) => {
+            const active = genderSelected && d.gender === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onGenderChange(id)}
+                className={cn(
+                  "flex h-16 flex-col items-center justify-center rounded-2xl border text-[11px] font-bold transition",
+                  active
+                    ? "border-neon bg-neon/10 text-neon"
+                    : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                )}
+              >
+                <Icon className="mb-1 size-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+      <div className="mt-4">
+        <BodyStep d={d} update={update} compact />
+      </div>
+      <p className="mt-4 flex items-start gap-2.5 px-1 text-[10px] leading-relaxed text-muted-foreground">
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-neon" />
+        We use this to calculate a sensible starting target—not to judge your body.
+      </p>
+    </div>
+  );
+}
+
+function WhyNowStep({
+  name,
+  motivation,
+  value,
+  onMotivationChange,
+  onSourceChange,
+}: {
+  name: string;
+  motivation: OnboardingMotivation | undefined;
+  value: ReferralSource | undefined;
+  onMotivationChange: (motivation: OnboardingMotivation) => void;
+  onSourceChange: (source: ReferralSource) => void;
+}) {
+  const motivations: {
+    id: OnboardingMotivation;
+    label: string;
+    sub: string;
+    icon: typeof Flame;
+  }[] = [
+    {
+      id: "feel_confident",
+      label: "Feel confident in my body",
+      sub: "See and feel the change",
+      icon: Heart,
+    },
+    {
+      id: "have_energy",
+      label: "Have more energy",
+      sub: "Show up stronger outside the gym",
+      icon: Zap,
+    },
+    {
+      id: "stay_consistent",
+      label: "Finally stay consistent",
+      sub: "Stop starting over",
+      icon: Check,
+    },
+    {
+      id: "get_stronger",
+      label: "Prove I can get stronger",
+      sub: "Train with something to chase",
+      icon: Dumbbell,
+    },
+  ];
+  return (
+    <div>
+      <div className="rounded-[2rem] border border-neon/20 bg-[linear-gradient(145deg,rgba(183,255,62,0.14),rgba(255,255,255,0.035)_54%,rgba(255,255,255,0.01))] p-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+          One honest answer
+        </p>
+        <h2 className="mt-3 text-[28px] font-black leading-[1.05] tracking-[-0.045em]">
+          {name || "When you picture progress"}, what would feel different?
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          This stays at the heart of your Ascendr experience—especially on the days motivation is
+          low.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {motivations.map(({ id, label, sub, icon: Icon }) => {
+          const active = motivation === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onMotivationChange(id)}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl border p-3.5 text-left transition",
+                active ? "border-neon/70 bg-neon/[0.1]" : "border-white/[0.07] bg-white/[0.025]",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-9 place-items-center rounded-xl",
+                  active ? "bg-neon text-neon-foreground" : "bg-white/[0.06]",
+                )}
+              >
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold">{label}</span>
+                <span className="mt-0.5 block text-[10px] text-muted-foreground">{sub}</span>
+              </span>
+              {active && <Check className="size-4 text-neon" strokeWidth={3} />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-5 border-t border-white/[0.07] pt-5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold">How did you find Ascendr?</p>
+          <span className="text-[10px] text-muted-foreground">Optional</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {REFERRAL_SOURCES.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSourceChange(id)}
+              className={cn(
+                "rounded-full border px-3 py-2 text-[10px] font-bold transition",
+                value === id
+                  ? "border-neon/70 bg-neon/10 text-neon"
+                  : "border-white/[0.07] bg-white/[0.025] text-muted-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanPreviewStep({ name, d }: { name: string; d: Draft }) {
+  const profile = profileFromDraft(d, name || "Athlete");
+  const nutrition = suggestNutrition(profile);
+  const workouts = weeklyScheduleService
+    .generateSchedule(profile)
+    .filter((day) => !day.isRestDay)
+    .slice(0, 3);
+  const goal = GOAL_LABELS[d.goals[0] ?? d.goal];
+  return (
+    <div>
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(255,255,255,0.07),rgba(255,255,255,0.018)_58%,rgba(183,255,62,0.075))] px-5 py-5 shadow-[0_22px_50px_-38px_rgba(0,0,0,0.95)]">
+        <div className="pointer-events-none absolute -right-12 -top-16 size-44 rounded-full bg-neon/15 blur-3xl" />
+        <div className="relative">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+              <span className="grid size-4 place-items-center rounded-full bg-neon text-neon-foreground">
+                <Check className="size-2.5" strokeWidth={4} />
+              </span>
+              Plan ready
+            </span>
+            <span className="text-[10px] font-medium text-muted-foreground">
+              Made for {formatFirstName(name) || "you"}
+            </span>
+          </div>
+          <h2 className="mt-5 max-w-[10ch] text-[31px] font-black leading-[1.02] tracking-[-0.055em]">
+            Your first week is ready.
+          </h2>
+          <p className="mt-3 max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+            A focused {goal.toLowerCase()} plan with the right amount of structure to get moving.
+          </p>
+        </div>
+      </section>
+
+      <section className="relative mt-4 overflow-hidden rounded-[1.75rem] border border-neon/25 bg-[linear-gradient(145deg,rgba(183,255,62,0.14),rgba(18,22,18,0.94)_48%,rgba(8,10,9,0.98))] p-5 shadow-[0_22px_50px_-32px_rgba(183,255,62,0.45)]">
+        <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-neon/70 to-transparent" />
+        <div className="relative flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+              Ascendr plan
+            </p>
+            <h3 className="mt-1 text-[22px] font-black tracking-[-0.035em]">{goal}</h3>
+          </div>
+          <span className="rounded-full border border-neon/25 bg-neon/[0.08] px-3 py-1.5 text-[10px] font-bold text-neon">
+            Adaptive
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              Train
+            </p>
+            <p className="mt-2 text-xl font-black leading-none">{d.daysPerWeek}×</p>
+            <p className="mt-1.5 text-[10px] text-white/60">each week</p>
+          </div>
+          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              Session
+            </p>
+            <p className="mt-2 text-xl font-black leading-none">{d.sessionMinutes}</p>
+            <p className="mt-1.5 text-[10px] text-white/60">minutes</p>
+          </div>
+          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              Fuel
+            </p>
+            <p className="mt-2 text-xl font-black leading-none">{nutrition.protein}g</p>
+            <p className="mt-1.5 text-[10px] text-white/60">protein</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 text-[11px] text-white/65">
+          <span className="size-1.5 rounded-full bg-neon shadow-[0_0_10px_var(--neon)]" />
+          Your schedule will flex when real life does.
+        </div>
+      </section>
+
+      <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-white/[0.075] bg-white/[0.025]">
+        <div className="flex items-end justify-between border-b border-white/[0.07] px-4 pb-3 pt-4">
+          <div>
+            <p className="text-xs font-black">Your opening week</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Three sessions, one clear starting line.
+            </p>
+          </div>
+          <Dumbbell className="mb-0.5 size-4 text-neon" />
+        </div>
+        <div className="divide-y divide-white/[0.065] px-4">
+          {workouts.map((workout, index) => (
+            <div key={workout.id} className="flex items-center gap-3 py-3.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-neon/15 bg-neon/[0.08] text-[10px] font-black text-neon">
+                0{index + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-bold">{workout.workoutTitle}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                  {workout.focus}
+                </span>
+              </span>
+              <span className="shrink-0 text-[10px] font-semibold text-white/60">
+                {workout.duration} min
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <p className="mx-auto mt-5 max-w-[32ch] text-center text-xs leading-relaxed text-muted-foreground">
+        Start with session one. We’ll keep the plan useful as your routine takes shape.
+      </p>
+    </div>
   );
 }
 
@@ -1389,22 +2001,18 @@ function EquipmentStep({
 
 function DaysStep({
   value,
-  split,
   onChange,
-  onSplitChange,
 }: {
   value: 2 | 3 | 4 | 5 | 6;
-  split: WorkoutSplitId;
   onChange: (v: 2 | 3 | 4 | 5 | 6) => void;
-  onSplitChange: (v: WorkoutSplitId) => void;
 }) {
   const options = [2, 3, 4, 5, 6] as const;
-  const suggestedSplits = WORKOUT_SPLIT_OPTIONS.filter(
-    (option) => option.id === "auto" || option.recommendedDays.includes(value),
-  );
   return (
     <div>
-      <StepHeader title="Build your weekly rhythm" sub="Choose a realistic schedule and split." />
+      <StepHeader
+        title="Build your weekly rhythm"
+        sub="Choose a realistic schedule. We'll design the training around you."
+      />
       <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
         Training days
       </p>
@@ -1428,45 +2036,21 @@ function DaysStep({
         ))}
       </div>
 
-      <div className="mt-6 flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
-            Workout split
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Best matches for {value} days</p>
+      <div className="mt-6 rounded-3xl border border-neon/20 bg-neon/[0.055] p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-2xl bg-neon/10 text-neon">
+            <Sparkles className="size-4" />
+          </span>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neon">
+              Personalized after onboarding
+            </p>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              Ascendr AI will choose the best training structure for your goals, experience,
+              equipment, recovery, and {value}-day schedule.
+            </p>
+          </div>
         </div>
-        <span className="text-[9px] text-muted-foreground">You can change this later</span>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2.5">
-        {suggestedSplits.map((option) => {
-          const active = split === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => onSplitChange(option.id)}
-              className={cn(
-                "min-h-[92px] rounded-2xl border p-3 text-left transition",
-                active ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[12px] font-bold leading-tight">{option.shortName}</span>
-                <span
-                  className={cn(
-                    "grid size-4 shrink-0 place-items-center rounded-full border",
-                    active ? "border-neon bg-neon text-neon-foreground" : "border-white/15",
-                  )}
-                >
-                  {active && <Check className="size-2.5" strokeWidth={3} />}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
-                {option.description}
-              </p>
-            </button>
-          );
-        })}
       </div>
     </div>
   );
@@ -1475,17 +2059,21 @@ function DaysStep({
 function BodyStep({
   d,
   update,
+  compact = false,
 }: {
   d: Draft;
   update: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+  compact?: boolean;
 }) {
   const imperial = d.units === "imperial";
   return (
     <div>
-      <StepHeader
-        title="Your body details"
-        sub="We use this to calibrate calorie and macro targets."
-      />
+      {!compact && (
+        <StepHeader
+          title="Your body details"
+          sub="We use this to calibrate calorie and macro targets."
+        />
+      )}
 
       {/* Units toggle */}
       <div className="mb-4 inline-flex rounded-full bg-white/[0.04] border border-white/[0.06] p-1">
@@ -1847,7 +2435,6 @@ function ReviewStep({ d }: { d: Draft }) {
   const profile = profileFromDraft(d, d.name || "Athlete");
   const nutrition = suggestNutrition(profile);
   const plan = weeklyScheduleService.generateSchedule(profile);
-  const selectedSplit = getWorkoutSplitOption(d.workoutSplit);
   return (
     <div>
       <StepHeader
@@ -1870,7 +2457,7 @@ function ReviewStep({ d }: { d: Draft }) {
           ))}
         </div>
         <div className="text-xs text-muted-foreground mt-1">
-          {EXPERIENCE_LABELS[d.experience]} · {EQUIPMENT_LABELS[d.equipment]} · {selectedSplit.name}
+          {EXPERIENCE_LABELS[d.experience]} · {EQUIPMENT_LABELS[d.equipment]} · AI-designed plan
         </div>
       </div>
 
@@ -2061,18 +2648,29 @@ function CommitmentStep({ name, d }: { name: string; d: Draft }) {
   );
 }
 
-function BodyScanTeaserStep({
-  onUnlock,
-  onSkip,
-}: {
-  onUnlock: (scanType: "body" | "face") => void;
-  onSkip: () => void;
-}) {
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not prepare preview photo."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function prepareBodyScanPreviewPhoto(photo: string) {
+  const original = await fetch(photo).then((response) => response.blob());
+  const file = new File([original], "body-scan-preview", {
+    type: original.type || "image/jpeg",
+  });
+  return blobToDataUrl(await compressImage(file, 1200, 0.78));
+}
+
+function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip: () => void }) {
+  const analyzePreview = useServerFn(analyzeBodyScanPreview);
   const [acceptedOffer, setAcceptedOffer] = useState(false);
-  const [scanType, setScanType] = useState<"body" | "face">("body");
   const [photo, setPhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState(false);
+  const [previewResult, setPreviewResult] = useState<BodyScanPreviewResult | null>(null);
   const [error, setError] = useState("");
 
   const continueToUnlock = async () => {
@@ -2080,53 +2678,41 @@ function BodyScanTeaserStep({
     setSaving(true);
     setError("");
     try {
-      if (scanType === "body") await savePendingBodyScan(photo);
-      else await savePendingFaceScan(photo);
-      await new Promise((resolve) => window.setTimeout(resolve, 4200));
-      setResult(true);
+      await savePendingBodyScan(photo);
+      const previewPhoto = await prepareBodyScanPreviewPhoto(photo);
+      const [nextPreview] = await Promise.all([
+        analyzePreview({ data: { photo: previewPhoto } }),
+        new Promise((resolve) => window.setTimeout(resolve, 4200)),
+      ]);
+      setPreviewResult(nextPreview);
     } catch (pendingError) {
-      console.error(`Could not complete onboarding ${scanType} scan:`, pendingError);
+      console.error("Could not prepare the onboarding Body Scan preview:", pendingError);
       setError(
         pendingError instanceof Error
           ? pendingError.message
-          : `Ascendr couldn't complete that ${scanType} analysis. Please try again.`,
+          : "Ascendr couldn't prepare that Body Scan preview. Please try again.",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const sampleMetrics =
-    scanType === "body"
-      ? ([
-          ["Muscle", 82],
-          ["V-Taper", 88],
-          ["Symmetry", 85],
-          ["Potential", 91],
-        ] as const)
-      : ([
-          ["Symmetry", 87],
-          ["Jawline", 84],
-          ["Skin", 82],
-          ["Potential", 90],
-        ] as const);
-
   if (saving && photo) {
     return (
       <div className="fixed inset-0 z-[90] bg-black">
-        <ScanAnalysisProgress photo={photo} scanType={scanType} preview />
+        <ScanAnalysisProgress photo={photo} scanType="body" preview />
       </div>
     );
   }
 
-  if (result && photo) {
+  if (previewResult && photo) {
     return (
-      <LockedOnboardingScanPreview
+      <LockedBodyScanPreview
         photo={photo}
-        scanType={scanType}
-        onUnlock={() => onUnlock(scanType)}
+        preview={previewResult}
+        onUnlock={onUnlock}
         onRetry={() => {
-          setResult(false);
+          setPreviewResult(null);
           setPhoto(null);
         }}
       />
@@ -2146,50 +2732,17 @@ function BodyScanTeaserStep({
         </div>
 
         <h2 className="mt-3 max-w-[12ch] text-[2rem] font-black leading-[1.02] tracking-[-0.05em]">
-          Want to see your {scanType === "body" ? "physique" : "appearance"} potential?
+          Want to see your physique potential?
         </h2>
         <p className="mt-2.5 max-w-[38ch] text-[13px] leading-relaxed text-muted-foreground">
           One private photo reveals visible strengths and gives you a focused improvement plan.
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-1.5">
-          {(["body", "face"] as const).map((type) => {
-            const active = scanType === type;
-            const Icon = type === "body" ? ScanLine : ScanFace;
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => {
-                  setScanType(type);
-                  setPhoto(null);
-                  setResult(false);
-                  setError("");
-                }}
-                className={cn(
-                  "flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition",
-                  active
-                    ? "bg-neon text-neon-foreground shadow-lg shadow-neon/15"
-                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4" />
-                {type === "body" ? "Body Analysis" : "Face Analysis"}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="relative mt-4 h-[318px] overflow-hidden rounded-[30px] border border-white/[0.08] bg-[#0c0f0d] shadow-2xl shadow-black/40">
           <img
             src="/media/ascendr-sample-body-scan.png"
             alt="Sample athlete used to demonstrate an Ascendr analysis report"
-            className={cn(
-              "absolute inset-0 h-full w-full",
-              scanType === "body"
-                ? "object-contain object-center"
-                : "scale-[1.55] object-cover object-[center_12%]",
-            )}
+            className="absolute inset-0 h-full w-full object-contain object-center opacity-75"
           />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/15 via-black/20 to-black/90" />
           <div
@@ -2206,17 +2759,13 @@ function BodyScanTeaserStep({
           <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="grid size-7 place-items-center rounded-lg bg-neon text-neon-foreground">
-                {scanType === "body" ? (
-                  <ScanLine className="size-4" strokeWidth={2.5} />
-                ) : (
-                  <ScanFace className="size-4" strokeWidth={2.5} />
-                )}
+                <ScanLine className="size-4" strokeWidth={2.5} />
               </span>
               <div>
                 <p className="text-[8px] font-black uppercase tracking-[0.2em] text-neon">
-                  {scanType === "body" ? "Body Scan" : "Face Scan"}
+                  Body Scan
                 </p>
-                <p className="text-[10px] font-bold text-white">Sample report</p>
+                <p className="text-[10px] font-bold text-white">Locked preview</p>
               </div>
             </div>
             <span className="flex items-center gap-1 rounded-full border border-neon/15 bg-neon/[0.07] px-2 py-1 text-[7px] font-black uppercase tracking-[0.16em] text-neon">
@@ -2228,38 +2777,43 @@ function BodyScanTeaserStep({
             <div className="flex items-end justify-between gap-4 border-b border-white/[0.07] pb-3">
               <div>
                 <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                  Overall {scanType === "body" ? "physique" : "appearance"}
+                  Overall physique rating
                 </p>
                 <div className="mt-1 flex items-end gap-1.5">
                   <span className="text-[2.65rem] font-black leading-none tracking-[-0.07em] text-white">
-                    86
+                    76
                   </span>
-                  <span className="mb-1 text-[9px] font-bold text-muted-foreground">/ 100</span>
+                  <span className="mb-1 text-[8px] font-black text-neon">/100</span>
                 </div>
               </div>
               <div className="mb-0.5 rounded-xl border border-white/[0.07] bg-white/[0.035] px-2.5 py-2 text-right">
                 <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                  {scanType === "body" ? "Body fat range" : "Eye area"}
+                  Body fat range
                 </p>
-                <p className="mt-0.5 text-sm font-black text-neon">
-                  {scanType === "body" ? "12-15%" : "86"}
-                </p>
+                <span className="mt-1.5 block h-4 w-12 rounded bg-neon/15 blur-[3px]" />
               </div>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-              {sampleMetrics.map(([label, value]) => (
-                <div key={label}>
-                  <div className="flex items-end justify-between gap-2">
+              {[
+                { label: "Muscle", width: "78%" },
+                { label: "V-taper", width: "84%" },
+                { label: "Symmetry", width: "87%" },
+                { label: "Potential", width: "88%" },
+                { label: "Shoulders", width: "83%" },
+                { label: "Core", width: "85%" },
+              ].map((metric) => (
+                <div key={metric.label}>
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-[7px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                      {label}
+                      {metric.label}
                     </span>
-                    <span className="text-[11px] font-black text-neon">{value}</span>
+                    <LockKeyhole className="size-2.5 text-neon/75" />
                   </div>
                   <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.08]">
                     <div
-                      className="h-full rounded-full bg-neon shadow-[0_0_8px_rgba(163,255,68,.55)]"
-                      style={{ width: `${value}%` }}
+                      className="h-full rounded-full bg-neon shadow-[0_0_8px_rgba(163,255,68,.45)]"
+                      style={{ width: metric.width }}
                     />
                   </div>
                 </div>
@@ -2272,18 +2826,12 @@ function BodyScanTeaserStep({
               <p className="text-[7px] font-black uppercase tracking-[0.18em] text-neon">
                 Your next move
               </p>
-              <span className="rounded-full bg-neon/10 px-1.5 py-0.5 text-[7px] font-black text-neon">
-                01
-              </span>
+              <LockKeyhole className="size-3 text-neon" />
             </div>
-            <p className="mt-1.5 text-[11px] font-extrabold leading-tight text-white">
-              {scanType === "body" ? "Build upper-body width" : "Sharper grooming strategy"}
+            <p className="mt-1.5 text-[11px] font-extrabold leading-tight text-white/65">
+              Unlock your personalized plan
             </p>
-            <p className="mt-1 text-[8px] leading-snug text-muted-foreground">
-              {scanType === "body"
-                ? "A clear priority from 9 visible muscle groups."
-                : "A focused plan for grooming, skin, and presentation."}
-            </p>
+            <div className="mt-2 h-2 w-4/5 rounded bg-white/10 blur-[2px]" />
           </div>
 
           <div className="pointer-events-none absolute left-3 right-3 top-[154px] h-px bg-neon shadow-[0_0_14px_3px_rgba(163,255,68,.45)]" />
@@ -2295,7 +2843,7 @@ function BodyScanTeaserStep({
             onClick={() => setAcceptedOffer(true)}
             className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon font-bold text-neon-foreground glow-neon transition active:scale-[0.98]"
           >
-            Preview My {scanType === "body" ? "Body" : "Face"} Analysis
+            Preview My Body Analysis
             <ArrowRight className="size-5" />
           </button>
           <button
@@ -2319,7 +2867,7 @@ function BodyScanTeaserStep({
     <div>
       <StepHeader
         title="Add one photo"
-        sub={`You chose to preview your ${scanType === "body" ? "Body" : "Face"} Scan. You can still skip whenever you want.`}
+        sub="You chose to preview your Body Scan. You can still skip whenever you want."
       />
 
       <button
@@ -2327,7 +2875,7 @@ function BodyScanTeaserStep({
         onClick={() => {
           setAcceptedOffer(false);
           setPhoto(null);
-          setResult(false);
+          setPreviewResult(null);
           setError("");
         }}
         className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground"
@@ -2338,19 +2886,15 @@ function BodyScanTeaserStep({
 
       <div className="rounded-3xl border border-neon/20 bg-gradient-to-br from-neon/[0.08] via-transparent to-transparent p-1">
         <PhotoSlot
-          label={scanType === "body" ? "Your full-body photo" : "Your face photo"}
-          capture={scanType === "body" ? "environment" : "user"}
+          label="Your full-body photo"
+          capture="environment"
           value={photo}
           onChange={(nextPhoto) => {
             setPhoto(nextPhoto);
-            setResult(false);
+            setPreviewResult(null);
             setError("");
           }}
-          hint={
-            scanType === "body"
-              ? "Take one still photo with your full body visible from head to toe and the camera level."
-              : "Use one clear front-facing photo in even lighting with your full face visible."
-          }
+          hint="Take one still photo with your full body visible from head to toe and the camera level."
         />
       </div>
 
@@ -2360,26 +2904,19 @@ function BodyScanTeaserStep({
           <p className="text-xs font-semibold">Photo quality checklist</p>
         </div>
         <div className="mt-3 grid gap-2">
-          {(scanType === "body"
-            ? [
-                "Head-to-toe in frame",
-                "Level camera and even lighting",
-                "Natural stance in fitted gymwear",
-              ]
-            : [
-                "Full face clearly visible",
-                "Even light and neutral expression",
-                "Remove filters, glasses, and hats",
-              ]
-          ).map((item) => (
+          {[
+            "Head-to-toe in frame",
+            "Level camera and even lighting",
+            "Natural stance in fitted gymwear",
+          ].map((item) => (
             <div key={item} className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <Check className="size-3.5 text-neon" /> {item}
             </div>
           ))}
         </div>
         <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-          Ascendr will prepare a private preview on this device. The full AI scan runs only after
-          you subscribe.
+          Ascendr uses a limited AI check to score this preview. Body-fat details, factor numbers,
+          and your improvement plan stay locked until you subscribe.
         </p>
       </div>
 
@@ -2392,7 +2929,7 @@ function BodyScanTeaserStep({
             <div>
               <p className="text-sm font-bold">Your photo is ready</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Prepare a private preview on this device. No account or sign-in is required.
+                Prepare your photo-specific preview. No account or sign-in is required.
               </p>
             </div>
           </div>
@@ -2412,7 +2949,7 @@ function BodyScanTeaserStep({
         className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon font-bold text-neon-foreground glow-neon transition active:scale-[0.98] disabled:opacity-40"
       >
         {saving ? <Loader2 className="size-5 animate-spin" /> : <Sparkles className="size-5" />}
-        {saving ? "Preparing Preview" : `Preview My ${scanType === "body" ? "Body" : "Face"} Scan`}
+        {saving ? "Preparing Preview" : "Preview My Body Scan"}
       </button>
 
       <button
@@ -2427,113 +2964,6 @@ function BodyScanTeaserStep({
         Results are a visual fitness opinion, not a medical assessment or body-composition
         measurement.
       </p>
-    </div>
-  );
-}
-
-function LockedOnboardingScanPreview({
-  photo,
-  scanType,
-  onUnlock,
-  onRetry,
-}: {
-  photo: string;
-  scanType: "body" | "face";
-  onUnlock: () => void;
-  onRetry: () => void;
-}) {
-  const metrics =
-    scanType === "body"
-      ? ["Muscle Development", "Body Fat Range", "V-Taper", "Symmetry", "Potential"]
-      : ["Facial Symmetry", "Jawline", "Skin Quality", "Eye Area", "Looksmax Potential"];
-
-  return (
-    <div className="pb-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neon">
-            Preview ready
-          </p>
-          <h2 className="mt-2 text-[2rem] font-black leading-none tracking-[-0.045em]">
-            Your report is prepared.
-          </h2>
-        </div>
-        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-neon text-neon-foreground shadow-lg shadow-neon/20">
-          <Check className="size-5" strokeWidth={3} />
-        </span>
-      </div>
-      <p className="mt-3 max-w-[38ch] text-[13px] leading-relaxed text-muted-foreground">
-        Your photo is ready for a private {scanType === "body" ? "physique" : "appearance"} scan.
-        Subscribe to run the full AI analysis and reveal every score, insight, and action step.
-      </p>
-
-      <div className="relative mt-5 min-h-[470px] overflow-hidden rounded-[30px] border border-neon/25 bg-black shadow-2xl shadow-black/50">
-        <img
-          src={photo}
-          alt={`Your completed ${scanType} analysis`}
-          className="absolute inset-0 h-full w-full object-cover object-top opacity-45"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/40 to-black" />
-        <div className="absolute inset-x-0 top-[38%] h-px bg-neon shadow-[0_0_20px_4px_rgba(163,255,68,.5)]" />
-
-        <div className="relative z-10 flex min-h-[470px] flex-col justify-end p-5">
-          <div className="rounded-[26px] border border-white/10 bg-black/75 p-5 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-white/45">
-                  Overall {scanType === "body" ? "physique" : "appearance"}
-                </p>
-                <div className="mt-2 h-12 w-24 rounded-xl bg-white/10 blur-[5px]" />
-              </div>
-              <span className="grid size-12 place-items-center rounded-2xl border border-neon/25 bg-neon/10 text-neon">
-                <LockKeyhole className="size-5" />
-              </span>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-2.5">
-              {metrics.map((metric) => (
-                <div
-                  key={metric}
-                  className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3"
-                >
-                  <p className="truncate text-[8px] font-bold uppercase tracking-[0.12em] text-white/45">
-                    {metric}
-                  </p>
-                  <div className="mt-2 h-5 w-12 rounded-md bg-neon/30 blur-[4px]" />
-                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full w-3/4 rounded-full bg-neon/35 blur-[2px]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-neon/20 bg-neon/[0.08] p-4">
-              <LockKeyhole className="size-5 shrink-0 text-neon" />
-              <div>
-                <p className="text-sm font-bold">Subscribe to gain access</p>
-                <p className="mt-0.5 text-[10px] leading-relaxed text-white/45">
-                  Reveal your full report and personalized improvement plan.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onUnlock}
-        className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon font-bold text-neon-foreground glow-neon transition active:scale-[0.98]"
-      >
-        <LockKeyhole className="size-5" /> Subscribe to Run & Reveal My Results
-      </button>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-2 flex h-11 w-full items-center justify-center text-xs font-semibold text-muted-foreground transition hover:text-foreground"
-      >
-        Use a different photo
-      </button>
     </div>
   );
 }
@@ -2579,27 +3009,153 @@ function CustomizingPlan({
 
   const currentStep = Math.min(PLAN_STEPS.length, Math.floor(progress * PLAN_STEPS.length) + 1);
   const complete = ready && progress >= 1;
+  const progressPercent = Math.round(progress * 100);
+  const currentLabel = complete ? "Your plan is ready" : PLAN_STEPS[currentStep - 1];
 
   return (
-    <div className="flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background px-4 pb-safe pt-safe sm:px-6">
-      <div className="flex-1 flex flex-col justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neon/10 border border-neon/30">
-            <Sparkles className="size-3.5 text-neon" />
-            <span className="text-[10px] font-bold tracking-[0.2em] text-neon uppercase">
-              {complete ? "Your plan is ready" : "Customizing your plan"}
-            </span>
-          </div>
-          <h2 className="mt-5 text-3xl font-extrabold leading-tight">
-            {complete ? "Built around" : "Building something"}
-            <br />
-            <span className="text-neon">{complete ? "your real routine" : "just for you"}</span>
-          </h2>
+    <div className="relative min-h-dvh min-w-0 overflow-x-clip bg-background px-5 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)] sm:px-6">
+      <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-80 w-[36rem] -translate-x-1/2 rounded-full bg-neon/[0.09] blur-[110px]" />
+      <div className="mx-auto w-full max-w-md">
+        <header className="flex items-center justify-between border-b border-white/[0.07] pb-4">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+            Ascendr
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Plan build · {currentStep} / {PLAN_STEPS.length}
+          </span>
+        </header>
+
+        <main className="pt-7">
+          <section className="relative overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,0.075),rgba(255,255,255,0.018)_55%,rgba(183,255,62,0.075))] p-5 shadow-[0_24px_65px_-42px_rgba(0,0,0,0.95)]">
+            <div className="pointer-events-none absolute -right-14 -top-14 size-44 rounded-full bg-neon/20 blur-3xl" />
+            <div className="relative flex items-start gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+                  {complete ? "Complete" : "Crafting your routine"}
+                </p>
+                <h2 className="mt-3 max-w-[9ch] text-[31px] font-black leading-[1.02] tracking-[-0.055em]">
+                  {complete ? "Your plan is set." : "Your plan is taking shape."}
+                </h2>
+                <p className="mt-3 max-w-[24ch] text-sm leading-relaxed text-muted-foreground">
+                  {complete
+                    ? "Everything is ready for your first session."
+                    : "Matching training, recovery, and nutrition into one rhythm."}
+                </p>
+              </div>
+              <div
+                className="grid size-[5.3rem] shrink-0 place-items-center rounded-full p-[5px] shadow-[0_0_34px_rgba(183,255,62,0.18)]"
+                style={{
+                  background: `conic-gradient(#b7ff3e ${progressPercent}%, rgba(255,255,255,0.1) 0)`,
+                }}
+                aria-label={`${progressPercent}% complete`}
+              >
+                <div className="grid size-full place-items-center rounded-full bg-[#101210] text-center">
+                  <span className="text-[22px] font-black leading-none tracking-[-0.06em]">
+                    {progressPercent}
+                  </span>
+                  <span className="-mt-1 text-[8px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                    %
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative mt-6 h-1.5 overflow-hidden rounded-full bg-white/[0.09]">
+              <motion.div
+                className="h-full rounded-full bg-neon shadow-[0_0_16px_rgba(183,255,62,0.8)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress * 100}%` }}
+                transition={{ ease: "linear" }}
+              />
+            </div>
+          </section>
+
+          <section className="mt-4 rounded-[1.6rem] border border-neon/20 bg-neon/[0.055] p-4">
+            <div className="flex items-center gap-3">
+              <span className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-neon/35 bg-neon/[0.08] text-neon">
+                {!complete && (
+                  <span className="absolute size-5 animate-ping rounded-full bg-neon/15" />
+                )}
+                {complete ? (
+                  <Check className="relative size-4" strokeWidth={3} />
+                ) : (
+                  <Sparkles className="relative size-4" />
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-neon">
+                  {complete ? "Ready to go" : "Fine-tuning now"}
+                </span>
+                <span className="mt-1 block truncate text-sm font-bold">{currentLabel}</span>
+              </span>
+            </div>
+          </section>
+
+          <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-white/[0.075] bg-white/[0.025]">
+            <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-4">
+              <div>
+                <p className="text-xs font-black">Your training blueprint</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Built from the details you shared.
+                </p>
+              </div>
+              <span className="rounded-full border border-white/[0.1] px-2.5 py-1 text-[9px] font-bold text-white/70">
+                Adaptive
+              </span>
+            </div>
+            <ul className="grid grid-cols-2 gap-px bg-white/[0.06]">
+              {PLAN_STEPS.map((label, i) => {
+                const done = complete || i < currentStep - 1;
+                const active = !complete && i === currentStep - 1;
+                return (
+                  <motion.li
+                    key={label}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: done || active ? 1 : 0.42, y: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex min-h-16 items-center gap-2.5 bg-[#0b0d0c] px-3 py-3"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-6 shrink-0 place-items-center rounded-lg border text-[9px] font-black",
+                        done
+                          ? "border-neon bg-neon text-neon-foreground"
+                          : active
+                            ? "border-neon/60 bg-neon/[0.1] text-neon"
+                            : "border-white/10 text-muted-foreground",
+                      )}
+                    >
+                      {done ? (
+                        <Check className="size-3" strokeWidth={3} />
+                      ) : active ? (
+                        <motion.span
+                          className="size-1.5 rounded-full bg-neon"
+                          animate={{ opacity: [0.35, 1, 0.35] }}
+                          transition={{ repeat: Infinity, duration: 1.1 }}
+                        />
+                      ) : (
+                        `0${i + 1}`
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold leading-snug",
+                        active && "text-neon",
+                      )}
+                    >
+                      {label}
+                    </span>
+                  </motion.li>
+                );
+              })}
+            </ul>
+          </section>
+
           {complete && plan && (
-            <motion.div
+            <motion.section
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-5 rounded-2xl border border-neon/20 bg-neon/[0.07] px-4 py-3 text-left"
+              className="mt-4 rounded-[1.6rem] border border-neon/20 bg-neon/[0.055] p-4"
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="truncate text-sm font-extrabold">{plan.name}</p>
@@ -2610,70 +3166,13 @@ function CustomizingPlan({
               <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
                 {plan.summary}
               </p>
-            </motion.div>
+            </motion.section>
           )}
-          <div className="mt-6 h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
-            <motion.div
-              className="h-full bg-neon"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress * 100}%` }}
-              transition={{ ease: "linear" }}
-            />
-          </div>
-          <div className="mt-2 text-[11px] tabular-nums text-muted-foreground">
-            {Math.round(progress * 100)}%
-          </div>
-        </div>
 
-        <ul className="mt-10 space-y-3">
-          {PLAN_STEPS.map((label, i) => {
-            const done = complete || i < currentStep - 1;
-            const active = !complete && i === currentStep - 1;
-            return (
-              <motion.li
-                key={label}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: done || active ? 1 : 0.35, x: 0 }}
-                transition={{ duration: 0.25 }}
-                className="flex items-center gap-3"
-              >
-                <div
-                  className={cn(
-                    "size-7 rounded-full grid place-items-center shrink-0 border transition",
-                    done
-                      ? "bg-neon border-neon text-neon-foreground"
-                      : active
-                        ? "border-neon text-neon"
-                        : "border-white/15 text-muted-foreground",
-                  )}
-                >
-                  {done ? (
-                    <Check className="size-4" strokeWidth={3} />
-                  ) : active ? (
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    >
-                      <Sparkles className="size-3.5" />
-                    </motion.div>
-                  ) : (
-                    <span className="text-[11px] font-bold tabular-nums">{i + 1}</span>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    done && "text-foreground",
-                    active && "text-neon",
-                    !done && !active && "text-muted-foreground",
-                  )}
-                >
-                  {label}
-                </span>
-              </motion.li>
-            );
-          })}
-        </ul>
+          <p className="mx-auto mt-5 max-w-[34ch] text-center text-[11px] leading-relaxed text-muted-foreground">
+            We’re using your goals, schedule, and setup to make the first week feel achievable.
+          </p>
+        </main>
       </div>
     </div>
   );

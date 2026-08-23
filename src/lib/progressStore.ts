@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { createClientId } from "./clientId";
 
 export interface WorkoutLogEntry {
   id: string;
@@ -13,7 +14,11 @@ const EVT = "fitness:progress-change";
 let cache: WorkoutLogEntry[] | null = null;
 function loadFresh(): WorkoutLogEntry[] {
   if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(KEY) || "[]");
+  } catch {
+    return [];
+  }
 }
 function load(): WorkoutLogEntry[] {
   if (cache === null) cache = loadFresh();
@@ -27,7 +32,7 @@ function save(list: WorkoutLogEntry[]) {
 
 export function logWorkout(minutes: number, workoutId?: string) {
   const list = [...load()];
-  list.push({ id: crypto.randomUUID(), date: new Date().toISOString(), minutes, workoutId });
+  list.push({ id: createClientId(), date: new Date().toISOString(), minutes, workoutId });
   save(list);
 }
 
@@ -41,8 +46,13 @@ export function replaceWorkoutLogEntries(list: WorkoutLogEntry[]) {
 
 function subscribe(cb: () => void) {
   if (typeof window === "undefined") return () => {};
-  const invalidate = () => { cache = null; cb(); };
-  const onStorage = (e: StorageEvent) => { if (!e.key || e.key === KEY) invalidate(); };
+  const invalidate = () => {
+    cache = null;
+    cb();
+  };
+  const onStorage = (e: StorageEvent) => {
+    if (!e.key || e.key === KEY) invalidate();
+  };
   window.addEventListener(EVT, invalidate);
   window.addEventListener("storage", onStorage);
   return () => {
@@ -80,7 +90,9 @@ export function useProgress(workoutMinutesTarget = 30): ProgressSummary {
 
   const weekStart = startOfWeek(new Date()).getTime();
   const completedThisWeek = new Set(
-    log.filter((l) => new Date(l.date).getTime() >= weekStart).map((l) => new Date(l.date).toDateString())
+    log
+      .filter((l) => new Date(l.date).getTime() >= weekStart)
+      .map((l) => new Date(l.date).toDateString()),
   ).size;
 
   // streak: consecutive prior days (incl. today) with at least one workout

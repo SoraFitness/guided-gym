@@ -20,8 +20,8 @@ function HistoryPage() {
   const prs = computePRs(history);
 
   return (
-    <div className="min-h-dvh bg-background pb-24">
-      <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+    <div className="mx-auto min-h-dvh w-full min-w-0 max-w-md overflow-x-clip bg-background page-pb-safe">
+      <div className="flex min-w-0 items-center gap-3 px-4 pb-3 page-pt-safe sm:px-5">
         <Link
           to="/workouts"
           className="size-10 rounded-full bg-white/[0.06] grid place-items-center"
@@ -29,17 +29,19 @@ function HistoryPage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-2xl font-extrabold">Workout history</h1>
+        <h1 className="min-w-0 text-[clamp(1.5rem,7vw,1.875rem)] font-extrabold leading-tight">
+          Workout history
+        </h1>
       </div>
 
-      <div className="px-5 mt-2 grid grid-cols-3 gap-2">
+      <div className="mt-2 grid grid-cols-3 gap-2 px-4 sm:px-5">
         <Stat label="Workouts" value={`${prs.totalWorkouts}`} />
         <Stat label="Total sets" value={`${prs.totalSets}`} />
         <Stat label="Total reps" value={`${prs.totalReps}`} />
       </div>
 
       {history.length === 0 ? (
-        <div className="px-5 mt-12 text-center text-muted-foreground">
+        <div className="mt-12 px-4 text-center text-muted-foreground sm:px-5">
           <Dumbbell className="mx-auto size-10 opacity-40" />
           <p className="mt-3 text-sm">No completed workouts yet.</p>
           <Link
@@ -50,13 +52,13 @@ function HistoryPage() {
           </Link>
         </div>
       ) : (
-        <div className="px-5 mt-5 flex flex-col gap-2">
+        <div className="mt-5 flex flex-col gap-2 px-4 sm:px-5">
           {history.map((w) => (
             <Link
               key={w.id}
               to="/workout/history/$id"
               params={{ id: w.id }}
-              className="rounded-2xl bg-surface border border-white/[0.05] p-4 flex items-center gap-3 active:scale-[0.99] transition"
+              className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.05] bg-surface p-4 transition active:scale-[0.99]"
             >
               <div className="size-11 rounded-xl bg-neon/15 grid place-items-center">
                 <Trophy className="size-5 text-neon" />
@@ -87,9 +89,11 @@ function HistoryPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-surface border border-white/[0.05] p-3 text-center">
+    <div className="min-w-0 rounded-2xl border border-white/[0.05] bg-surface p-2.5 text-center sm:p-3">
       <div className="text-xl font-extrabold tabular-nums">{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="truncate text-[9px] uppercase tracking-wide text-muted-foreground sm:text-[10px] sm:tracking-wider">
+        {label}
+      </div>
     </div>
   );
 }

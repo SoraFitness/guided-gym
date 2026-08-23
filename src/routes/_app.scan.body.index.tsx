@@ -58,7 +58,7 @@ function BodyScanIntro() {
       <header className="flex items-center gap-3">
         <Link
           to="/scan"
-          className="grid size-10 place-items-center rounded-full border border-white/[0.06] bg-surface"
+          className="grid h-[44px] w-[44px] place-items-center rounded-full border border-white/[0.06] bg-surface"
           aria-label="Back to scans"
         >
           <ArrowLeft className="size-5" />
@@ -118,11 +118,19 @@ function BodyScanIntro() {
 
       <button
         type="button"
-        onClick={() => navigate({ to: "/scan/body/new" })}
+        onClick={() => navigate({ to: "/scan/body/new", search: { pending: undefined } })}
         className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon text-base font-bold text-neon-foreground shadow-[0_14px_40px_-14px_var(--neon)] transition active:scale-[0.985]"
       >
         <Sparkles className="size-5" /> Start Body Scan
       </button>
+
+      <Link
+        to="/scan/body/$id"
+        params={{ id: "demo" }}
+        className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.035] text-sm font-bold text-white/70 transition active:scale-[0.985]"
+      >
+        <ScanLine className="size-4 text-neon" /> View sample report
+      </Link>
 
       <section className="mt-5 grid grid-cols-3 gap-2">
         {[

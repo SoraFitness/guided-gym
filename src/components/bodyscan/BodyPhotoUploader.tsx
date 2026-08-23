@@ -146,6 +146,7 @@ export function PhotoSlot({
         </button>
         <input
           ref={cameraRef}
+          aria-label="Take scan photo"
           type="file"
           accept="image/*"
           capture={capture}
@@ -154,6 +155,7 @@ export function PhotoSlot({
         />
         <input
           ref={uploadRef}
+          aria-label="Upload scan photo"
           type="file"
           accept="image/*"
           className="hidden"

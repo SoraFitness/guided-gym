@@ -1,3 +1,5 @@
+import type { NutrientDetails } from "./nutritionQuality";
+
 export interface Food {
   id: string;
   name: string;
@@ -9,6 +11,7 @@ export interface Food {
   carbs: number;
   fat: number;
   tags: string[];
+  nutrients?: NutrientDetails;
 }
 
 export const foods: Food[] = [
@@ -213,6 +216,8 @@ export interface LogEntry {
     carbs: number;
     fat: number;
     source: LogSource;
+    tags?: string[];
+    nutrients?: NutrientDetails;
   };
 }
 
@@ -246,6 +251,8 @@ export function entryFood(e: LogEntry): {
   protein: number;
   carbs: number;
   fat: number;
+  tags?: string[];
+  nutrients?: NutrientDetails;
 } {
   if (e.custom) return { emoji: "🍽️", ...e.custom };
   const f = foods.find((x) => x.id === e.foodId);

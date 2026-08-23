@@ -1,12 +1,13 @@
-
 ## Part 1 — Make it feel like a native iOS PWA (installable only, no service worker)
 
 **New files in `public/`** (icons via `imagegen`, dark background with neon accent mark):
+
 - `manifest.webmanifest` — `name: "Sora"`, `short_name: "Sora"`, `display: "standalone"`, `start_url: "/"`, `scope: "/"`, `background_color: "#0A0A0A"`, `theme_color: "#0A0A0A"`, `orientation: "portrait"`, icons 192/512 + maskable 512.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon-180.png`, `favicon.ico`.
 - `apple-splash-{1290x2796, 1179x2556, 1170x2532, 1284x2778, 1125x2436, 828x1792, 750x1334}.png` — generated dark splash with centered logo.
 
 **`src/routes/__root.tsx`** — add head tags:
+
 - `<link rel="manifest" href="/manifest.webmanifest">`
 - `<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">`
 - `<meta name="apple-mobile-web-app-capable" content="yes">`
@@ -18,6 +19,7 @@
 - One `<link rel="apple-touch-startup-image">` per splash size with `media="(device-width: …px) and (device-height: …px) and (-webkit-device-pixel-ratio: …) and (orientation: portrait)"`.
 
 **`src/styles.css`** — safe-area + native feel:
+
 - `html, body { height: 100%; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }`
 - `body { background: hsl(var(--background)); }` to kill white rubber-band gap.
 - `* { -webkit-touch-callout: none; }` on app shell.
@@ -26,6 +28,7 @@
 - `.scroll-smooth-ios { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }`
 
 **`src/routes/_app.tsx`** — apply safe areas:
+
 - Outer wrapper gets `pt-safe`.
 - Bottom-nav `<nav>` gets `pb-safe` and `pb-[max(20px,env(safe-area-inset-bottom))]`.
 - Content area padding-bottom uses `calc(safe-area + 96px)`.
@@ -40,6 +43,7 @@
 Keep the existing `/onboarding` flow but extend `Draft` and add four steps. New optional fields persisted to profile state (no migration needed unless we want analytics in DB — see Referral section).
 
 **Extended Draft fields:**
+
 - `referralSource: "tiktok" | "instagram" | "youtube" | "friend" | "appstore" | "google" | "other" | null`
 - `referralCode: string | null`
 
@@ -67,6 +71,7 @@ Other spec items mapped to existing steps (already collected, just reordered / r
 ## Part 3 — Paywall: add referral input (track-only)
 
 `src/routes/paywall.tsx`:
+
 - New collapsible "Have a referral code?" section above the CTA.
 - Input + Apply button → on apply, persist to profile (`referralCode`), show inline `✓ Code saved` state. No price change, no validation.
 - Safe-area padding (`pb-safe`).
@@ -76,6 +81,7 @@ Other spec items mapped to existing steps (already collected, just reordered / r
 ## Part 4 — Use onboarding data
 
 Mostly already wired (`workoutRecommendationService`, `suggestNutrition`, `saveGoals` are already called on the final onboarding step). Verification + small fixes only:
+
 - Confirm goal, experience, daysPerWeek, equipment, currentWeight, goalWeight, age, gender flow into the existing recommendation calls. Adjust calls if the equipment field becomes an array (use first item as primary for the existing single-equipment engine).
 - Personalize Home greeting using `profile.name` (already supported by `useProfile`).
 - No new plan engine; we're not re-architecting business logic (out of scope per "UI change → keep work in frontend").

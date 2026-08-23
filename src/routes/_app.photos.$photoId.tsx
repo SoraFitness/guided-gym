@@ -161,7 +161,8 @@ function PhotoDetail() {
           onClick={() => setFullscreen(false)}
         >
           <button
-            className="absolute top-5 right-5 size-10 rounded-full bg-white/10 grid place-items-center text-white"
+            className="absolute right-5 grid size-10 place-items-center rounded-full bg-white/10 text-white"
+            style={{ top: "max(1.25rem, calc(env(safe-area-inset-top) + 0.75rem))" }}
             aria-label="Close"
           >
             <X className="size-5" />
