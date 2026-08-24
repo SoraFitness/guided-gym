@@ -74,7 +74,8 @@ workflows:
       - name: Set build number
         script: |
           cd ios/App
-          agvtool new-version -all "$CM_BUILD_NUMBER"
+          echo "Setting iOS build number to $BUILD_NUMBER"
+          agvtool new-version -all "$BUILD_NUMBER"
       - name: Build signed IPA
         script: |
           cd ios/App
