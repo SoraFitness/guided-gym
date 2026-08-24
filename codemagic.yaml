@@ -33,6 +33,8 @@ workflows:
     integrations:
       app_store_connect: CodemagicAscendr
     environment:
+      groups:
+        - production
       node: 22.14.0
       xcode: latest
       ios_signing:
