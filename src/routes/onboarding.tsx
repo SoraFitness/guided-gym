@@ -860,11 +860,14 @@ function Onboarding() {
       <main
         ref={scrollContainerRef}
         className={cn(
-          "min-h-0 flex-1 snap-y snap-proximity overflow-y-auto overscroll-y-contain px-4 sm:px-6",
-          step === 0 ? "pb-32 pt-0 sm:pb-36" : "pb-28 pt-4 sm:pb-36 sm:pt-6",
+          "min-h-0 flex-1 touch-pan-y overflow-y-scroll overscroll-none px-4 sm:px-6",
+          step === 0
+            ? "pb-[calc(env(safe-area-inset-bottom)+8rem)] pt-0 sm:pb-36"
+            : "pb-[calc(env(safe-area-inset-bottom)+8rem)] pt-4 sm:pb-36 sm:pt-6",
         )}
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="mx-auto w-full max-w-md snap-start">
+        <div className="mx-auto w-full max-w-md">
           <AnimatePresence mode="wait" custom={dir}>
             <motion.div
               key={step}
