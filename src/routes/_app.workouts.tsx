@@ -1504,7 +1504,7 @@ function TrainingDayCard({
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {day.dayName}
+            {day.dayName} Â· {day.splitLabel}
           </div>
           <h3 className="mt-0.5 text-xl font-extrabold leading-tight">{day.workoutTitle}</h3>
         </div>

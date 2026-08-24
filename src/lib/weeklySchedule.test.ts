@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getWorkout } from "./workouts";
+import { getWorkout, workouts } from "./workouts";
 import { weeklyScheduleService } from "./weeklySchedule";
 import type { Profile } from "./profile";
 
@@ -53,6 +53,24 @@ describe("weekly schedule workout matching", () => {
     expect(schedule.find((day) => day.splitLabel === "Push Day")?.workoutId).toBe("push-strength");
     expect(schedule.find((day) => day.splitLabel === "Pull Day")?.workoutId).toBe("pull-strength");
     expect(schedule.find((day) => day.splitLabel === "Leg Day")?.workoutId).toBe("lower-body-burn");
+  });
+
+  it("does not assign a saved full-body workout to a focused leg-day Details link", () => {
+    const fullBodyBuilder = workouts.find((workout) => workout.title.endsWith("Full Body Builder"));
+    expect(fullBodyBuilder).toBeDefined();
+
+    const schedule = weeklyScheduleService.generateSchedule(profile, [fullBodyBuilder!.id]);
+    const legDay = schedule.find((day) => day.splitLabel === "Leg Day");
+    const workout = legDay?.workoutId ? getWorkout(legDay.workoutId) : undefined;
+
+    expect(legDay?.workoutId).not.toBe(fullBodyBuilder!.id);
+    expect(legDay?.workoutTitle).toBe(workout?.title);
+    expect(workout?.targetMuscles.some((muscle) => muscle === "legs" || muscle === "glutes")).toBe(
+      true,
+    );
+    expect(
+      workout?.targetMuscles.some((muscle) => ["chest", "back", "arms"].includes(muscle)),
+    ).toBe(false);
   });
 
   it("plans every week in a selected month with split-compatible workouts", () => {

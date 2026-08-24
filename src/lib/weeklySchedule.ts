@@ -277,57 +277,46 @@ function matchWorkoutId(label: SplitLabel, ranked: Workout[]): string | undefine
     const matches = ranked.filter(fn);
     return matches[0]?.id;
   };
+  const pickCompatible = () => pick((workout) => workoutFitsScheduledSplit(label, workout));
   switch (label) {
     case "Push Day":
-      return pick((w) => w.targetMuscles.includes("chest"));
+      return pick((w) => w.id === "push-strength") ?? pickCompatible();
     case "Pull Day":
-      return pick((w) => w.targetMuscles.includes("back"));
+      return pick((w) => w.id === "pull-strength") ?? pickCompatible();
     case "Leg Day":
-      return pick((w) => w.targetMuscles.includes("legs") || w.targetMuscles.includes("glutes"));
+      return pick((w) => w.id === "lower-body-burn") ?? pickCompatible();
     case "Upper Body":
-      return (
-        pick((w) => w.id === "upper-body-strength") ??
-        pick((w) => w.targetMuscles.includes("chest"))
-      );
+      return pick((w) => w.id === "upper-body-strength") ?? pickCompatible();
     case "Lower Body":
-      return (
-        pick((w) => w.id === "lower-body-burn") ?? pick((w) => w.targetMuscles.includes("legs"))
-      );
+      return pick((w) => w.id === "lower-body-burn") ?? pickCompatible();
     case "Full Body Strength":
       return (
         pick((w) => w.id === "dumbbell-builder" || w.id === "bodyweight-starter") ??
-        pick(() => true)
+        pickCompatible()
       );
     case "Full Body Conditioning":
-      return pick((w) => w.id === "full-body-sweat") ?? pick((w) => w.category === "HIIT");
+      return pick((w) => w.id === "full-body-sweat") ?? pickCompatible();
     case "Pull + Core":
-      return pick((w) => w.targetMuscles.includes("back")) ?? pick((w) => w.category === "Core");
+      return pickCompatible();
     case "Conditioning / Core":
-      return pick((w) => w.category === "HIIT" || w.category === "Cardio");
+      return pickCompatible();
     case "Chest + Back":
-      return (
-        pick((w) => w.targetMuscles.includes("chest") && w.targetMuscles.includes("back")) ??
-        pick((w) => w.targetMuscles.includes("chest") || w.targetMuscles.includes("back"))
-      );
+      return pickCompatible();
     case "Shoulders + Arms":
     case "Arms":
-      return pick((w) => w.targetMuscles.includes("arms"));
+      return pickCompatible();
     case "Chest":
-      return pick((w) => w.targetMuscles.includes("chest"));
+      return pickCompatible();
     case "Back":
-      return pick((w) => w.targetMuscles.includes("back"));
+      return pickCompatible();
     case "Shoulders":
-      return pick(
-        (w) =>
-          w.targetMuscles.includes("arms") &&
-          (w.targetMuscles.includes("chest") || w.targetMuscles.includes("back")),
-      );
+      return pickCompatible();
     case "Power Upper":
     case "Hypertrophy Upper":
-      return pick((w) => w.targetMuscles.includes("chest") || w.targetMuscles.includes("back"));
+      return pickCompatible();
     case "Power Lower":
     case "Hypertrophy Lower":
-      return pick((w) => w.targetMuscles.includes("legs") || w.targetMuscles.includes("glutes"));
+      return pickCompatible();
     default:
       return undefined;
   }
@@ -342,34 +331,42 @@ function workoutFitsScheduledSplit(label: SplitLabel, workout: Workout): boolean
   const muscles = new Set(workout.targetMuscles);
   const has = (...targets: Parameters<typeof muscles.has>[0][]) =>
     targets.some((target) => muscles.has(target));
+  const hasUpper = has("chest", "back", "arms");
+  const hasLower = has("legs", "glutes");
+  const isUpperFocused = hasUpper && !hasLower;
+  const isLowerFocused = hasLower && !hasUpper && workout.category !== "Cardio";
+  const isFullBodyStrength = hasUpper && hasLower && workout.category === "Strength";
 
   switch (label) {
     case "Push Day":
     case "Chest":
-      return has("chest");
+      return has("chest") && isUpperFocused;
     case "Pull Day":
     case "Back":
     case "Pull + Core":
-      return has("back");
+      return has("back") && isUpperFocused;
     case "Leg Day":
     case "Lower Body":
     case "Power Lower":
     case "Hypertrophy Lower":
-      return has("legs", "glutes");
+      return isLowerFocused;
     case "Upper Body":
     case "Power Upper":
     case "Hypertrophy Upper":
     case "Chest + Back":
-      return has("chest", "back", "arms");
+      return isUpperFocused;
     case "Shoulders + Arms":
     case "Shoulders":
     case "Arms":
-      return has("arms");
+      return has("arms") && isUpperFocused;
     case "Full Body Strength":
-      return has("chest", "back", "legs", "glutes", "core");
+      return isFullBodyStrength;
     case "Full Body Conditioning":
+      return (
+        workout.category === "HIIT" || (hasUpper && hasLower && workout.category !== "Mobility")
+      );
     case "Conditioning / Core":
-      return has("cardio", "core");
+      return workout.category === "HIIT" || workout.category === "Cardio" || has("cardio", "core");
     case "Rest":
       return false;
   }
@@ -500,7 +497,7 @@ export const weeklyScheduleService = {
         dateISO,
         splitLabel: label,
         workoutId,
-        workoutTitle: label,
+        workoutTitle: w?.title ?? label,
         focus: focusFor(label),
         duration,
         difficulty,
