@@ -157,7 +157,7 @@ function PaywallScreen() {
   }
 
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-[radial-gradient(ellipse_at_50%_-10%,rgba(183,255,62,0.17),transparent_42%),linear-gradient(180deg,#10180d_0%,#0a0d0a_42%,#090b0a_100%)] text-foreground">
       {/* Ambient glow */}
       <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 h-[480px] w-[480px] rounded-full bg-neon/20 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[320px] w-[320px] rounded-full bg-neon/10 blur-3xl" />

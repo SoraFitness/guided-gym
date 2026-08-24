@@ -7,7 +7,9 @@ const config: CapacitorConfig = {
   appName: "Ascendr",
   webDir: "mobile-shell",
   ios: {
-    contentInset: "always",
+    // Let route backgrounds reach the status-bar area. Each mobile surface
+    // already applies env(safe-area-inset-*) to its interactive content.
+    contentInset: "never",
   },
   ...(hostedAppUrl
     ? {
