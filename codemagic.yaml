@@ -63,7 +63,10 @@ workflows:
       - name: Install locked dependencies
         script: npm ci --include=dev
       - name: Run Ascendr release checks
-        script: npm run check
+        script: |
+          npm run typecheck
+          npm run lint
+          npm run test
       - name: Sync Capacitor configuration and web shell
         script: npx cap sync ios
       - name: Apply App Store signing profiles
