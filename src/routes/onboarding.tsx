@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -526,6 +526,7 @@ function Onboarding() {
   const [restoredProgress] = useState(() => readStoredOnboardingProgress());
   const [step, setStep] = useState(restoredProgress?.step ?? 0);
   const [dir, setDir] = useState<1 | -1>(1);
+  const scrollContainerRef = useRef<HTMLElement>(null);
   const [generating, setGenerating] = useState(false);
   const [planReady, setPlanReady] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<SavedWorkoutPlan | null>(null);
@@ -614,6 +615,17 @@ function Onboarding() {
       // Keep the live flow usable if storage is restricted.
     }
   }, [d, genderSelected, step]);
+
+  useEffect(() => {
+    const resetScroll = () => {
+      scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+
+    resetScroll();
+    const frame = window.requestAnimationFrame(resetScroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [step]);
 
   useEffect(() => {
     const checkpoint = getOnboardingPaywallCheckpoint();
@@ -736,7 +748,7 @@ function Onboarding() {
   ];
 
   return (
-    <div className="flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background">
+    <div className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
       <header
         className={cn(
           "z-50 w-full px-4",
@@ -845,12 +857,13 @@ function Onboarding() {
       </header>
 
       <main
+        ref={scrollContainerRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6",
+          "min-h-0 flex-1 snap-y snap-proximity overflow-y-auto overscroll-y-contain px-4 sm:px-6",
           step === 0 ? "pb-32 pt-0 sm:pb-36" : "pb-28 pt-4 sm:pb-36 sm:pt-6",
         )}
       >
-        <div className="mx-auto w-full max-w-md">
+        <div className="mx-auto w-full max-w-md snap-start">
           <AnimatePresence mode="wait" custom={dir}>
             <motion.div
               key={step}
