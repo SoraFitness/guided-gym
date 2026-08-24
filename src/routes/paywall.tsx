@@ -19,7 +19,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AscendrLogo } from "@/components/AscendrLogo";
-import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
+import {
+  isPurchaseCancelled,
+  purchaseSubscription,
+  restorePurchases,
+  useSubscription,
+  type Plan,
+  type PlanPrices,
+} from "@/lib/subscription";
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { syncProfileToCloud } from "@/lib/profileSync";
@@ -70,6 +77,7 @@ function PaywallScreen() {
   const { source } = Route.useSearch();
   const { profile, updateProfile } = useProfile();
   const session = useAuthSession();
+  const subscription = useSubscription();
   const scanOffer = source === "body-scan" || source === "face-scan";
   const faceScanOffer = source === "face-scan";
   const [selected, setSelected] = useState<Plan>("yearly");
@@ -83,6 +91,15 @@ function PaywallScreen() {
   useEffect(() => {
     markOnboardingPaywallVisited();
   }, []);
+
+  useEffect(() => {
+    const firstAvailablePlan = (["yearly", "monthly", "weekly"] as const).find(
+      (plan) => subscription.availablePlans[plan],
+    );
+    if (firstAvailablePlan && !subscription.availablePlans[selected]) {
+      setSelected(firstAvailablePlan);
+    }
+  }, [selected, subscription.availablePlans]);
 
   const continueAfterUnlock = () => {
     clearOnboardingResume();
@@ -119,20 +136,51 @@ function PaywallScreen() {
     }
   };
 
-  const handlePurchase = () => {
+  const handlePurchase = async () => {
     setPurchasing(true);
-    setTimeout(() => {
-      subscribe(selected);
-      continueAfterUnlock();
-    }, 900);
+    try {
+      const nextSubscription = await purchaseSubscription(selected);
+      if (nextSubscription.active) continueAfterUnlock();
+      else alert("Your purchase did not unlock Ascendr Pro. Please try restoring your purchases.");
+    } catch (error) {
+      if (!isPurchaseCancelled(error)) {
+        alert(
+          error instanceof Error
+            ? error.message
+            : "We couldn't complete your purchase. Please try again.",
+        );
+      }
+    } finally {
+      setPurchasing(false);
+    }
   };
 
-  const handleRestore = () => {
-    const sub = restorePurchases();
-    if (sub.active) {
-      continueAfterUnlock();
-    } else alert("No previous purchases found.");
+  const handleRestore = async () => {
+    setPurchasing(true);
+    try {
+      const nextSubscription = await restorePurchases();
+      if (nextSubscription.active) continueAfterUnlock();
+      else alert("No previous purchases found.");
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "We couldn't restore your purchases. Please try again.",
+      );
+    } finally {
+      setPurchasing(false);
+    }
   };
+
+  const purchaseUnavailable =
+    !subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error);
+  const purchaseStatus =
+    subscription.error ??
+    (!subscription.ready
+      ? "Loading secure checkout…"
+      : !subscription.availablePlans[selected]
+        ? "This subscription option is not available."
+        : null);
 
   if (source === "body-scan") {
     return (
@@ -152,6 +200,10 @@ function PaywallScreen() {
         onPurchase={handlePurchase}
         onRestore={handleRestore}
         onClose={() => navigate({ to: "/home" })}
+        prices={subscription.prices}
+        purchaseUnavailable={purchaseUnavailable}
+        purchaseStatus={purchaseStatus}
+        subscriptionReady={subscription.ready}
       />
     );
   }
@@ -306,17 +358,20 @@ function PaywallScreen() {
         <div className="mt-3 space-y-2.5">
           <PlanCard
             plan="yearly"
+            price={subscription.prices.yearly}
             selected={selected === "yearly"}
             onSelect={() => setSelected("yearly")}
             badge="SAVE 79%"
           />
           <PlanCard
             plan="monthly"
+            price={subscription.prices.monthly}
             selected={selected === "monthly"}
             onSelect={() => setSelected("monthly")}
           />
           <PlanCard
             plan="weekly"
+            price={subscription.prices.weekly}
             selected={selected === "weekly"}
             onSelect={() => setSelected("weekly")}
           />
@@ -408,12 +463,12 @@ function PaywallScreen() {
         <div className="mx-auto max-w-md">
           <button
             onClick={handlePurchase}
-            disabled={purchasing}
+            disabled={purchasing || purchaseUnavailable}
             className={cn(
               "h-12 w-full rounded-2xl bg-neon text-sm font-bold text-neon-foreground",
               "shadow-[0_10px_40px_-10px_color-mix(in_oklab,var(--neon)_60%,transparent)]",
               "flex items-center justify-center gap-2 active:scale-[0.98] transition",
-              purchasing && "opacity-70",
+              (purchasing || purchaseUnavailable) && "opacity-70",
             )}
           >
             {purchasing ? (
@@ -426,11 +481,18 @@ function PaywallScreen() {
             )}
           </button>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            Cancel anytime · {PLAN_PRICES[selected].price}
-            {PLAN_PRICES[selected].per}
+            Cancel anytime · {subscription.prices[selected].price}
+            {subscription.prices[selected].per}
           </p>
+          {purchaseStatus && (
+            <p className="mt-1 text-center text-[10px] text-muted-foreground">{purchaseStatus}</p>
+          )}
           <div className="mt-2.5 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
-            <button onClick={handleRestore} className="hover:text-foreground">
+            <button
+              onClick={handleRestore}
+              disabled={purchasing || !subscription.ready}
+              className="hover:text-foreground disabled:opacity-50"
+            >
               Restore Purchases
             </button>
             <span className="opacity-40">·</span>
@@ -461,6 +523,10 @@ interface BodyScanPaywallProps {
   onPurchase: () => void;
   onRestore: () => void;
   onClose: () => void;
+  prices: PlanPrices;
+  purchaseUnavailable: boolean;
+  purchaseStatus: string | null;
+  subscriptionReady: boolean;
 }
 
 function BodyScanPaywall({
@@ -476,6 +542,10 @@ function BodyScanPaywall({
   onPurchase,
   onRestore,
   onClose,
+  prices,
+  purchaseUnavailable,
+  purchaseStatus,
+  subscriptionReady,
 }: BodyScanPaywallProps) {
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -533,6 +603,7 @@ function BodyScanPaywall({
         <div className="mt-2.5 grid gap-1.5">
           <PlanCard
             plan="yearly"
+            price={prices.yearly}
             selected={selected === "yearly"}
             onSelect={() => onSelect("yearly")}
             badge="SAVE 79%"
@@ -540,12 +611,14 @@ function BodyScanPaywall({
           />
           <PlanCard
             plan="monthly"
+            price={prices.monthly}
             selected={selected === "monthly"}
             onSelect={() => onSelect("monthly")}
             compact
           />
           <PlanCard
             plan="weekly"
+            price={prices.weekly}
             selected={selected === "weekly"}
             onSelect={() => onSelect("weekly")}
             compact
@@ -603,10 +676,10 @@ function BodyScanPaywall({
           <button
             type="button"
             onClick={onPurchase}
-            disabled={purchasing}
+            disabled={purchasing || purchaseUnavailable}
             className={cn(
               "flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-neon text-sm font-black text-neon-foreground shadow-[0_10px_34px_-14px_var(--neon)] transition active:scale-[0.98]",
-              purchasing && "opacity-70",
+              (purchasing || purchaseUnavailable) && "opacity-70",
             )}
           >
             {purchasing ? "Processing…" : "Unlock My Body Scan"}
@@ -614,13 +687,21 @@ function BodyScanPaywall({
           </button>
           <div className="mt-1.5 flex items-center justify-between gap-3 text-[9px] text-muted-foreground">
             <span>
-              Cancel anytime · {PLAN_PRICES[selected].price}
-              {PLAN_PRICES[selected].per}
+              Cancel anytime · {prices[selected].price}
+              {prices[selected].per}
             </span>
-            <button type="button" onClick={onRestore} className="shrink-0 hover:text-foreground">
+            <button
+              type="button"
+              onClick={onRestore}
+              disabled={purchasing || !subscriptionReady}
+              className="shrink-0 hover:text-foreground disabled:opacity-50"
+            >
               Restore Purchases
             </button>
           </div>
+          {purchaseStatus && (
+            <p className="mt-1 text-center text-[9px] text-muted-foreground">{purchaseStatus}</p>
+          )}
           <div className="mt-1 flex items-center justify-center gap-3 text-[9px] text-muted-foreground">
             <a href="/terms" className="hover:text-foreground">
               Terms
@@ -638,18 +719,20 @@ function BodyScanPaywall({
 
 function PlanCard({
   plan,
+  price,
   selected,
   onSelect,
   badge,
   compact = false,
 }: {
   plan: Plan;
+  price: PlanPrices[Plan];
   selected: boolean;
   onSelect: () => void;
   badge?: string;
   compact?: boolean;
 }) {
-  const p = PLAN_PRICES[plan];
+  const p = price;
   return (
     <button
       type="button"

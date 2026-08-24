@@ -85,7 +85,7 @@ import {
   ONBOARDING_PROGRESS_STORAGE_KEY,
   saveOnboardingPaywallCheckpoint,
 } from "@/lib/onboardingResume";
-import { getSubscription } from "@/lib/subscription";
+import { useSubscription } from "@/lib/subscription";
 import { createClientId } from "@/lib/clientId";
 import {
   buildOnboardingResponseSnapshot,
@@ -521,6 +521,7 @@ function focusAreasForGoals(goals: Goal[]): FocusArea[] {
 function Onboarding() {
   const navigate = useNavigate();
   const { setProfile } = useProfile();
+  const subscription = useSubscription();
   const generatePlan = useServerFn(generateWorkoutPlan);
   const recordOnboardingStart = useServerFn(captureOnboardingStarted);
   const recordOnboardingCompletion = useServerFn(captureOnboardingCompleted);
@@ -629,14 +630,15 @@ function Onboarding() {
   }, [step]);
 
   useEffect(() => {
+    if (!subscription.ready) return;
     const checkpoint = getOnboardingPaywallCheckpoint();
-    if (!checkpoint || getSubscription().active) return;
+    if (!checkpoint || subscription.active) return;
     navigate({
       to: "/paywall",
       search: { source: checkpoint.source ?? undefined },
       replace: true,
     });
-  }, [navigate]);
+  }, [navigate, subscription.active, subscription.ready]);
 
   const canNext = useMemo(() => {
     switch (step) {

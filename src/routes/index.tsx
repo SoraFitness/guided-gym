@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useProfile } from "@/lib/profile";
 import { getOnboardingPaywallCheckpoint } from "@/lib/onboardingResume";
-import { getSubscription } from "@/lib/subscription";
+import { useSubscription } from "@/lib/subscription";
 
 export const Route = createFileRoute("/")({
   component: IndexRedirect,
@@ -11,11 +11,12 @@ export const Route = createFileRoute("/")({
 function IndexRedirect() {
   const navigate = useNavigate();
   const { profile, ready } = useProfile();
+  const subscription = useSubscription();
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !subscription.ready) return;
     const checkpoint = getOnboardingPaywallCheckpoint();
-    if (checkpoint && !getSubscription().active) {
+    if (checkpoint && !subscription.active) {
       navigate({
         to: "/paywall",
         search: { source: checkpoint.source ?? undefined },
@@ -24,7 +25,7 @@ function IndexRedirect() {
       return;
     }
     navigate({ to: profile ? "/home" : "/onboarding", replace: true });
-  }, [ready, profile, navigate]);
+  }, [ready, profile, navigate, subscription.active, subscription.ready]);
 
   return (
     <div className="min-h-dvh bg-background flex items-center justify-center">
