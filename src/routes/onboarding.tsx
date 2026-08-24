@@ -38,6 +38,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
+import { AscendrLogo } from "@/components/AscendrLogo";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { LockedBodyScanPreview } from "@/components/scans/LockedBodyScanPreview";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
@@ -3030,8 +3031,11 @@ function CustomizingPlan({
       <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-80 w-[36rem] -translate-x-1/2 rounded-full bg-neon/[0.09] blur-[110px]" />
       <div className="mx-auto w-full max-w-md">
         <header className="flex items-center justify-between border-b border-white/[0.07] pb-4">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
-            Ascendr
+          <span className="flex items-center gap-2">
+            <AscendrLogo decorative className="size-6 rounded-lg border border-white/10" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+              Ascendr
+            </span>
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Plan build · {currentStep} / {PLAN_STEPS.length}

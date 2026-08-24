@@ -18,6 +18,7 @@ import {
   Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AscendrLogo } from "@/components/AscendrLogo";
 import { subscribe, restorePurchases, PLAN_PRICES, type Plan } from "@/lib/subscription";
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
@@ -168,10 +169,7 @@ function PaywallScreen() {
         {/* Brand bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="relative grid size-9 place-items-center rounded-xl border border-neon/25 bg-neon/[0.09] text-neon">
-              <span className="absolute size-5 rounded-full bg-neon/10 blur-md" />
-              <LockKeyhole className="relative size-4" />
-            </span>
+            <AscendrLogo className="size-10 rounded-[13px] border border-white/10 shadow-[0_10px_24px_-12px_var(--color-neon)]" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">Ascendr</p>
               <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">

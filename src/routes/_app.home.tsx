@@ -26,6 +26,7 @@ import { FOCUS_LABELS, useProfile, type FocusArea } from "@/lib/profile";
 import { getWorkout, workoutRecommendationService, type Workout } from "@/lib/workouts";
 import { weeklyScheduleService, type WeeklyScheduleDay } from "@/lib/weeklySchedule";
 import { WorkoutCardHero } from "@/components/WorkoutCard";
+import { AscendrLogo } from "@/components/AscendrLogo";
 import { useNutrition } from "@/lib/nutritionStore";
 import { useProgress } from "@/lib/progressStore";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
@@ -120,9 +121,12 @@ function HomePage() {
     <div className="animate-slide-up px-4 pb-6 pt-4 sm:px-5 sm:pb-8 sm:pt-5">
       <header data-tour="tour-home-header" className="flex items-center justify-between gap-4 px-1">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neon">
-            {formatToday()}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <AscendrLogo decorative className="size-[18px] rounded-md border border-white/10" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neon">
+              {formatToday()}
+            </p>
+          </div>
           <h1 className="mt-1 truncate text-[clamp(21px,6.4vw,25px)] font-extrabold leading-tight tracking-[-0.03em]">
             {getGreeting()}, {displayName}
           </h1>
