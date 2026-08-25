@@ -1,16 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  Check,
-  Cloud,
-  Eye,
-  EyeOff,
-  LockKeyhole,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AscendrLogo } from "@/components/AscendrLogo";
 import { Button } from "@/components/ui/button";
@@ -29,6 +20,37 @@ type Feedback =
   | { tone: "confirmation"; email: string; type: ConfirmationType }
   | { tone: "error"; message: string }
   | null;
+
+function GoogleLogo({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <path
+        fill="#4285F4"
+        d="M21.35 12.27c0-.79-.07-1.55-.2-2.27H12v4.3h5.23a4.47 4.47 0 0 1-1.94 2.93v2.79h3.6c2.1-1.93 3.31-4.78 3.31-8.18Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 21.72c2.7 0 4.97-.9 6.63-2.43l-3.6-2.79c-1 .67-2.27 1.07-3.73 1.07-2.87 0-5.3-1.94-6.17-4.54H1.41v2.88A9.99 9.99 0 0 0 12 21.72Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.13 13.03a5.99 5.99 0 0 1 0-3.84V6.31H1.41a10 10 0 0 0 0 9.6l3.72-2.88Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.47c1.57 0 2.98.54 4.09 1.61l3.07-3.07C16.96 1.96 14.7.72 12 .72A9.99 9.99 0 0 0 1.41 6.31l3.72 2.88C6 7.41 8.43 5.47 12 5.47Z"
+      />
+    </svg>
+  );
+}
+
+function AppleLogo({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className} fill="currentColor">
+      <path d="M16.67 12.53c-.02-2.22 1.81-3.31 1.89-3.36a4.06 4.06 0 0 0-3.2-1.73c-1.35-.14-2.66.81-3.35.81-.71 0-1.77-.8-2.91-.78A4.22 4.22 0 0 0 5.54 9.7c-1.54 2.67-.39 6.59 1.08 8.74.74 1.05 1.6 2.22 2.74 2.18 1.11-.05 1.52-.71 2.86-.71 1.3 0 1.69.71 2.87.68 1.2-.02 1.95-1.05 2.66-2.11a8.7 8.7 0 0 0 1.22-2.48 3.84 3.84 0 0 1-2.3-3.47ZM14.47 5.99A3.91 3.91 0 0 0 15.36 3a4.14 4.14 0 0 0-2.7 1.39 3.72 3.72 0 0 0-.92 2.88c1.03.08 2.08-.52 2.73-1.28Z" />
+    </svg>
+  );
+}
 
 function safeDestination(value: unknown) {
   if (
@@ -140,18 +162,19 @@ function AccountScreen() {
     }
   }
 
-  async function continueWithGoogle() {
+  async function continueWithProvider(provider: "google" | "apple") {
+    const providerName = provider === "apple" ? "Apple" : "Google";
     setBusy(true);
     setFeedback(null);
     try {
       const redirectTo = getAuthRedirectUrl(destination);
       const result = isLegacyAnonymousSession
-        ? await supabase.auth.linkIdentity({ provider: "google", options: { redirectTo } })
-        : await lovable.auth.signInWithOAuth("google", { redirect_uri: redirectTo });
+        ? await supabase.auth.linkIdentity({ provider, options: { redirectTo } })
+        : await lovable.auth.signInWithOAuth(provider, { redirect_uri: redirectTo });
       if (result.error) throw result.error;
     } catch (error) {
-      console.error("[account] Google sign-in failed", error);
-      showError(error, "Google sign-in failed. Please try again.");
+      console.error(`[account] ${providerName} sign-in failed`, error);
+      showError(error, `${providerName} sign-in failed. Please try again.`);
     } finally {
       setBusy(false);
     }
@@ -358,11 +381,20 @@ function AccountScreen() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={continueWithGoogle}
+                onClick={() => continueWithProvider("google")}
                 disabled={busy}
                 className="h-12 w-full rounded-full border-white/15 bg-white/[0.045] text-sm font-bold hover:bg-white/[0.08]"
               >
-                <Cloud className="size-4 text-neon" /> Continue with Google
+                <GoogleLogo className="size-4" /> Continue with Google
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => continueWithProvider("apple")}
+                disabled={busy}
+                className="h-12 w-full rounded-full border-white/15 bg-black text-sm font-bold text-white hover:bg-white/[0.1] hover:text-white"
+              >
+                <AppleLogo className="size-4" /> Continue with Apple
               </Button>
             </div>
           )}
