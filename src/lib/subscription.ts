@@ -63,6 +63,8 @@ const EMPTY_SUBSCRIPTION: Subscription = {
 };
 const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.trim();
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
+const RUNTIME_CONFIG_TIMEOUT_MS = 8_000;
+const RUNTIME_CONFIG_RETRY_MS = 15_000;
 
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
@@ -181,23 +183,48 @@ function setupErrorMessage(apiKey: string | null) {
   return null;
 }
 
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    operation.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function loadRuntimeRevenueCatApiKey(): Promise<string | null> {
+  try {
+    const { data, error } = await withTimeout(
+      supabase.functions.invoke<{ apiKey?: unknown }>("revenuecat-config"),
+      RUNTIME_CONFIG_TIMEOUT_MS,
+      "RevenueCat checkout configuration timed out.",
+    );
+    if (error) throw error;
+    const apiKey = typeof data?.apiKey === "string" ? data.apiKey.trim() : "";
+    if (!apiKey.startsWith("appl_")) throw new Error("Invalid RevenueCat iOS configuration.");
+    return apiKey;
+  } catch (error) {
+    console.error("[revenuecat] Could not load iOS checkout configuration", error);
+    return null;
+  }
+}
+
 async function getRevenueCatApiKey(): Promise<string | null> {
   if (BUNDLED_REVENUECAT_API_KEY) return BUNDLED_REVENUECAT_API_KEY;
 
   if (!runtimeApiKeyPromise) {
-    runtimeApiKeyPromise = supabase.functions
-      .invoke<{ apiKey?: unknown }>("revenuecat-config")
-      .then(({ data, error }) => {
-        if (error) throw error;
-        const apiKey = typeof data?.apiKey === "string" ? data.apiKey.trim() : "";
-        if (!apiKey.startsWith("appl_")) throw new Error("Invalid RevenueCat iOS configuration.");
-        return apiKey;
-      })
-      .catch((error) => {
-        runtimeApiKeyPromise = null;
-        console.error("[revenuecat] Could not load iOS checkout configuration", error);
-        return null;
-      });
+    const request = loadRuntimeRevenueCatApiKey();
+    runtimeApiKeyPromise = request;
+    void request.then((apiKey) => {
+      if (!apiKey && runtimeApiKeyPromise === request) runtimeApiKeyPromise = null;
+    });
   }
 
   return runtimeApiKeyPromise;
@@ -214,15 +241,15 @@ async function refreshRevenueCatState(forceRefresh = false) {
 }
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
-  const apiKey = await getRevenueCatApiKey();
-  const setupError = setupErrorMessage(apiKey);
-  if (setupError) {
-    publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: setupError });
-    return;
-  }
-  if (!apiKey) return;
-
   try {
+    const apiKey = await getRevenueCatApiKey();
+    const setupError = setupErrorMessage(apiKey);
+    if (setupError) {
+      publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: setupError });
+      return;
+    }
+    if (!apiKey) return;
+
     if (!configured) {
       if (import.meta.env.DEV) await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
       await Purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey });
@@ -267,9 +294,21 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (session === "loading") return;
-    configureQueue = configureQueue
-      .catch(() => undefined)
-      .then(() => syncRevenueCatUser(userId, email));
+
+    const synchronize = () => {
+      configureQueue = configureQueue
+        .catch(() => undefined)
+        .then(() => syncRevenueCatUser(userId, email));
+    };
+
+    synchronize();
+    if (!isNativePlatform()) return;
+
+    const retryId = window.setInterval(() => {
+      if (!configured) synchronize();
+    }, RUNTIME_CONFIG_RETRY_MS);
+
+    return () => window.clearInterval(retryId);
   }, [email, session, userId]);
 
   useEffect(() => {
