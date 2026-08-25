@@ -9,6 +9,7 @@ import { useSubscription } from "@/lib/subscription";
 import { saveSubscriptionResumePath } from "@/lib/subscriptionResume";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
+import { AccountBackupReminderBanner } from "@/components/AccountBackupReminderBanner";
 import { TOUR_STEPS } from "@/lib/tourSteps";
 import { markTourCompleted, useTourCompleted } from "@/lib/tourStore";
 
@@ -69,8 +70,7 @@ function AppShell() {
   const signedIn = userId !== null;
   const localDataOwnerMatches = userId ? localDataBelongsToAccount(userId) : false;
   const hasPremiumAccess =
-    signedIn &&
-    localDataOwnerMatches &&
+    (!signedIn || localDataOwnerMatches) &&
     ready &&
     Boolean(profile) &&
     subscription.ready &&
@@ -78,10 +78,6 @@ function AppShell() {
 
   useEffect(() => {
     if (subscriptionExempt || !ready || session === "loading") return;
-    if (!session) {
-      navigate({ to: "/onboarding", replace: true });
-      return;
-    }
     if (!profile) {
       navigate({ to: "/onboarding", replace: true });
       return;
@@ -126,15 +122,13 @@ function AppShell() {
         ? "Loading Ascendr..."
         : signedIn && !localDataOwnerMatches
           ? "Securing this device for your account..."
-          : !session
-            ? "Sign in is required to access your private fitness data."
-            : !profile
-              ? "Preparing your private fitness profile..."
-              : !subscription.ready
-                ? "Checking your subscription..."
-                : subscription.renewalRequired
-                  ? "Your subscription has ended. Taking you to renew..."
-                  : "An active subscription is required to continue.";
+          : !profile
+            ? "Preparing your private fitness profile..."
+            : !subscription.ready
+              ? "Checking your subscription..."
+              : subscription.renewalRequired
+                ? "Your subscription has ended. Taking you to renew..."
+                : "An active subscription is required to continue.";
 
     return (
       <>
@@ -209,6 +203,13 @@ function AppShell() {
           setTourOpen(false);
         }}
       />
+      {!tourOpen && (
+        <AccountBackupReminderBanner
+          activeSubscription={subscription.active}
+          authReady={session !== "loading"}
+          signedIn={signedIn}
+        />
+      )}
     </div>
   );
 }

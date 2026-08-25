@@ -30,8 +30,6 @@ import {
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { syncProfileToCloud } from "@/lib/profileSync";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { consumeSubscriptionResumePath } from "@/lib/subscriptionResume";
 import {
   clearOnboardingResume,
@@ -81,7 +79,6 @@ function PaywallScreen() {
   const { profile, updateProfile } = useProfile();
   const session = useAuthSession();
   const subscription = useSubscription();
-  const signedIn = session !== null && session !== "loading";
   const scanOffer = source === "body-scan" || source === "face-scan";
   const faceScanOffer = source === "face-scan";
   const [selected, setSelected] = useState<Plan>("yearly");
@@ -89,17 +86,12 @@ function PaywallScreen() {
   const [referral, setReferral] = useState(profile?.referralCode ?? "");
   const [referralApplied, setReferralApplied] = useState(!!profile?.referralCode);
   const [referralSaving, setReferralSaving] = useState(false);
-  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [checkpoint] = useState(() => getOnboardingPaywallCheckpoint());
   const returningUser = Boolean(checkpoint?.lastVisitedAt);
 
   useEffect(() => {
     markOnboardingPaywallVisited();
   }, []);
-
-  useEffect(() => {
-    if (signedIn) setAccountDialogOpen(false);
-  }, [signedIn]);
 
   useEffect(() => {
     const firstAvailablePlan = (["yearly", "monthly", "weekly"] as const).find(
@@ -129,10 +121,10 @@ function PaywallScreen() {
   }, [faceScanOffer, navigate, scanOffer]);
 
   useEffect(() => {
-    if (signedIn && subscription.ready && subscription.active) {
+    if (subscription.ready && subscription.active) {
       continueAfterUnlock();
     }
-  }, [continueAfterUnlock, signedIn, subscription.active, subscription.ready]);
+  }, [continueAfterUnlock, subscription.active, subscription.ready]);
 
   const applyReferral = async () => {
     const code = referral.trim().toUpperCase();
@@ -160,8 +152,7 @@ function PaywallScreen() {
     setPurchasing(true);
     try {
       const nextSubscription = await purchaseSubscription(selected);
-      if (nextSubscription.active && signedIn) continueAfterUnlock();
-      else if (nextSubscription.active) setAccountDialogOpen(true);
+      if (nextSubscription.active) continueAfterUnlock();
       else alert("Your purchase did not unlock Ascendr Pro. Please try restoring your purchases.");
     } catch (error) {
       if (!isPurchaseCancelled(error)) {
@@ -180,8 +171,7 @@ function PaywallScreen() {
     setPurchasing(true);
     try {
       const nextSubscription = await restorePurchases();
-      if (nextSubscription.active && signedIn) continueAfterUnlock();
-      else if (nextSubscription.active) setAccountDialogOpen(true);
+      if (nextSubscription.active) continueAfterUnlock();
       else alert("No previous purchases found.");
     } catch (error) {
       alert(
@@ -230,10 +220,8 @@ function PaywallScreen() {
           purchaseUnavailable={purchaseUnavailable}
           purchaseStatus={purchaseStatus}
           subscriptionReady={subscription.ready}
-          accountRequired={!signedIn}
           renewalRequired={subscription.renewalRequired}
         />
-        <PurchaseAccountDialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen} />
       </>
     );
   }
@@ -535,7 +523,6 @@ function PaywallScreen() {
           </div>
         </div>
       </div>
-      <PurchaseAccountDialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen} />
     </div>
   );
 }
@@ -557,7 +544,6 @@ interface BodyScanPaywallProps {
   purchaseUnavailable: boolean;
   purchaseStatus: string | null;
   subscriptionReady: boolean;
-  accountRequired: boolean;
   renewalRequired: boolean;
 }
 
@@ -578,7 +564,6 @@ function BodyScanPaywall({
   purchaseUnavailable,
   purchaseStatus,
   subscriptionReady,
-  accountRequired,
   renewalRequired,
 }: BodyScanPaywallProps) {
   return (
@@ -634,7 +619,7 @@ function BodyScanPaywall({
           </span>
         </div>
 
-        {renewalRequired && !accountRequired && (
+        {renewalRequired && (
           <p className="mt-3 rounded-2xl border border-neon/25 bg-neon/[0.08] px-3 py-2 text-center text-[10px] font-semibold text-neon">
             Your subscription has ended. Renew to restore your saved scan and progress.
           </p>
@@ -756,31 +741,6 @@ function BodyScanPaywall({
   );
 }
 
-function PurchaseAccountDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-neon/20 bg-background p-3 sm:p-4">
-        <SoftAccountPrompt
-          title="Create your account to access Premium"
-          description="Your Apple subscription is ready. Sign in to securely connect it to your private Ascendr account."
-          redirectPath="/paywall"
-          storageKey="ascendr-paywall-account"
-          dismissible={false}
-          primaryLabel="Sign in or create account"
-          initialExpanded
-          initialMode="signup"
-          onSignedIn={() => onOpenChange(false)}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-}
 function PlanCard({
   plan,
   price,

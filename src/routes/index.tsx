@@ -17,8 +17,8 @@ function IndexRedirect() {
 
   useEffect(() => {
     if (!ready || !subscription.ready || session === "loading") return;
-    if (!session) {
-      navigate({ to: "/onboarding", replace: true });
+    if (profile && subscription.active) {
+      navigate({ to: "/home", replace: true });
       return;
     }
     const checkpoint = getOnboardingPaywallCheckpoint();
