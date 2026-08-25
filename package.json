@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "edge:functions:check": "npx --yes deno@2.9.5 check supabase/functions/subscription-access/index.ts && npx --yes deno@2.9.5 check supabase/functions/ai-gateway/index.ts && npx --yes deno@2.9.5 check supabase/functions/food-provider/index.ts && npx --yes deno@2.9.5 check supabase/functions/account-delete/index.ts && npx --yes deno@2.9.5 check supabase/functions/onboarding/index.ts && npx --yes deno@2.9.5 check supabase/functions/finalize-weekly-reports/index.ts",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run edge:functions:check && npm run build"
+    "edge:functions:test": "npx --yes deno@2.9.5 test --allow-env supabase/functions/_shared/subscription_test.ts",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run edge:functions:check && npm run edge:functions:test && npm run build"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.48",
