@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isAccountSession, isGuestSession, type AuthSession } from "./authSession";
+import {
+  isAccountSession,
+  isGuestSession,
+  parseNativeAuthCallback,
+  type AuthSession,
+} from "./authSession";
 
 const anonymousSession: AuthSession = {
   userId: "guest-user",
@@ -28,5 +33,20 @@ describe("auth session classification", () => {
     expect(isAccountSession(anonymousSession)).toBe(false);
     expect(isAccountSession(accountSession)).toBe(true);
     expect(isAccountSession("loading")).toBe(false);
+  });
+
+  it("accepts only Ascendr native auth callbacks", () => {
+    expect(parseNativeAuthCallback("ascendr://auth/callback?code=example-code")).toEqual({
+      type: "code",
+      code: "example-code",
+    });
+    expect(
+      parseNativeAuthCallback(
+        "ascendr://auth/callback#access_token=access-token&refresh_token=refresh-token",
+      ),
+    ).toEqual({ type: "tokens", accessToken: "access-token", refreshToken: "refresh-token" });
+    expect(parseNativeAuthCallback("https://example.com/auth/callback?code=example-code")).toBe(
+      null,
+    );
   });
 });

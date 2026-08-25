@@ -3,6 +3,7 @@ import { Cloud, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
+import { getAuthRedirectUrl } from "@/lib/authSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -57,16 +58,17 @@ export function SoftAccountPrompt({
   async function withGoogle() {
     setBusy(true);
     try {
+      const redirectTo = getAuthRedirectUrl(redirectPath);
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const result = session?.user.is_anonymous
         ? await supabase.auth.linkIdentity({
             provider: "google",
-            options: { redirectTo: window.location.origin + redirectPath },
+            options: { redirectTo },
           })
         : await lovable.auth.signInWithOAuth("google", {
-            redirect_uri: window.location.origin + redirectPath,
+            redirect_uri: redirectTo,
           });
       if (result.error) toast.error(result.error.message);
     } catch (error) {
@@ -80,7 +82,7 @@ export function SoftAccountPrompt({
   async function withEmail() {
     if (!email.trim() || !password) return;
     const normalizedEmail = email.trim().toLowerCase();
-    const emailRedirectTo = window.location.origin + redirectPath;
+    const emailRedirectTo = getAuthRedirectUrl(redirectPath);
     setBusy(true);
     try {
       const {
@@ -146,7 +148,7 @@ export function SoftAccountPrompt({
       const { error } = await supabase.auth.resend({
         type: confirmation.type,
         email: confirmation.email,
-        options: { emailRedirectTo: window.location.origin + redirectPath },
+        options: { emailRedirectTo: getAuthRedirectUrl(redirectPath) },
       });
       if (error) toast.error(error.message);
       else toast.success("Confirmation email sent again.");
