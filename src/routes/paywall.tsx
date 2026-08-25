@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -110,7 +110,7 @@ function PaywallScreen() {
     }
   }, [selected, subscription.availablePlans]);
 
-  const continueAfterUnlock = () => {
+  const continueAfterUnlock = useCallback(() => {
     clearOnboardingResume();
     const resumePath = consumeSubscriptionResumePath();
     if (resumePath) {
@@ -126,7 +126,13 @@ function PaywallScreen() {
     } else {
       navigate({ to: "/home" });
     }
-  };
+  }, [faceScanOffer, navigate, scanOffer]);
+
+  useEffect(() => {
+    if (signedIn && subscription.ready && subscription.active) {
+      continueAfterUnlock();
+    }
+  }, [continueAfterUnlock, signedIn, subscription.active, subscription.ready]);
 
   const applyReferral = async () => {
     const code = referral.trim().toUpperCase();
@@ -151,14 +157,11 @@ function PaywallScreen() {
   };
 
   const handlePurchase = async () => {
-    if (!signedIn) {
-      setAccountDialogOpen(true);
-      return;
-    }
     setPurchasing(true);
     try {
       const nextSubscription = await purchaseSubscription(selected);
-      if (nextSubscription.active) continueAfterUnlock();
+      if (nextSubscription.active && signedIn) continueAfterUnlock();
+      else if (nextSubscription.active) setAccountDialogOpen(true);
       else alert("Your purchase did not unlock Ascendr Pro. Please try restoring your purchases.");
     } catch (error) {
       if (!isPurchaseCancelled(error)) {
@@ -174,14 +177,11 @@ function PaywallScreen() {
   };
 
   const handleRestore = async () => {
-    if (!signedIn) {
-      setAccountDialogOpen(true);
-      return;
-    }
     setPurchasing(true);
     try {
       const nextSubscription = await restorePurchases();
-      if (nextSubscription.active) continueAfterUnlock();
+      if (nextSubscription.active && signedIn) continueAfterUnlock();
+      else if (nextSubscription.active) setAccountDialogOpen(true);
       else alert("No previous purchases found.");
     } catch (error) {
       alert(
@@ -195,8 +195,7 @@ function PaywallScreen() {
   };
 
   const purchaseUnavailable =
-    signedIn &&
-    (!subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error));
+    !subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error);
   const revenueCatPurchaseStatus =
     subscription.error ??
     (!subscription.ready
@@ -204,11 +203,9 @@ function PaywallScreen() {
       : !subscription.availablePlans[selected]
         ? "This subscription option is not available."
         : null);
-  const purchaseStatus = !signedIn
-    ? "Sign in to continue to secure checkout."
-    : subscription.renewalRequired
-      ? "Your subscription has ended. Renew to restore access to your saved data."
-      : revenueCatPurchaseStatus;
+  const purchaseStatus = subscription.renewalRequired
+    ? "Your subscription has ended. Renew to restore access to your saved data."
+    : revenueCatPurchaseStatus;
 
   if (source === "body-scan") {
     return (
@@ -772,8 +769,8 @@ function PurchaseAccountDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-neon/20 bg-background p-3 sm:p-4">
         <SoftAccountPrompt
-          title="Sign in to unlock Premium"
-          description="Your subscription and saved fitness data stay connected to your private Ascendr account."
+          title="Create your account to access Premium"
+          description="Your Apple subscription is ready. Sign in to securely connect it to your private Ascendr account."
           redirectPath="/paywall"
           storageKey="ascendr-paywall-account"
           dismissible={false}

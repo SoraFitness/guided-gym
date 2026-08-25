@@ -190,17 +190,6 @@ async function refreshRevenueCatState(forceRefresh = false) {
 }
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
-  if (!userId) {
-    packagesByPlan = {};
-    configuredUserId = null;
-    publish({
-      ...EMPTY_SUBSCRIPTION,
-      ready: true,
-      error: "Sign in to subscribe or restore a purchase.",
-    });
-    return;
-  }
-
   const setupError = setupErrorMessage();
   if (setupError) {
     publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: setupError });
@@ -212,17 +201,25 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   try {
     if (!configured) {
       if (import.meta.env.DEV) await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-      await Purchases.configure({ apiKey, appUserID: userId });
+      await Purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey });
       configured = true;
       configuredUserId = userId;
       await Purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
-    } else if (configuredUserId !== userId) {
+    } else if (userId && configuredUserId !== userId) {
+      packagesByPlan = {};
+      publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
       const result = await Purchases.logIn({ appUserID: userId });
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
+    } else if (!userId && configuredUserId) {
+      packagesByPlan = {};
+      publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
+      const result = await Purchases.logOut();
+      configuredUserId = null;
+      applyCustomerInfo(result.customerInfo);
     }
 
-    if (email) await Purchases.setEmail({ email });
+    if (userId && email) await Purchases.setEmail({ email });
     await refreshRevenueCatState();
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
@@ -302,8 +299,8 @@ export function useSubscription() {
 
 async function requireConfiguredRevenueCat() {
   await configureQueue;
-  if (!configured || !configuredUserId) {
-    throw new Error(subscription.error ?? "Sign in before managing a subscription.");
+  if (!configured) {
+    throw new Error(subscription.error ?? "Secure checkout is not ready yet.");
   }
 }
 
