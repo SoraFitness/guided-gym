@@ -16,6 +16,7 @@ export interface PlanPrice {
   price: string;
   per: string;
   subtitle: string;
+  badge?: string;
 }
 
 export type PlanPrices = Record<Plan, PlanPrice>;
@@ -33,14 +34,9 @@ export interface Subscription {
 }
 
 export const PLAN_PRICES: PlanPrices = {
-  weekly: { label: "Weekly", price: "$9.99", per: "/week", subtitle: "Billed weekly" },
-  monthly: { label: "Monthly", price: "$19.99", per: "/month", subtitle: "Billed monthly" },
-  yearly: {
-    label: "Yearly",
-    price: "$49.99",
-    per: "/year",
-    subtitle: "$4.17/month · save 79%",
-  },
+  weekly: { label: "Weekly", price: "—", per: "", subtitle: "Loading your local price…" },
+  monthly: { label: "Monthly", price: "—", per: "", subtitle: "Loading your local price…" },
+  yearly: { label: "Yearly", price: "—", per: "", subtitle: "Loading your local price…" },
 };
 
 const PLAN_ORDER: Plan[] = ["yearly", "monthly", "weekly"];
@@ -122,7 +118,32 @@ function planFromProductIdentifier(productIdentifier: string): Plan | null {
   return configuredPlan ?? planFromIdentifier(productIdentifier);
 }
 
-function createPlanPrice(plan: Plan, aPackage: PurchasesPackage): PlanPrice {
+function calculateYearlyDiscount(
+  yearlyPackage: PurchasesPackage | undefined,
+  monthlyPackage: PurchasesPackage | undefined,
+) {
+  const yearlyPrice = yearlyPackage?.product.price;
+  const monthlyPrice = monthlyPackage?.product.price;
+  if (
+    typeof yearlyPrice !== "number" ||
+    typeof monthlyPrice !== "number" ||
+    yearlyPrice <= 0 ||
+    monthlyPrice <= 0
+  ) {
+    return null;
+  }
+
+  const annualMonthlyCost = monthlyPrice * 12;
+  if (yearlyPrice >= annualMonthlyCost) return null;
+
+  return Math.round((1 - yearlyPrice / annualMonthlyCost) * 100);
+}
+
+function createPlanPrice(
+  plan: Plan,
+  aPackage: PurchasesPackage,
+  yearlyDiscount: number | null,
+): PlanPrice {
   const product = aPackage.product;
   const period = plan === "yearly" ? "/year" : plan === "monthly" ? "/month" : "/week";
   const monthlyPrice = product.pricePerMonthString;
@@ -136,6 +157,7 @@ function createPlanPrice(plan: Plan, aPackage: PurchasesPackage): PlanPrice {
     price: product.priceString,
     per: period,
     subtitle,
+    badge: plan === "yearly" && yearlyDiscount ? `SAVE ${yearlyDiscount}%` : undefined,
   };
 }
 
@@ -163,8 +185,13 @@ function applyOfferings(availablePackages: PurchasesPackage[]) {
     const plan = planFromPackage(aPackage);
     if (!plan || nextPackages[plan]) continue;
     nextPackages[plan] = aPackage;
-    prices[plan] = createPlanPrice(plan, aPackage);
     availablePlans[plan] = true;
+  }
+
+  const yearlyDiscount = calculateYearlyDiscount(nextPackages.yearly, nextPackages.monthly);
+  for (const plan of PLAN_ORDER) {
+    const aPackage = nextPackages[plan];
+    if (aPackage) prices[plan] = createPlanPrice(plan, aPackage, yearlyDiscount);
   }
 
   packagesByPlan = nextPackages;

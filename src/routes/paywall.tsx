@@ -391,7 +391,6 @@ function PaywallScreen() {
             price={subscription.prices.yearly}
             selected={selected === "yearly"}
             onSelect={() => setSelected("yearly")}
-            badge="SAVE 79%"
           />
           <PlanCard
             plan="monthly"
@@ -647,7 +646,6 @@ function BodyScanPaywall({
             price={prices.yearly}
             selected={selected === "yearly"}
             onSelect={() => onSelect("yearly")}
-            badge="SAVE 79%"
             compact
           />
           <PlanCard
@@ -788,14 +786,12 @@ function PlanCard({
   price,
   selected,
   onSelect,
-  badge,
   compact = false,
 }: {
   plan: Plan;
   price: PlanPrices[Plan];
   selected: boolean;
   onSelect: () => void;
-  badge?: string;
   compact?: boolean;
 }) {
   const p = price;
@@ -811,14 +807,14 @@ function PlanCard({
           : "border-white/[0.1] bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.045]",
       )}
     >
-      {badge && (
+      {p.badge && (
         <span
           className={cn(
             "absolute top-0 -translate-y-1/2 whitespace-nowrap rounded-full bg-neon font-bold tracking-wider text-neon-foreground",
             compact ? "right-3 px-1.5 py-px text-[7px]" : "right-4 px-2.5 py-1 text-[9px]",
           )}
         >
-          {badge}
+          {p.badge}
         </span>
       )}
       <div className="flex items-center gap-3">
