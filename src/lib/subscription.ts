@@ -8,7 +8,6 @@ import {
 } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
-import { supabase } from "@/integrations/supabase/client";
 
 export type Plan = "weekly" | "monthly" | "yearly";
 
@@ -65,6 +64,8 @@ const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
 const RUNTIME_CONFIG_TIMEOUT_MS = 8_000;
 const RUNTIME_CONFIG_RETRY_MS = 15_000;
+const RUNTIME_CONFIG_URL =
+  "https://adzfzimuranhrllbxfyf.supabase.co/functions/v1/revenuecat-config";
 
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
@@ -201,12 +202,15 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: strin
 
 async function loadRuntimeRevenueCatApiKey(): Promise<string | null> {
   try {
-    const { data, error } = await withTimeout(
-      supabase.functions.invoke<{ apiKey?: unknown }>("revenuecat-config"),
+    const response = await withTimeout(
+      fetch(RUNTIME_CONFIG_URL, { method: "POST" }),
       RUNTIME_CONFIG_TIMEOUT_MS,
       "RevenueCat checkout configuration timed out.",
     );
-    if (error) throw error;
+    if (!response.ok) {
+      throw new Error(`RevenueCat checkout configuration failed (${response.status}).`);
+    }
+    const data = (await response.json()) as { apiKey?: unknown };
     const apiKey = typeof data?.apiKey === "string" ? data.apiKey.trim() : "";
     if (!apiKey.startsWith("appl_")) throw new Error("Invalid RevenueCat iOS configuration.");
     return apiKey;
