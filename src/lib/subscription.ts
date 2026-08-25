@@ -24,6 +24,8 @@ export interface Subscription {
   active: boolean;
   plan: Plan | null;
   since: string | null;
+  expiresAt: string | null;
+  renewalRequired: boolean;
   ready: boolean;
   availablePlans: Record<Plan, boolean>;
   prices: PlanPrices;
@@ -51,6 +53,8 @@ const EMPTY_SUBSCRIPTION: Subscription = {
   active: false,
   plan: null,
   since: null,
+  expiresAt: null,
+  renewalRequired: false,
   ready: false,
   availablePlans: EMPTY_AVAILABLE_PLANS,
   prices: PLAN_PRICES,
@@ -131,13 +135,15 @@ function createPlanPrice(plan: Plan, aPackage: PurchasesPackage): PlanPrice {
 }
 
 function applyCustomerInfo(customerInfo: CustomerInfo) {
-  const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
+  const entitlement = customerInfo.entitlements.all[ENTITLEMENT_ID];
   const active = entitlement?.isActive === true;
 
   updateSubscription({
     active,
     plan: active ? planFromProductIdentifier(entitlement.productIdentifier) : null,
     since: active ? entitlement.latestPurchaseDate : null,
+    expiresAt: entitlement?.expirationDate ?? null,
+    renewalRequired: !active && Boolean(entitlement?.expirationDate),
     ready: true,
     error: null,
   });
@@ -173,7 +179,8 @@ function setupErrorMessage() {
   return null;
 }
 
-async function refreshRevenueCatState() {
+async function refreshRevenueCatState(forceRefresh = false) {
+  if (forceRefresh) await Purchases.invalidateCustomerInfoCache();
   const [{ customerInfo }, offerings] = await Promise.all([
     Purchases.getCustomerInfo(),
     Purchases.getOfferings(),
@@ -183,6 +190,17 @@ async function refreshRevenueCatState() {
 }
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
+  if (!userId) {
+    packagesByPlan = {};
+    configuredUserId = null;
+    publish({
+      ...EMPTY_SUBSCRIPTION,
+      ready: true,
+      error: "Sign in to subscribe or restore a purchase.",
+    });
+    return;
+  }
+
   const setupError = setupErrorMessage();
   if (setupError) {
     publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: setupError });
@@ -194,14 +212,12 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   try {
     if (!configured) {
       if (import.meta.env.DEV) await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-      await Purchases.configure({ apiKey, appUserID: userId ?? undefined });
+      await Purchases.configure({ apiKey, appUserID: userId });
       configured = true;
       configuredUserId = userId;
       await Purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
     } else if (configuredUserId !== userId) {
-      const result = userId
-        ? await Purchases.logIn({ appUserID: userId })
-        : await Purchases.logOut();
+      const result = await Purchases.logIn({ appUserID: userId });
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     }
@@ -215,6 +231,8 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       active: false,
       plan: null,
       since: null,
+      expiresAt: null,
+      renewalRequired: false,
       ready: true,
       error: "We couldn't verify your subscription. Please try again.",
     });
@@ -232,6 +250,37 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined)
       .then(() => syncRevenueCatUser(userId, email));
   }, [email, session, userId]);
+
+  useEffect(() => {
+    if (!userId || !isNativePlatform()) return;
+
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      configureQueue = configureQueue
+        .catch(() => undefined)
+        .then(() => (configured && configuredUserId ? refreshRevenueCatState(true) : undefined))
+        .catch((error) => {
+          console.error("[revenuecat] Could not refresh subscription state", error);
+          updateSubscription({
+            active: false,
+            plan: null,
+            since: null,
+            renewalRequired: false,
+            ready: true,
+            error: "We couldn't verify your subscription. Please try again.",
+          });
+        });
+    };
+
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [userId]);
 
   return children;
 }
@@ -253,7 +302,9 @@ export function useSubscription() {
 
 async function requireConfiguredRevenueCat() {
   await configureQueue;
-  if (!configured) throw new Error(subscription.error ?? "RevenueCat is not ready.");
+  if (!configured || !configuredUserId) {
+    throw new Error(subscription.error ?? "Sign in before managing a subscription.");
+  }
 }
 
 export async function purchaseSubscription(plan: Plan): Promise<Subscription> {

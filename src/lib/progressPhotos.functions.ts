@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { claimRateLimit } from "@/lib/rateLimit.server";
@@ -41,7 +42,7 @@ const createInput = z.object({
 });
 
 export const listProgressPhotos = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }): Promise<ProgressPhotoRow[]> => {
     const { supabase, userId } = context;
     const { data, error } = await supabase
@@ -77,7 +78,7 @@ export const listProgressPhotos = createServerFn({ method: "GET" })
   });
 
 export const getProgressPhoto = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }): Promise<ProgressPhotoRow | null> => {
     const { supabase, userId } = context;
@@ -105,7 +106,7 @@ export const getProgressPhoto = createServerFn({ method: "GET" })
   });
 
 export const createProgressPhoto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => createInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -130,7 +131,7 @@ export const createProgressPhoto = createServerFn({ method: "POST" })
   });
 
 export const updateProgressPhoto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -155,7 +156,7 @@ export const updateProgressPhoto = createServerFn({ method: "POST" })
   });
 
 export const deleteProgressPhoto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -184,7 +185,7 @@ interface AiFeedback {
 }
 
 export const compareProgressPhotosAI = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: { beforeId: string; afterId: string }) =>
     z.object({ beforeId: z.string().uuid(), afterId: z.string().uuid() }).parse(data),
   )
@@ -213,13 +214,7 @@ export const compareProgressPhotosAI = createServerFn({ method: "POST" })
     const afterUrl = signed?.find((s) => s.path === after.image_path)?.signedUrl;
     if (!beforeUrl || !afterUrl) throw new Error("Could not load images");
 
-    const lovableKey = process.env.LOVABLE_API_KEY;
-    const openRouterKey = process.env.OPENROUTER_API_KEY;
-    const key = lovableKey || openRouterKey;
-    if (!key) throw new Error("AI is not configured");
-    const gateway = lovableKey
-      ? createLovableAiGatewayProvider(lovableKey)
-      : createOpenRouterProvider(openRouterKey as string);
+    const gateway = createLovableAiGatewayProvider(context.accessToken, "progress-photo-compare");
     const model = gateway("google/gemini-2.5-flash");
 
     const beforeDate = new Date(before.taken_on as string);

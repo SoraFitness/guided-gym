@@ -30,6 +30,8 @@ import {
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { syncProfileToCloud } from "@/lib/profileSync";
+import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
+import { consumeSubscriptionResumePath } from "@/lib/subscriptionResume";
 import {
   clearOnboardingResume,
   getOnboardingPaywallCheckpoint,
@@ -78,6 +80,7 @@ function PaywallScreen() {
   const { profile, updateProfile } = useProfile();
   const session = useAuthSession();
   const subscription = useSubscription();
+  const signedIn = session !== null && session !== "loading";
   const scanOffer = source === "body-scan" || source === "face-scan";
   const faceScanOffer = source === "face-scan";
   const [selected, setSelected] = useState<Plan>("yearly");
@@ -103,6 +106,11 @@ function PaywallScreen() {
 
   const continueAfterUnlock = () => {
     clearOnboardingResume();
+    const resumePath = consumeSubscriptionResumePath();
+    if (resumePath) {
+      window.location.assign(resumePath);
+      return;
+    }
     if (scanOffer) {
       if (faceScanOffer) {
         navigate({ to: "/scan/face", search: { pending: "onboarding" } });
@@ -137,6 +145,7 @@ function PaywallScreen() {
   };
 
   const handlePurchase = async () => {
+    if (!signedIn) return;
     setPurchasing(true);
     try {
       const nextSubscription = await purchaseSubscription(selected);
@@ -156,6 +165,7 @@ function PaywallScreen() {
   };
 
   const handleRestore = async () => {
+    if (!signedIn) return;
     setPurchasing(true);
     try {
       const nextSubscription = await restorePurchases();
@@ -173,14 +183,22 @@ function PaywallScreen() {
   };
 
   const purchaseUnavailable =
-    !subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error);
-  const purchaseStatus =
+    !signedIn ||
+    !subscription.ready ||
+    !subscription.availablePlans[selected] ||
+    Boolean(subscription.error);
+  const revenueCatPurchaseStatus =
     subscription.error ??
     (!subscription.ready
       ? "Loading secure checkout…"
       : !subscription.availablePlans[selected]
         ? "This subscription option is not available."
         : null);
+  const purchaseStatus = !signedIn
+    ? "Create or sign in to an Ascendr account before subscribing or restoring a purchase."
+    : subscription.renewalRequired
+      ? "Your subscription has ended. Renew to restore access to your saved data."
+      : revenueCatPurchaseStatus;
 
   if (source === "body-scan") {
     return (
@@ -204,6 +222,8 @@ function PaywallScreen() {
         purchaseUnavailable={purchaseUnavailable}
         purchaseStatus={purchaseStatus}
         subscriptionReady={subscription.ready}
+        accountRequired={!signedIn}
+        renewalRequired={subscription.renewalRequired}
       />
     );
   }
@@ -237,6 +257,12 @@ function PaywallScreen() {
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {!signedIn && (
+          <div className="mt-4">
+            <AccountRequiredPrompt />
+          </div>
+        )}
 
         {/* Hero */}
         <motion.section
@@ -527,6 +553,8 @@ interface BodyScanPaywallProps {
   purchaseUnavailable: boolean;
   purchaseStatus: string | null;
   subscriptionReady: boolean;
+  accountRequired: boolean;
+  renewalRequired: boolean;
 }
 
 function BodyScanPaywall({
@@ -546,6 +574,8 @@ function BodyScanPaywall({
   purchaseUnavailable,
   purchaseStatus,
   subscriptionReady,
+  accountRequired,
+  renewalRequired,
 }: BodyScanPaywallProps) {
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -599,6 +629,18 @@ function BodyScanPaywall({
             Private
           </span>
         </div>
+
+        {accountRequired && (
+          <div className="mt-3">
+            <AccountRequiredPrompt />
+          </div>
+        )}
+
+        {renewalRequired && !accountRequired && (
+          <p className="mt-3 rounded-2xl border border-neon/25 bg-neon/[0.08] px-3 py-2 text-center text-[10px] font-semibold text-neon">
+            Your subscription has ended. Renew to restore your saved scan and progress.
+          </p>
+        )}
 
         <div className="mt-2.5 grid gap-1.5">
           <PlanCard
@@ -693,7 +735,7 @@ function BodyScanPaywall({
             <button
               type="button"
               onClick={onRestore}
-              disabled={purchasing || !subscriptionReady}
+              disabled={purchasing || !subscriptionReady || accountRequired}
               className="shrink-0 hover:text-foreground disabled:opacity-50"
             >
               Restore Purchases
@@ -714,6 +756,21 @@ function BodyScanPaywall({
         </div>
       </footer>
     </div>
+  );
+}
+
+function AccountRequiredPrompt() {
+  return (
+    <SoftAccountPrompt
+      title="Create your private Ascendr account"
+      description="Your subscription and saved fitness data stay connected to this account across your devices."
+      redirectPath="/paywall"
+      storageKey="ascendr-paywall-account"
+      dismissible={false}
+      primaryLabel="Create or sign in"
+      initialExpanded
+      initialMode="signup"
+    />
   );
 }
 

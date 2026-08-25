@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Loader2, Mail, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -41,7 +40,7 @@ function DeleteAccountPage() {
   const navigate = useNavigate();
   const session = useAuthSession();
   const { setProfile } = useProfile();
-  const removeAccount = useServerFn(deleteAscendrAccount);
+  const removeAccount = deleteAscendrAccount;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 

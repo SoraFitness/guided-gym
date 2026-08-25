@@ -2,8 +2,10 @@ import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import { claimScanQuota } from "@/lib/scanQuota.functions";
 import { claimRateLimit } from "@/lib/rateLimit.server";
+import { fetchAscendrAi } from "@/lib/edge-functions.server";
 
 const OPENROUTER_BODY_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
 const BODY_SCAN_ANALYSIS_VERSION = "body-consistency-v1";
@@ -722,9 +724,6 @@ function buildBodyScanPreview(
 
 export const analyzeBodyScanPreviewPhoto = createServerOnlyFn(
   async (photo: string): Promise<BodyScanPreviewResult> => {
-    const key = process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Body Scan preview is not configured.");
-
     const fingerprint = await previewFingerprint(photo);
     const cached = previewCache.get(fingerprint);
     if (cached && cached.expiresAt > Date.now()) return cached.result;
@@ -736,37 +735,28 @@ export const analyzeBodyScanPreviewPhoto = createServerOnlyFn(
     }
 
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        signal: AbortSignal.timeout(90_000),
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-          "X-Title": "Ascendr Body Scan Preview",
-        },
-        body: JSON.stringify({
-          model: OPENROUTER_BODY_SCAN_MODEL,
-          temperature: 0,
-          max_tokens: 500,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "ascendr_body_scan_preview",
-              strict: true,
-              schema: bodyScanPreviewJsonSchema,
-            },
+      const response = await fetchAscendrAi(undefined, "body-scan-preview", {
+        model: OPENROUTER_BODY_SCAN_MODEL,
+        temperature: 0,
+        max_tokens: 500,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "ascendr_body_scan_preview",
+            strict: true,
+            schema: bodyScanPreviewJsonSchema,
           },
-          messages: [
-            { role: "system", content: PREVIEW_SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: PREVIEW_USER_PROMPT },
-                { type: "image_url", image_url: { url: photo } },
-              ],
-            },
-          ],
-        }),
+        },
+        messages: [
+          { role: "system", content: PREVIEW_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: PREVIEW_USER_PROMPT },
+              { type: "image_url", image_url: { url: photo } },
+            ],
+          },
+        ],
       });
 
       const payload = (await response.json()) as OpenRouterResponse;
@@ -841,12 +831,10 @@ function previousBodyScan(
 }
 
 export const analyzeBodyScan = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator(Input)
   .handler(async ({ data, context }): Promise<BodyScanAiResult> => {
     const { supabase, userId } = context;
-    const key = process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
-
     const { data: row, error: readError } = await supabase
       .from("body_scans")
       .select("result")
@@ -992,8 +980,6 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
         return result;
       }
 
-      if (!key) throw new Error("Body Scan AI is not configured.");
-
       await claimScanQuota(supabase, data.submissionId, "body");
 
       const userContent =
@@ -1010,34 +996,25 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
               { type: "image_url", image_url: { url: signed.signedUrl } },
             ];
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        signal: AbortSignal.timeout(90_000),
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-          "X-Title": "Ascendr Body Scan",
-        },
-        body: JSON.stringify({
-          model: OPENROUTER_BODY_SCAN_MODEL,
-          temperature: 0,
-          max_tokens: 2600,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "ascendr_body_scan",
-              strict: true,
-              schema: bodyScanJsonSchema,
-            },
+      const response = await fetchAscendrAi(context.accessToken, "body-scan", {
+        model: OPENROUTER_BODY_SCAN_MODEL,
+        temperature: 0,
+        max_tokens: 2600,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "ascendr_body_scan",
+            strict: true,
+            schema: bodyScanJsonSchema,
           },
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: userContent,
-            },
-          ],
-        }),
+        },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: userContent,
+          },
+        ],
       });
 
       const payload = (await response.json()) as OpenRouterResponse;

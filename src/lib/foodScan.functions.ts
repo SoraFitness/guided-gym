@@ -3,6 +3,8 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { claimRateLimit } from "@/lib/rateLimit.server";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 
 const Input = z.object({
   image: z
@@ -80,18 +82,13 @@ const PROMPT = [
 ].join("\n");
 
 export const analyzeFoodImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }): Promise<FoodScanResponse> => {
+  .handler(async ({ data, context }): Promise<FoodScanResponse> => {
     claimRateLimit("food-photo", { limit: 10, windowMs: 60 * 60 * 1_000 });
-    const lovableKey = process.env.LOVABLE_API_KEY;
-    const openRouterKey = process.env.OPENROUTER_API_KEY;
-    const key = lovableKey || openRouterKey;
-    if (!key) return { ok: false, reason: "no_key" };
 
     try {
-      const gateway = lovableKey
-        ? (await import("./ai-gateway.server")).createLovableAiGatewayProvider(lovableKey)
-        : createOpenRouterProvider(openRouterKey as string);
+      const gateway = createOpenRouterProvider(context.accessToken, "food-scan");
 
       const { experimental_output: output } = await generateText({
         model: gateway("google/gemini-2.5-flash"),

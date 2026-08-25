@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 
 export const SCAN_WEEKLY_LIMIT = 5;
 export type ScanQuotaType = "face" | "body";
@@ -60,7 +61,7 @@ export async function claimScanQuota(
 }
 
 export const getScanQuota = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => z.object({ scanType: scanTypeSchema }).parse(data))
   .handler(async ({ data, context }): Promise<ScanQuotaStatus> => {
     const { data: quotaData, error } = await context.supabase.rpc("get_scan_quota", {

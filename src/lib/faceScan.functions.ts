@@ -2,7 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import { claimScanQuota } from "@/lib/scanQuota.functions";
+import { fetchAscendrAi } from "@/lib/edge-functions.server";
 
 const OPENROUTER_FACE_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
 
@@ -221,12 +223,10 @@ function normalizeResult(result: FaceScanResult): FaceScanResult {
 }
 
 export const analyzeFaceScan = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator(Input)
   .handler(async ({ data, context }): Promise<FaceScanResult> => {
     const { supabase, userId } = context;
-    const key = process.env.OPENROUTER_FACE_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("Face Scan AI is not configured.");
 
     const { data: row, error: readError } = await supabase
       .from("body_scans")
@@ -279,37 +279,28 @@ export const analyzeFaceScan = createServerFn({ method: "POST" })
         throw new Error(signedError?.message ?? "Could not load face photo.");
       }
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        signal: AbortSignal.timeout(90_000),
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-          "X-Title": "Ascendr Face Scan",
-        },
-        body: JSON.stringify({
-          model: OPENROUTER_FACE_SCAN_MODEL,
-          temperature: 0.2,
-          max_tokens: 1200,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "ascendr_face_scan",
-              strict: true,
-              schema: faceScanJsonSchema,
-            },
+      const response = await fetchAscendrAi(context.accessToken, "face-scan", {
+        model: OPENROUTER_FACE_SCAN_MODEL,
+        temperature: 0.2,
+        max_tokens: 1200,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "ascendr_face_scan",
+            strict: true,
+            schema: faceScanJsonSchema,
           },
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: USER_PROMPT },
-                { type: "image_url", image_url: { url: signed.signedUrl } },
-              ],
-            },
-          ],
-        }),
+        },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: USER_PROMPT },
+              { type: "image_url", image_url: { url: signed.signedUrl } },
+            ],
+          },
+        ],
       });
 
       const payload = (await response.json()) as OpenRouterResponse;

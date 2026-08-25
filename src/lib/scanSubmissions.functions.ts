@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 
 const scanTypeSchema = z.enum(["face", "body"]);
 const scanStatusSchema = z.enum(["ready_for_analysis", "processing", "complete", "failed"]);
@@ -105,7 +106,7 @@ async function toSummary(
 }
 
 export const createScanSubmission = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => createInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -138,7 +139,7 @@ export const createScanSubmission = createServerFn({ method: "POST" })
   });
 
 export const updateScanSubmission = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => updateInput.parse(data))
   .handler(async ({ data, context }) => {
     const { data: row, error: readError } = await context.supabase
@@ -174,7 +175,7 @@ export const updateScanSubmission = createServerFn({ method: "POST" })
   });
 
 export const listScanSubmissions = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => scanQueryInput.parse(data))
   .handler(async ({ data, context }): Promise<ScanSubmissionSummary[]> => {
     const { data: rows, error } = await context.supabase
@@ -201,7 +202,7 @@ export const listScanSubmissions = createServerFn({ method: "POST" })
   });
 
 export const getScanSubmission = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => scanDetailInput.parse(data))
   .handler(async ({ data, context }): Promise<ScanSubmissionDetail | null> => {
     const { data: row, error } = await context.supabase
@@ -218,7 +219,7 @@ export const getScanSubmission = createServerFn({ method: "POST" })
   });
 
 export const deleteScanSubmission = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: unknown) => deleteInput.parse(data))
   .handler(async ({ data, context }) => {
     const { data: row, error: readError } = await context.supabase

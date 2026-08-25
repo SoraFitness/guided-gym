@@ -1,1 +1,19 @@
-project_id = "jbxbqehkncfglffbecyg"
+project_id = "adzfzimuranhrllbxfyf"
+
+[functions.subscription-access]
+verify_jwt = false
+
+[functions.ai-gateway]
+verify_jwt = false
+
+[functions.food-provider]
+verify_jwt = false
+
+[functions.account-delete]
+verify_jwt = false
+
+[functions.onboarding]
+verify_jwt = false
+
+[functions.finalize-weekly-reports]
+verify_jwt = false

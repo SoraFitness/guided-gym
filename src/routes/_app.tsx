@@ -4,6 +4,9 @@ import { Home, Dumbbell, Apple, Sparkles, ChartNoAxesCombined, ScanLine } from "
 import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { startCloudSync } from "@/lib/cloudSync";
+import { claimLocalDataOwnership, localDataBelongsToAccount } from "@/lib/accountOwnership";
+import { useSubscription } from "@/lib/subscription";
+import { saveSubscriptionResumePath } from "@/lib/subscriptionResume";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
 import { TOUR_STEPS } from "@/lib/tourSteps";
@@ -22,29 +25,86 @@ const tabs = [
   { to: "/progress", label: "Progress", Icon: ChartNoAxesCombined },
 ] as const;
 
-// Runs the localStorage <-> Supabase sync engine while a user is signed in.
-function CloudSyncGate() {
-  const session = useAuthSession();
-  const userId = session && session !== "loading" ? session.userId : null;
+const SUBSCRIPTION_EXEMPT_PATHS = new Set([
+  "/contact",
+  "/delete-account",
+  "/health-disclaimer",
+  "/privacy",
+  "/terms",
+]);
 
+function CloudSyncGate({ userId }: { userId: string }) {
   useEffect(() => {
-    if (!userId) return;
+    if (claimLocalDataOwnership(userId)) {
+      window.location.reload();
+      return;
+    }
     return startCloudSync(userId);
   }, [userId]);
 
   return null;
 }
 
+function AccessGate({ message }: { message: string }) {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background px-6 text-center">
+      <div>
+        <div className="mx-auto size-8 animate-spin rounded-full border-2 border-muted border-t-neon" />
+        <p className="mt-4 text-sm text-muted-foreground">{message}</p>
+      </div>
+    </div>
+  );
+}
+
 function AppShell() {
   const { profile, ready } = useProfile();
+  const session = useAuthSession();
+  const subscription = useSubscription();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tourCompleted = useTourCompleted();
   const [tourOpen, setTourOpen] = useState(false);
+  const subscriptionExempt = SUBSCRIPTION_EXEMPT_PATHS.has(pathname);
+  const userId = session && session !== "loading" ? session.userId : null;
+  const signedIn = userId !== null;
+  const localDataOwnerMatches = userId ? localDataBelongsToAccount(userId) : false;
+  const hasPremiumAccess =
+    signedIn &&
+    localDataOwnerMatches &&
+    ready &&
+    Boolean(profile) &&
+    subscription.ready &&
+    subscription.active;
 
   useEffect(() => {
-    if (ready && !profile) navigate({ to: "/onboarding" });
-  }, [ready, profile, navigate]);
+    if (subscriptionExempt || !ready || session === "loading") return;
+    if (!session) {
+      navigate({ to: "/onboarding", replace: true });
+      return;
+    }
+    if (!profile) {
+      navigate({ to: "/onboarding", replace: true });
+      return;
+    }
+    if (!subscription.ready) return;
+    if (!subscription.active) {
+      const resumePath =
+        typeof window === "undefined"
+          ? pathname
+          : `${window.location.pathname}${window.location.search}`;
+      saveSubscriptionResumePath(resumePath);
+      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+    }
+  }, [
+    navigate,
+    pathname,
+    profile,
+    ready,
+    session,
+    subscription.active,
+    subscription.ready,
+    subscriptionExempt,
+  ]);
 
   // auto-open tour the first time the user lands in the app with a profile
   useEffect(() => {
@@ -54,14 +114,39 @@ function AppShell() {
   }, [ready, profile, pathname, tourCompleted, tourOpen]);
 
   const hideTabs =
+    subscriptionExempt ||
     pathname.startsWith("/workout/") ||
     pathname.startsWith("/scan/body/new") ||
     pathname.startsWith("/scan/body/") ||
     pathname.startsWith("/scan/face");
 
+  if (!subscriptionExempt && !hasPremiumAccess) {
+    const message =
+      session === "loading" || !ready
+        ? "Loading Ascendr..."
+        : signedIn && !localDataOwnerMatches
+          ? "Securing this device for your account..."
+          : !session
+            ? "Sign in is required to access your private fitness data."
+            : !profile
+              ? "Preparing your private fitness profile..."
+              : !subscription.ready
+                ? "Checking your subscription..."
+                : subscription.renewalRequired
+                  ? "Your subscription has ended. Taking you to renew..."
+                  : "An active subscription is required to continue.";
+
+    return (
+      <>
+        {userId && subscription.ready && subscription.active && <CloudSyncGate userId={userId} />}
+        <AccessGate message={message} />
+      </>
+    );
+  }
+
   return (
     <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background">
-      <CloudSyncGate />
+      {hasPremiumAccess && userId && <CloudSyncGate userId={userId} />}
       <div
         className="app-shell__content min-w-0 flex-1"
         style={{

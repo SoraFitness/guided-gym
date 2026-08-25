@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { generateText } from "ai";
@@ -358,7 +359,7 @@ async function getOrCreateGoals(
 // ----- Server functions -----
 
 export const computeCurrentWeekReport = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const start = startOfWeekUTC();
@@ -368,7 +369,7 @@ export const computeCurrentWeekReport = createServerFn({ method: "GET" })
   });
 
 export const getWeeklyReport = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: { weekStart: string }) => z.object({ weekStart: z.string() }).parse(d))
   .handler(async ({ data, context }): Promise<WeeklyReportDTO> => {
     const { supabase, userId } = context;
@@ -425,7 +426,7 @@ export const getWeeklyReport = createServerFn({ method: "GET" })
   });
 
 export const listWeeklyReports = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data, error } = await supabase
@@ -439,15 +440,13 @@ export const listWeeklyReports = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-async function generateAiText(stats: WeeklyReportDTO, goals: UserGoals): Promise<string> {
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
-  const key = lovableKey || openRouterKey;
-  if (!key) return fallbackSummary(stats);
+async function generateAiText(
+  stats: WeeklyReportDTO,
+  goals: UserGoals,
+  accessToken: string,
+): Promise<string> {
   try {
-    const gateway = lovableKey
-      ? createLovableAiGatewayProvider(lovableKey)
-      : createOpenRouterProvider(openRouterKey as string);
+    const gateway = createLovableAiGatewayProvider(accessToken, "weekly-report");
     const model = gateway("google/gemini-3-flash-preview");
     const system = `You are a supportive, realistic fitness coach writing a short weekly recap.
 RULES:
@@ -500,7 +499,7 @@ function fallbackSummary(s: WeeklyReportDTO): string {
 }
 
 export const finalizeWeeklyReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: { weekStart?: string }) => z.object({ weekStart: z.string().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -517,7 +516,7 @@ export const finalizeWeeklyReport = createServerFn({ method: "POST" })
     const weekEnd = toISODate(end);
     const goals = await getOrCreateGoals(supabase, userId);
     const report = await computeReport(supabase, userId, weekStart, weekEnd, goals);
-    const aiSummary = await generateAiText(report, goals);
+    const aiSummary = await generateAiText(report, goals, context.accessToken);
     report.aiSummary = aiSummary;
     report.isFinalized = true;
 
@@ -565,7 +564,7 @@ export const finalizeWeeklyReport = createServerFn({ method: "POST" })
 // ----- Quick log functions -----
 
 export const upsertUserGoals = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) =>
     z
       .object({
@@ -589,11 +588,11 @@ export const upsertUserGoals = createServerFn({ method: "POST" })
   });
 
 export const getUserGoals = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => getOrCreateGoals(context.supabase, context.userId));
 
 export const quickLogWorkout = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) =>
     z
       .object({
@@ -628,7 +627,7 @@ export const quickLogWorkout = createServerFn({ method: "POST" })
   });
 
 export const quickLogMeal = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) =>
     z
       .object({
@@ -659,7 +658,7 @@ export const quickLogMeal = createServerFn({ method: "POST" })
   });
 
 export const quickLogWeight = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) =>
     z.object({ weight_kg: z.number().min(20).max(500), logged_on: z.string().optional() }).parse(d),
   )
@@ -678,7 +677,7 @@ export const quickLogWeight = createServerFn({ method: "POST" })
   });
 
 export const quickLogActivity = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) =>
     z
       .object({
@@ -708,7 +707,7 @@ export const quickLogActivity = createServerFn({ method: "POST" })
 // ----- Notifications -----
 
 export const listNotifications = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data, error } = await supabase
@@ -722,7 +721,7 @@ export const listNotifications = createServerFn({ method: "GET" })
   });
 
 export const markNotificationRead = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -735,7 +734,7 @@ export const markNotificationRead = createServerFn({ method: "POST" })
   });
 
 export const markAllNotificationsRead = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     await supabase

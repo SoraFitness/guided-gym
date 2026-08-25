@@ -5,6 +5,10 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "@/lib/openrouter.server";
 import { assertRequestSize, claimRateLimit, rateLimitResponse } from "@/lib/rateLimit.server";
+import {
+  getSubscriptionAccess,
+  SubscriptionVerificationError,
+} from "@/lib/subscription-access.server";
 
 type Body = {
   messages: UIMessage[];
@@ -53,9 +57,6 @@ export const Route = createFileRoute("/api/coach")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const key = process.env.OPENROUTER_API_KEY;
-        if (!key) return new Response("Missing OPENROUTER_API_KEY", { status: 500 });
-
         try {
           assertRequestSize(request, 256_000);
         } catch (error) {
@@ -81,39 +82,45 @@ export const Route = createFileRoute("/api/coach")({
         }
 
         const authHeader = request.headers.get("authorization");
-        const guestMode = !authHeader && threadId.startsWith("guest-");
-        let supabase: ReturnType<typeof createClient<Database>> | null = null;
-        let userId: string | null = null;
-
-        if (authHeader) {
-          if (!authHeader.startsWith("Bearer ")) {
-            return new Response("Unauthorized", { status: 401 });
-          }
-          const token = authHeader.slice("Bearer ".length);
-
-          const SUPABASE_URL = process.env.SUPABASE_URL;
-          const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
-          if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-            return new Response("Backend not configured", { status: 500 });
-          }
-          supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-            global: { headers: { Authorization: `Bearer ${token}` } },
-            auth: { persistSession: false, autoRefreshToken: false },
-          });
-          const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
-          if (claimsErr || !claims?.claims?.sub) {
-            return new Response("Unauthorized", { status: 401 });
-          }
-          userId = claims.claims.sub as string;
-        } else if (!guestMode) {
+        if (!authHeader?.startsWith("Bearer ")) {
           return new Response("Unauthorized", { status: 401 });
+        }
+        const token = authHeader.slice("Bearer ".length);
+
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+        const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+          return new Response("Backend not configured", { status: 500 });
+        }
+        const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
+        if (claimsErr || !claims?.claims?.sub) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+        const userId = claims.claims.sub as string;
+
+        try {
+          const subscription = await getSubscriptionAccess(token);
+          if (!subscription.active) {
+            return new Response("An active subscription is required.", { status: 402 });
+          }
+        } catch (error) {
+          if (!(error instanceof SubscriptionVerificationError)) {
+            console.error("[coach] Subscription verification failed", error);
+          }
+          return new Response("Subscription verification is temporarily unavailable.", {
+            status: 503,
+          });
         }
 
         try {
-          claimRateLimit(guestMode ? "coach-guest" : "coach-user", {
-            limit: guestMode ? 8 : 40,
+          claimRateLimit("coach-user", {
+            limit: 40,
             windowMs: 15 * 60 * 1_000,
-            identity: userId ?? undefined,
+            identity: userId,
           });
         } catch (error) {
           return rateLimitResponse(error) ?? new Response("Too many requests", { status: 429 });
@@ -121,7 +128,7 @@ export const Route = createFileRoute("/api/coach")({
 
         const lastUser = [...messages].reverse().find((m) => m.role === "user");
 
-        const openrouter = createOpenRouterProvider(key);
+        const openrouter = createOpenRouterProvider(token, "coach");
         const model = openrouter(OPENROUTER_COACH_MODEL);
 
         // Long-term memory: durable facts saved by the coach in past sessions.
@@ -263,7 +270,6 @@ export const Route = createFileRoute("/api/coach")({
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
           onFinish: async ({ messages: finalMessages }) => {
-            if (!supabase || !userId) return;
             const assistant = [...finalMessages].reverse().find((m) => m.role === "assistant");
             if (!assistant) return;
             try {

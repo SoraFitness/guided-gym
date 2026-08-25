@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import type { Json } from "@/integrations/supabase/types";
 
 export interface StoredCoachMessage {
@@ -10,7 +11,7 @@ export interface StoredCoachMessage {
 
 // Get (or create) the user's single rolling coach thread + load its messages.
 export const getCoachThread = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
 
@@ -51,7 +52,7 @@ export const getCoachThread = createServerFn({ method: "GET" })
 
 // Delete every message in the user's thread (keeps the thread row).
 export const clearCoachThread = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: { threadId: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -65,7 +66,7 @@ export const clearCoachThread = createServerFn({ method: "POST" })
   });
 
 export const importCoachMessages = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((data: { messages: StoredCoachMessage[] }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;

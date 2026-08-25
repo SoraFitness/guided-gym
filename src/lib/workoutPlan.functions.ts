@@ -133,11 +133,9 @@ export const generateWorkoutPlan = createServerFn({ method: "POST" })
     const fallback = fallbackPlan(input, candidates);
     let generated = fallback;
     let source: SavedWorkoutPlan["source"] = "smart";
-    const key = process.env.OPENROUTER_API_KEY;
-
-    if (key && candidates.length >= input.daysPerWeek) {
+    if (candidates.length >= input.daysPerWeek) {
       try {
-        const provider = createOpenRouterProvider(key);
+        const provider = createOpenRouterProvider(undefined, "workout-plan");
         const candidateData = candidates.map(({ workout }) => ({
           id: workout.id,
           title: workout.title,

@@ -523,8 +523,8 @@ function Onboarding() {
   const { setProfile } = useProfile();
   const subscription = useSubscription();
   const generatePlan = useServerFn(generateWorkoutPlan);
-  const recordOnboardingStart = useServerFn(captureOnboardingStarted);
-  const recordOnboardingCompletion = useServerFn(captureOnboardingCompleted);
+  const recordOnboardingStart = captureOnboardingStarted;
+  const recordOnboardingCompletion = captureOnboardingCompleted;
   const [restoredProgress] = useState(() => readStoredOnboardingProgress());
   const [step, setStep] = useState(restoredProgress?.step ?? 0);
   const [dir, setDir] = useState<1 | -1>(1);

@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, BarChart3, Check, LockKeyhole, RefreshCw, Users } from "lucide-react";
 import { useAuthSession } from "@/lib/authSession";
 import { getOnboardingInsights, type OnboardingInsights } from "@/lib/onboardingInsights.functions";
@@ -13,7 +12,7 @@ export const Route = createFileRoute("/admin/onboarding")({
 
 function OnboardingInsightsPage() {
   const session = useAuthSession();
-  const loadInsights = useServerFn(getOnboardingInsights);
+  const loadInsights = getOnboardingInsights;
   const query = useQuery({
     queryKey: ["admin", "onboarding-insights"],
     queryFn: () => loadInsights({ data: {} }),

@@ -1,5 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
+import { invokeEdgeFunction } from "@/lib/edge-functions.server";
 import type { NutrientDetails } from "./nutritionQuality";
 
 export type FoodSearchSource = "preset" | "nutritionix" | "usda" | "openfoodfacts";
@@ -49,42 +52,36 @@ const optionalRound = (n: unknown, d = 1) => {
 // Instant search returns branded items with calories + serving but not full macros.
 // We then enrich the top branded results via /v2/search/item for protein/carbs/fat,
 // and the top common items via /v2/natural/nutrients.
-async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
-  const appId = process.env.NUTRITIONIX_APP_ID;
-  const appKey = process.env.NUTRITIONIX_API_KEY;
-  if (!appId || !appKey) return [];
-
+async function searchNutritionix(query: string, accessToken: string): Promise<FoodSearchResult[]> {
   try {
-    const url = `https://trackapi.nutritionix.com/v2/search/instant?query=${encodeURIComponent(query)}&detailed=true`;
-    const res = await fetch(url, {
-      headers: { "x-app-id": appId, "x-app-key": appKey, "x-remote-user-id": "0" },
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      common?: Array<{
-        food_name: string;
-        serving_unit?: string;
-        serving_qty?: number;
-        photo?: { thumb?: string };
-        full_nutrients?: Array<{ attr_id: number; value: number }>;
-      }>;
-      branded?: Array<{
-        food_name: string;
-        brand_name?: string;
-        serving_unit?: string;
-        serving_qty?: number;
-        nf_calories?: number;
-        nf_protein?: number;
-        nf_total_carbohydrate?: number;
-        nf_total_fat?: number;
-        nf_dietary_fiber?: number;
-        nf_sugars?: number;
-        nf_saturated_fat?: number;
-        nf_sodium?: number;
-        nix_item_id?: string;
-        photo?: { thumb?: string };
-      }>;
-    };
+    const { data } = await invokeEdgeFunction<{
+      data: {
+        common?: Array<{
+          food_name: string;
+          serving_unit?: string;
+          serving_qty?: number;
+          photo?: { thumb?: string };
+          full_nutrients?: Array<{ attr_id: number; value: number }>;
+        }>;
+        branded?: Array<{
+          food_name: string;
+          brand_name?: string;
+          serving_unit?: string;
+          serving_qty?: number;
+          nf_calories?: number;
+          nf_protein?: number;
+          nf_total_carbohydrate?: number;
+          nf_total_fat?: number;
+          nf_dietary_fiber?: number;
+          nf_sugars?: number;
+          nf_saturated_fat?: number;
+          nf_sodium?: number;
+          nix_item_id?: string;
+          photo?: { thumb?: string };
+        }>;
+      } | null;
+    }>("food-provider", accessToken, { action: "nutritionix-search", query });
+    if (!data) return [];
 
     const out: FoodSearchResult[] = [];
 
@@ -158,31 +155,29 @@ async function searchNutritionix(query: string): Promise<FoodSearchResult[]> {
 
 // ============ USDA FoodData Central ============
 // https://api.nal.usda.gov/fdc/v1/foods/search
-async function searchUSDA(query: string): Promise<FoodSearchResult[]> {
-  const key = process.env.USDA_API_KEY;
-  if (!key) return [];
+async function searchUSDA(query: string, accessToken: string): Promise<FoodSearchResult[]> {
   try {
-    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&pageSize=15&dataType=Branded,SR%20Legacy,Foundation`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      foods?: Array<{
-        fdcId: number;
-        description: string;
-        brandName?: string;
-        brandOwner?: string;
-        servingSize?: number;
-        servingSizeUnit?: string;
-        householdServingFullText?: string;
-        dataType?: string;
-        foodNutrients?: Array<{
-          nutrientNumber?: string;
-          nutrientName?: string;
-          value?: number;
-          unitName?: string;
+    const { data } = await invokeEdgeFunction<{
+      data: {
+        foods?: Array<{
+          fdcId: number;
+          description: string;
+          brandName?: string;
+          brandOwner?: string;
+          servingSize?: number;
+          servingSizeUnit?: string;
+          householdServingFullText?: string;
+          dataType?: string;
+          foodNutrients?: Array<{
+            nutrientNumber?: string;
+            nutrientName?: string;
+            value?: number;
+            unitName?: string;
+          }>;
         }>;
-      }>;
-    };
+      } | null;
+    }>("food-provider", accessToken, { action: "usda-search", query });
+    if (!data) return [];
 
     const out: FoodSearchResult[] = [];
     for (const f of (data.foods ?? []).slice(0, 15)) {
@@ -286,6 +281,7 @@ async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
 }
 
 export const lookupFoodByBarcode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator(BarcodeSchema)
   .handler(async ({ data }): Promise<BarcodeLookupResponse> => {
     const barcode = data.barcode.trim();
@@ -407,14 +403,15 @@ function dedupe(results: FoodSearchResult[]): FoodSearchResult[] {
 }
 
 export const searchFoodDatabase = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((input: { query: string }) => QuerySchema.parse(input))
-  .handler(async ({ data }): Promise<FoodSearchResponse> => {
+  .handler(async ({ data, context }): Promise<FoodSearchResponse> => {
     const query = data.query.trim();
     if (!query) return { ok: false, reason: "empty_query", results: [] };
 
     const [nix, usda, off] = await Promise.all([
-      searchNutritionix(query),
-      searchUSDA(query),
+      searchNutritionix(query, context.accessToken),
+      searchUSDA(query, context.accessToken),
       searchOpenFoodFacts(query),
     ]);
 
