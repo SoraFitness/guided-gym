@@ -18,7 +18,6 @@ import { FaceScanReport } from "@/components/scans/FaceScanReport";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
 import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { analyzeFaceScan, type FaceScanResult } from "@/lib/faceScan.functions";
 import { saveScanSubmission } from "@/lib/scanSubmissions";
@@ -104,12 +103,12 @@ function FaceScanPage() {
         return;
       }
       if (!accountSession) {
-        const message = "Sign in or create an account first so we can save and analyze your scan.";
-        setError(message);
-        toast.info(message);
-        document
-          .getElementById("face-scan-account")
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        navigate({
+          to: "/account",
+          search: {
+            next: pending === "onboarding" ? "/scan/face?pending=onboarding" : "/scan/face",
+          },
+        });
         return;
       }
       if (weeklyLimitReached) {
@@ -302,19 +301,6 @@ function FaceScanPage() {
             >
               <ScanFace className="size-4 text-neon" /> View sample report
             </button>
-
-            {!accountSession && (
-              <div id="face-scan-account" className="mt-5 scroll-mt-5">
-                <SoftAccountPrompt
-                  title="Save your scan privately"
-                  description="Create or sign in to your Ascendr account before uploading. Your photo and AI report will be saved to your private cloud account."
-                  redirectPath="/scan/face"
-                  storageKey="fitness:face-scan-account-required"
-                  dismissible={false}
-                  primaryLabel="Create account or sign in"
-                />
-              </div>
-            )}
 
             <ScanQuotaCard
               scanType="face"

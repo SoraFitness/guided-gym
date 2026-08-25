@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useProfile } from "@/lib/profile";
 import { getOnboardingPaywallCheckpoint } from "@/lib/onboardingResume";
 import { useSubscription } from "@/lib/subscription";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 
 export const Route = createFileRoute("/")({
   component: IndexRedirect,
@@ -17,6 +17,10 @@ function IndexRedirect() {
 
   useEffect(() => {
     if (!ready || !subscription.ready || session === "loading") return;
+    if (profile && subscription.active && !isAccountSession(session)) {
+      navigate({ to: "/account", search: { next: "/home" }, replace: true });
+      return;
+    }
     if (profile && subscription.active) {
       navigate({ to: "/home", replace: true });
       return;

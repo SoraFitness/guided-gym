@@ -8,7 +8,6 @@ import {
   listLocalProgressPhotos,
   syncLocalProgressPhotosToCloud,
 } from "@/lib/progressPhotos.local";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import {
   compareProgressPhotosAI,
@@ -151,17 +150,6 @@ function ComparePage() {
       <p className="text-xs text-muted-foreground mt-2">
         Tip: compare the same pose &amp; angle (front vs front) for the most honest read.
       </p>
-
-      {!accountSession && (
-        <div className="mt-5">
-          <SoftAccountPrompt
-            title="Sync for AI photo feedback"
-            description="Local compare works now. Save your account when you want cloud backup and AI feedback on your progress photos."
-            redirectPath="/photos/compare"
-            storageKey="fitness:dismiss-photo-compare-account-prompt"
-          />
-        </div>
-      )}
 
       <section className="mt-5 space-y-3">
         <PhotoPicker label="Before" photos={photos} selectedId={beforeId} onSelect={setBeforeId} />

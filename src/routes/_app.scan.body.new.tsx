@@ -17,7 +17,6 @@ import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { BodyScanReport } from "@/components/scans/BodyScanReport";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { analyzeBodyScan, type BodyScanAiResult } from "@/lib/bodyScan.functions";
 import { saveScanSubmission } from "@/lib/scanSubmissions";
@@ -97,12 +96,12 @@ function NewBodyScan() {
         return;
       }
       if (!accountSession) {
-        const message = "Sign in or create an account first so we can save and analyze your scan.";
-        setError(message);
-        toast.info(message);
-        document
-          .getElementById("body-scan-account")
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        navigate({
+          to: "/account",
+          search: {
+            next: pending === "onboarding" ? "/scan/body/new?pending=onboarding" : "/scan/body/new",
+          },
+        });
         return;
       }
       if (weeklyLimitReached) {
@@ -270,23 +269,6 @@ function NewBodyScan() {
                 ))}
               </div>
             </div>
-
-            {!accountSession && (
-              <div id="body-scan-account" className="mt-5 scroll-mt-5">
-                <SoftAccountPrompt
-                  title="Save your scan privately"
-                  description="Create or sign in to your Ascendr account before uploading. Your photo and AI report will be saved to your private cloud account."
-                  redirectPath={
-                    pending === "onboarding"
-                      ? "/scan/body/new?pending=onboarding"
-                      : "/scan/body/new"
-                  }
-                  storageKey="fitness:body-scan-account-required"
-                  dismissible={false}
-                  primaryLabel="Create account or sign in"
-                />
-              </div>
-            )}
 
             <ScanQuotaCard
               scanType="body"

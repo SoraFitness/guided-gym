@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { createLocalProgressPhoto } from "@/lib/progressPhotos.local";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -100,17 +99,6 @@ function NewPhoto() {
         </Link>
         <h1 className="text-2xl font-bold">Add Progress Photo</h1>
       </header>
-
-      {!accountSession && (
-        <div className="mt-5">
-          <SoftAccountPrompt
-            title="Save photos across devices"
-            description="You can add photos now. They stay on this device until you create an account for cloud backup."
-            redirectPath="/photos/new"
-            storageKey="fitness:dismiss-photo-new-account-prompt"
-          />
-        </div>
-      )}
 
       <div className="mt-5 rounded-3xl bg-surface border border-border p-4">
         <div className="aspect-[3/4] rounded-2xl bg-black overflow-hidden grid place-items-center relative">

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isAccountSession,
-  isGuestSession,
-  parseNativeAuthCallback,
-  type AuthSession,
-} from "./authSession";
+import { isAccountSession, parseNativeAuthCallback, type AuthSession } from "./authSession";
 
 const anonymousSession: AuthSession = {
   userId: "guest-user",
@@ -21,13 +16,6 @@ const accountSession: AuthSession = {
 };
 
 describe("auth session classification", () => {
-  it("keeps anonymous identities in guest mode", () => {
-    expect(isGuestSession(null)).toBe(true);
-    expect(isGuestSession(anonymousSession)).toBe(true);
-    expect(isGuestSession(accountSession)).toBe(false);
-    expect(isGuestSession("loading")).toBe(false);
-  });
-
   it("only treats a permanent identity as an account", () => {
     expect(isAccountSession(null)).toBe(false);
     expect(isAccountSession(anonymousSession)).toBe(false);

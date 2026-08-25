@@ -21,9 +21,8 @@ import { toast } from "sonner";
 import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS } from "@/lib/profile";
 import { buildCoachContext } from "@/lib/coachContext";
 import { getCoachThread, clearCoachThread, importCoachMessages } from "@/lib/coach.functions";
-import { startAnonymousSession, useAuthSession, type AuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession, type AuthSession } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "@tanstack/react-router";
@@ -69,26 +68,7 @@ const GUEST_MESSAGES_KEY = "fitness:guest-coach-messages";
 
 function CoachPage() {
   const session = useAuthSession();
-  const [guestSessionError, setGuestSessionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (session !== null) return;
-
-    let active = true;
-    setGuestSessionError(null);
-    void startAnonymousSession().catch((error: unknown) => {
-      console.error("[coach] Couldn't start secure guest access", error);
-      if (active) {
-        setGuestSessionError("Coach is unavailable right now. Please try again later.");
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [session]);
-
-  if (session === "loading" || (session === null && !guestSessionError)) {
+  if (session === "loading") {
     return (
       <div className="px-5 pt-8 flex justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -96,13 +76,13 @@ function CoachPage() {
     );
   }
 
-  if (session === null) {
+  if (!isAccountSession(session)) {
     return (
       <div className="px-5 pt-8">
         <div className="rounded-3xl border border-destructive/25 bg-destructive/[0.06] p-5 text-center">
-          <p className="text-sm font-semibold">{guestSessionError}</p>
+          <p className="text-sm font-semibold">Your account is required to use Coach.</p>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Check your connection, then reopen Coach.
+            Return to the account screen to secure your Premium access.
           </p>
         </div>
       </div>
@@ -270,17 +250,6 @@ function CoachChat({ session }: { session: AuthSession }) {
           </button>
         )}
       </header>
-
-      {session.isAnonymous && (
-        <div className="px-4 pb-3">
-          <SoftAccountPrompt
-            title="Save your coach memory"
-            description="Your coach works now on this device. Create an account later to sync chat history and training context across devices."
-            redirectPath="/coach"
-            storageKey="fitness:dismiss-coach-account-prompt"
-          />
-        </div>
-      )}
 
       <div ref={scrollerRef} className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
         {!loaded && (

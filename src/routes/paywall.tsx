@@ -106,8 +106,19 @@ function PaywallScreen() {
   const continueAfterUnlock = useCallback(() => {
     clearOnboardingResume();
     const resumePath = consumeSubscriptionResumePath();
+    const destination = resumePath
+      ? resumePath
+      : scanOffer
+        ? faceScanOffer
+          ? "/scan/face?pending=onboarding"
+          : "/scan/body/new?pending=onboarding"
+        : "/home";
+    if (!accountSession) {
+      navigate({ to: "/account", search: { next: destination }, replace: true });
+      return;
+    }
     if (resumePath) {
-      window.location.assign(resumePath);
+      window.location.assign(destination);
       return;
     }
     if (scanOffer) {
@@ -119,7 +130,7 @@ function PaywallScreen() {
     } else {
       navigate({ to: "/home" });
     }
-  }, [faceScanOffer, navigate, scanOffer]);
+  }, [accountSession, faceScanOffer, navigate, scanOffer]);
 
   useEffect(() => {
     if (subscription.ready && subscription.active) {

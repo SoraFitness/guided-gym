@@ -14,14 +14,13 @@ The iOS app registers the `ascendr` URL scheme and completes the Supabase sessio
 Then, in **Authentication** > **Providers**:
 
 1. Keep **Email** enabled and **Confirm email** enabled.
-2. Enable **Anonymous Sign-Ins** for secure Premium guest Coach access.
-3. Enable **Manual Linking** if guests can save their account with Google.
+2. Enable **Manual Linking** only if you want to offer Google account linking for legacy users.
 
 ## Verification
 
 1. Build and install a new TestFlight version containing the iOS URL-scheme change.
-2. Create an account in the app and open the confirmation email on the same device.
-3. Confirm that the email opens Ascendr and shows the saved-account state on Profile.
+2. Complete a Premium purchase, create an account on the secure post-purchase screen, and open the confirmation email on the same device.
+3. Confirm that the email opens Ascendr and takes the user into the app.
 4. In Supabase Dashboard, check **Authentication** > **Users** for the account, then check `public.user_profiles` after cloud sync completes.
 
 Do not use a Supabase service-role key or any secret in the browser for this flow.

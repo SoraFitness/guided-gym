@@ -29,7 +29,6 @@ import {
   Music2,
   Languages,
   ChevronDown,
-  X,
   Mars,
   Venus,
   UserRound,
@@ -37,7 +36,6 @@ import {
   Loader2,
   ScanLine,
 } from "lucide-react";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { AscendrLogo } from "@/components/AscendrLogo";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { LockedBodyScanPreview } from "@/components/scans/LockedBodyScanPreview";
@@ -559,7 +557,6 @@ function Onboarding() {
       : "en-US";
   });
   const [languageOpen, setLanguageOpen] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
   const [analyticsSession] = useState(() => {
     if (typeof window === "undefined") return null;
     return {
@@ -957,7 +954,7 @@ function Onboarding() {
               {welcomeCopy.accountPrompt}{" "}
               <button
                 type="button"
-                onClick={() => setSignInOpen(true)}
+                onClick={() => navigate({ to: "/account", search: { next: "/home" } })}
                 className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
               >
                 {welcomeCopy.signIn}
@@ -966,46 +963,6 @@ function Onboarding() {
           )}
         </div>
       </footer>
-
-      <AnimatePresence>
-        {step === 0 && signInOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 px-4 pb-safe pt-16 backdrop-blur-sm sm:items-center"
-            onClick={() => setSignInOpen(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 28, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.98 }}
-              transition={{ type: "spring", stiffness: 280, damping: 28 }}
-              className="relative w-full max-w-md rounded-[2rem] border border-white/[0.1] bg-[#101112] p-3 shadow-2xl shadow-black/70"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => setSignInOpen(false)}
-                className="absolute right-5 top-5 z-10 grid size-8 place-items-center rounded-full bg-white/[0.07] text-muted-foreground transition hover:text-foreground"
-                aria-label="Close sign in"
-              >
-                <X className="size-4" />
-              </button>
-              <SoftAccountPrompt
-                title="Welcome back"
-                description="Sign in to restore your Ascendr profile, plans, scans, and progress."
-                redirectPath="/home"
-                storageKey="ascendr-onboarding-signin"
-                dismissible={false}
-                initialExpanded
-                initialMode="signin"
-                onSignedIn={() => navigate({ to: "/home" })}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

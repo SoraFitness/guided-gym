@@ -9,7 +9,6 @@ import {
   syncLocalProgressPhotosToCloud,
 } from "@/lib/progressPhotos.local";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { PhotoCard } from "@/components/photos/PhotoCard";
 import { formatPhotoDate } from "@/components/photos/photoUtils";
 
@@ -70,17 +69,6 @@ function PhotosIndex() {
           <Plus className="size-5" />
         </Link>
       </header>
-
-      {!accountSession && (
-        <div className="mt-5">
-          <SoftAccountPrompt
-            title="Save photos to your account"
-            description="Progress photos work now on this device. Create an account when you want cloud backup, restore, and cross-device sync."
-            redirectPath="/photos"
-            storageKey="fitness:dismiss-photo-account-prompt"
-          />
-        </div>
-      )}
 
       {photos === null ? (
         <div className="mt-12 flex justify-center">

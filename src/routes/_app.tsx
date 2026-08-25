@@ -9,7 +9,6 @@ import { useSubscription } from "@/lib/subscription";
 import { saveSubscriptionResumePath } from "@/lib/subscriptionResume";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
-import { AccountBackupReminderBanner } from "@/components/AccountBackupReminderBanner";
 import { TOUR_STEPS } from "@/lib/tourSteps";
 import { markTourCompleted, useTourCompleted } from "@/lib/tourStore";
 
@@ -70,7 +69,8 @@ function AppShell() {
   const signedIn = accountUserId !== null;
   const localDataOwnerMatches = accountUserId ? localDataBelongsToAccount(accountUserId) : false;
   const hasPremiumAccess =
-    (!signedIn || localDataOwnerMatches) &&
+    signedIn &&
+    localDataOwnerMatches &&
     ready &&
     Boolean(profile) &&
     subscription.ready &&
@@ -90,6 +90,14 @@ function AppShell() {
           : `${window.location.pathname}${window.location.search}`;
       saveSubscriptionResumePath(resumePath);
       navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      return;
+    }
+    if (!signedIn) {
+      const next =
+        typeof window === "undefined"
+          ? pathname
+          : `${window.location.pathname}${window.location.search}`;
+      navigate({ to: "/account", search: { next }, replace: true });
     }
   }, [
     navigate,
@@ -97,6 +105,7 @@ function AppShell() {
     profile,
     ready,
     session,
+    signedIn,
     subscription.active,
     subscription.ready,
     subscriptionExempt,
@@ -205,13 +214,6 @@ function AppShell() {
           setTourOpen(false);
         }}
       />
-      {!tourOpen && (
-        <AccountBackupReminderBanner
-          activeSubscription={subscription.active}
-          authReady={session !== "loading"}
-          signedIn={signedIn}
-        />
-      )}
     </div>
   );
 }

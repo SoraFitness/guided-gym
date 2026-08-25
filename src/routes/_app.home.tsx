@@ -33,9 +33,7 @@ import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 import { QuickLogFab } from "@/components/weekly/QuickLogFab";
 import { listNotifications } from "@/lib/weeklyReport.functions";
 import { cn } from "@/lib/utils";
-import { isAccountSession, isGuestSession, useAuthSession } from "@/lib/authSession";
-import { useSubscription } from "@/lib/subscription";
-import { hasUnreadAccountBackupNotification } from "@/lib/accountBackupReminder";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
 import { useCompletedWorkouts, type CompletedWorkout } from "@/lib/workoutSessionStore";
 import { computeMuscleInsights, type MuscleInsight } from "@/lib/muscleAnalytics";
@@ -59,7 +57,6 @@ const GOAL_SUBTITLES: Record<string, string> = {
 function HomePage() {
   const { profile } = useProfile();
   const session = useAuthSession();
-  const subscription = useSubscription();
   const signedIn = isAccountSession(session);
   const displayName =
     profile?.name?.trim().toLowerCase() === "sahil" ? "Admin" : getDisplayName(profile?.name);
@@ -118,11 +115,7 @@ function HomePage() {
     enabled: signedIn,
     staleTime: 60_000,
   });
-  const unread =
-    (notifs ?? []).filter((notification) => !notification.read_at).length +
-    (isGuestSession(session) && subscription.active && hasUnreadAccountBackupNotification()
-      ? 1
-      : 0);
+  const unread = (notifs ?? []).filter((notification) => !notification.read_at).length;
 
   const subtitle = profile
     ? (GOAL_SUBTITLES[profile.goal] ?? "Keep building toward your goal")

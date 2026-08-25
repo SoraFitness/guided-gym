@@ -32,10 +32,6 @@ function toAuthSession(session: Session | null): AuthSession | null {
   };
 }
 
-export function isGuestSession(session: AuthSessionState) {
-  return session === null || (session !== "loading" && session.isAnonymous);
-}
-
 export function isAccountSession(session: AuthSessionState): session is AuthSession {
   return session !== null && session !== "loading" && !session.isAnonymous;
 }
@@ -104,15 +100,6 @@ export function startNativeAuthCallbackListener() {
   })();
 
   return nativeAuthCallbackListener;
-}
-
-export async function startAnonymousSession() {
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) throw error;
-
-  const session = toAuthSession(data.session);
-  if (!session) throw new Error("Couldn't start a secure guest session.");
-  return session;
 }
 
 export function useAuthSession(): AuthSessionState {

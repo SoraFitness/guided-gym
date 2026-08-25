@@ -42,7 +42,6 @@ import { loadGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
 import { suggestNutrition } from "@/lib/nutritionService";
 import { resetTour } from "@/lib/tourStore";
-import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import {
   Sheet,
   SheetContent,
@@ -178,16 +177,9 @@ function ProfilePage() {
         <span className="text-sm text-muted-foreground">Checking account status...</span>
       </section>
     ) : !accountSession ? (
-      <div className="mt-5">
-        <SoftAccountPrompt
-          title="You're a guest right now"
-          description="Some info may only stay on this device. Create an Ascendr account to sync your profile, AI Coach memory, and progress photos so you do not lose them."
-          redirectPath="/profile"
-          storageKey="fitness:dismiss-profile-account-prompt"
-          dismissible={false}
-          primaryLabel="Create account & sync"
-        />
-      </div>
+      <section className="mt-5 rounded-3xl border border-border bg-surface p-4 text-sm text-muted-foreground">
+        Secure your account to view and sync your profile.
+      </section>
     ) : (
       <section className="mt-5 rounded-3xl border border-neon/20 bg-neon/[0.055] p-4">
         <div className="flex items-start gap-3">

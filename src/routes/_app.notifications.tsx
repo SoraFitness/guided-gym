@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Bell, CheckCheck, Loader2 } from "lucide-react";
 import {
@@ -8,12 +7,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/weeklyReport.functions";
-import { isAccountSession, isGuestSession, useAuthSession } from "@/lib/authSession";
-import { useSubscription } from "@/lib/subscription";
-import {
-  hasUnreadAccountBackupNotification,
-  markAccountBackupNotificationRead,
-} from "@/lib/accountBackupReminder";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 
 export const Route = createFileRoute("/_app/notifications")({
   head: () => ({ meta: [{ title: "Notifications — Ascendr" }] }),
@@ -26,11 +20,7 @@ export const Route = createFileRoute("/_app/notifications")({
 
 function NotificationsPage() {
   const session = useAuthSession();
-  const subscription = useSubscription();
   const signedIn = isAccountSession(session);
-  const [accountBackupUnread, setAccountBackupUnread] = useState(() =>
-    hasUnreadAccountBackupNotification(),
-  );
   const list = useServerFn(listNotifications);
   const markAll = useServerFn(markAllNotificationsRead);
   const markOne = useServerFn(markNotificationRead);
@@ -40,23 +30,13 @@ function NotificationsPage() {
     queryFn: () => list(),
     enabled: signedIn,
   });
-  const showAccountBackupNotification = isGuestSession(session) && subscription.active;
-  const hasNotifications = showAccountBackupNotification || (data?.length ?? 0) > 0;
+  const hasNotifications = (data?.length ?? 0) > 0;
 
   async function markAllRead() {
     if (signedIn) {
       await markAll();
       qc.invalidateQueries({ queryKey: ["notifications"] });
     }
-    if (showAccountBackupNotification) {
-      markAccountBackupNotificationRead();
-      setAccountBackupUnread(false);
-    }
-  }
-
-  function markAccountBackupRead() {
-    markAccountBackupNotificationRead();
-    setAccountBackupUnread(false);
   }
 
   return (
@@ -91,33 +71,6 @@ function NotificationsPage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {showAccountBackupNotification && (
-            <li>
-              <Link
-                to="/profile"
-                onClick={markAccountBackupRead}
-                className={
-                  "block rounded-2xl border p-4 " +
-                  (accountBackupUnread
-                    ? "bg-neon/5 border-neon/20"
-                    : "bg-surface border-white/[0.05]")
-                }
-              >
-                <div className="flex items-start gap-3">
-                  <div className="size-8 rounded-full bg-neon/10 grid place-items-center shrink-0">
-                    <Bell className="size-4 text-neon" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm">Save all your data</div>
-                    <div className="text-[12px] text-muted-foreground mt-0.5">
-                      Create an account to back up your plan, progress, and Premium access.
-                    </div>
-                    <div className="text-[10px] text-muted-foreground mt-1.5">Action needed</div>
-                  </div>
-                </div>
-              </Link>
-            </li>
-          )}
           {(data ?? []).map((n) => (
             <li key={n.id as string}>
               <Link
