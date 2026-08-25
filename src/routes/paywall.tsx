@@ -31,6 +31,7 @@ import { useProfile } from "@/lib/profile";
 import { useAuthSession } from "@/lib/authSession";
 import { syncProfileToCloud } from "@/lib/profileSync";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { consumeSubscriptionResumePath } from "@/lib/subscriptionResume";
 import {
   clearOnboardingResume,
@@ -88,12 +89,17 @@ function PaywallScreen() {
   const [referral, setReferral] = useState(profile?.referralCode ?? "");
   const [referralApplied, setReferralApplied] = useState(!!profile?.referralCode);
   const [referralSaving, setReferralSaving] = useState(false);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [checkpoint] = useState(() => getOnboardingPaywallCheckpoint());
   const returningUser = Boolean(checkpoint?.lastVisitedAt);
 
   useEffect(() => {
     markOnboardingPaywallVisited();
   }, []);
+
+  useEffect(() => {
+    if (signedIn) setAccountDialogOpen(false);
+  }, [signedIn]);
 
   useEffect(() => {
     const firstAvailablePlan = (["yearly", "monthly", "weekly"] as const).find(
@@ -145,7 +151,10 @@ function PaywallScreen() {
   };
 
   const handlePurchase = async () => {
-    if (!signedIn) return;
+    if (!signedIn) {
+      setAccountDialogOpen(true);
+      return;
+    }
     setPurchasing(true);
     try {
       const nextSubscription = await purchaseSubscription(selected);
@@ -165,7 +174,10 @@ function PaywallScreen() {
   };
 
   const handleRestore = async () => {
-    if (!signedIn) return;
+    if (!signedIn) {
+      setAccountDialogOpen(true);
+      return;
+    }
     setPurchasing(true);
     try {
       const nextSubscription = await restorePurchases();
@@ -183,10 +195,8 @@ function PaywallScreen() {
   };
 
   const purchaseUnavailable =
-    !signedIn ||
-    !subscription.ready ||
-    !subscription.availablePlans[selected] ||
-    Boolean(subscription.error);
+    signedIn &&
+    (!subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error));
   const revenueCatPurchaseStatus =
     subscription.error ??
     (!subscription.ready
@@ -195,36 +205,39 @@ function PaywallScreen() {
         ? "This subscription option is not available."
         : null);
   const purchaseStatus = !signedIn
-    ? "Create or sign in to an Ascendr account before subscribing or restoring a purchase."
+    ? "Sign in to continue to secure checkout."
     : subscription.renewalRequired
       ? "Your subscription has ended. Renew to restore access to your saved data."
       : revenueCatPurchaseStatus;
 
   if (source === "body-scan") {
     return (
-      <BodyScanPaywall
-        selected={selected}
-        purchasing={purchasing}
-        referral={referral}
-        referralApplied={referralApplied}
-        referralSaving={referralSaving}
-        returningName={returningUser ? checkpoint?.name : undefined}
-        onSelect={setSelected}
-        onReferralChange={(value) => {
-          setReferral(value.toUpperCase());
-          setReferralApplied(false);
-        }}
-        onApplyReferral={() => void applyReferral()}
-        onPurchase={handlePurchase}
-        onRestore={handleRestore}
-        onClose={() => navigate({ to: "/home" })}
-        prices={subscription.prices}
-        purchaseUnavailable={purchaseUnavailable}
-        purchaseStatus={purchaseStatus}
-        subscriptionReady={subscription.ready}
-        accountRequired={!signedIn}
-        renewalRequired={subscription.renewalRequired}
-      />
+      <>
+        <BodyScanPaywall
+          selected={selected}
+          purchasing={purchasing}
+          referral={referral}
+          referralApplied={referralApplied}
+          referralSaving={referralSaving}
+          returningName={returningUser ? checkpoint?.name : undefined}
+          onSelect={setSelected}
+          onReferralChange={(value) => {
+            setReferral(value.toUpperCase());
+            setReferralApplied(false);
+          }}
+          onApplyReferral={() => void applyReferral()}
+          onPurchase={handlePurchase}
+          onRestore={handleRestore}
+          onClose={() => navigate({ to: "/home" })}
+          prices={subscription.prices}
+          purchaseUnavailable={purchaseUnavailable}
+          purchaseStatus={purchaseStatus}
+          subscriptionReady={subscription.ready}
+          accountRequired={!signedIn}
+          renewalRequired={subscription.renewalRequired}
+        />
+        <PurchaseAccountDialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen} />
+      </>
     );
   }
 
@@ -257,12 +270,6 @@ function PaywallScreen() {
             <X className="h-4 w-4" />
           </button>
         </div>
-
-        {!signedIn && (
-          <div className="mt-4">
-            <AccountRequiredPrompt />
-          </div>
-        )}
 
         {/* Hero */}
         <motion.section
@@ -532,6 +539,7 @@ function PaywallScreen() {
           </div>
         </div>
       </div>
+      <PurchaseAccountDialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen} />
     </div>
   );
 }
@@ -629,12 +637,6 @@ function BodyScanPaywall({
             Private
           </span>
         </div>
-
-        {accountRequired && (
-          <div className="mt-3">
-            <AccountRequiredPrompt />
-          </div>
-        )}
 
         {renewalRequired && !accountRequired && (
           <p className="mt-3 rounded-2xl border border-neon/25 bg-neon/[0.08] px-3 py-2 text-center text-[10px] font-semibold text-neon">
@@ -735,7 +737,7 @@ function BodyScanPaywall({
             <button
               type="button"
               onClick={onRestore}
-              disabled={purchasing || !subscriptionReady || accountRequired}
+              disabled={purchasing || !subscriptionReady}
               className="shrink-0 hover:text-foreground disabled:opacity-50"
             >
               Restore Purchases
@@ -759,21 +761,31 @@ function BodyScanPaywall({
   );
 }
 
-function AccountRequiredPrompt() {
+function PurchaseAccountDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
-    <SoftAccountPrompt
-      title="Create your private Ascendr account"
-      description="Your subscription and saved fitness data stay connected to this account across your devices."
-      redirectPath="/paywall"
-      storageKey="ascendr-paywall-account"
-      dismissible={false}
-      primaryLabel="Create or sign in"
-      initialExpanded
-      initialMode="signup"
-    />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border-neon/20 bg-background p-3 sm:p-4">
+        <SoftAccountPrompt
+          title="Sign in to unlock Premium"
+          description="Your subscription and saved fitness data stay connected to your private Ascendr account."
+          redirectPath="/paywall"
+          storageKey="ascendr-paywall-account"
+          dismissible={false}
+          primaryLabel="Sign in or create account"
+          initialExpanded
+          initialMode="signup"
+          onSignedIn={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
-
 function PlanCard({
   plan,
   price,
