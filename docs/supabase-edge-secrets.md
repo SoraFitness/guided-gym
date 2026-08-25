@@ -9,6 +9,7 @@ variables.
 | Current variable | Secret/public | Previously used by | New Supabase location |
 | --- | --- | --- |
 | `REVENUECAT_SECRET_API_KEY` | Secret | TanStack subscription checks and Coach | `subscription-access`; reused by paid Edge Functions |
+| `REVENUECAT_IOS_API_KEY` | Public iOS SDK configuration | Hosted iOS web app checkout initialization | `revenuecat-config`; returned only as RevenueCat's public `appl_` SDK key |
 | `REVENUECAT_ENTITLEMENT_ID` | Server configuration | TanStack subscription checks | `subscription-access`; reused by paid Edge Functions. Optional when the entitlement is `pro`, which is the built-in default. |
 | `OPENROUTER_API_KEY` | Secret | Coach, scans, food scan, reports, workout plans, cron | `ai-gateway`, `finalize-weekly-reports` |
 | `OPENROUTER_FACE_SCAN_API_KEY` | Secret | Face Scan | `ai-gateway` |
@@ -42,6 +43,7 @@ the values into source control or chat.
 ```powershell
 npx supabase link --project-ref adzfzimuranhrllbxfyf
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf REVENUECAT_SECRET_API_KEY=<your-value>
+npx supabase secrets set --project-ref adzfzimuranhrllbxfyf REVENUECAT_IOS_API_KEY=<your-public-appl-key>
 # Optional only if your RevenueCat entitlement ID is not `pro`:
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf REVENUECAT_ENTITLEMENT_ID=<your-entitlement-id>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf OPENROUTER_API_KEY=<your-value>
@@ -67,6 +69,7 @@ npx supabase functions deploy food-provider --project-ref adzfzimuranhrllbxfyf
 npx supabase functions deploy account-delete --project-ref adzfzimuranhrllbxfyf
 npx supabase functions deploy onboarding --project-ref adzfzimuranhrllbxfyf
 npx supabase functions deploy finalize-weekly-reports --project-ref adzfzimuranhrllbxfyf
+npx supabase functions deploy revenuecat-config --project-ref adzfzimuranhrllbxfyf
 ```
 
 Point the weekly scheduler at `https://adzfzimuranhrllbxfyf.supabase.co/functions/v1/finalize-weekly-reports`

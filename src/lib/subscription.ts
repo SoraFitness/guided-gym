@@ -8,6 +8,7 @@ import {
 } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Plan = "weekly" | "monthly" | "yearly";
 
@@ -60,7 +61,7 @@ const EMPTY_SUBSCRIPTION: Subscription = {
   prices: PLAN_PRICES,
   error: null,
 };
-const REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.trim();
+const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.trim();
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
 
 const listeners = new Set<() => void>();
@@ -69,6 +70,7 @@ let packagesByPlan: Partial<Record<Plan, PurchasesPackage>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
+let runtimeApiKeyPromise: Promise<string | null> | null = null;
 
 function publish(next: Subscription) {
   subscription = next;
@@ -173,10 +175,32 @@ function applyOfferings(availablePackages: PurchasesPackage[]) {
   });
 }
 
-function setupErrorMessage() {
+function setupErrorMessage(apiKey: string | null) {
   if (!isNativePlatform()) return "Purchases are available in the Ascendr iOS app.";
-  if (!REVENUECAT_API_KEY) return "RevenueCat is not configured for this build.";
+  if (!apiKey) return "RevenueCat checkout could not be configured. Please try again.";
   return null;
+}
+
+async function getRevenueCatApiKey(): Promise<string | null> {
+  if (BUNDLED_REVENUECAT_API_KEY) return BUNDLED_REVENUECAT_API_KEY;
+
+  if (!runtimeApiKeyPromise) {
+    runtimeApiKeyPromise = supabase.functions
+      .invoke<{ apiKey?: unknown }>("revenuecat-config")
+      .then(({ data, error }) => {
+        if (error) throw error;
+        const apiKey = typeof data?.apiKey === "string" ? data.apiKey.trim() : "";
+        if (!apiKey.startsWith("appl_")) throw new Error("Invalid RevenueCat iOS configuration.");
+        return apiKey;
+      })
+      .catch((error) => {
+        runtimeApiKeyPromise = null;
+        console.error("[revenuecat] Could not load iOS checkout configuration", error);
+        return null;
+      });
+  }
+
+  return runtimeApiKeyPromise;
 }
 
 async function refreshRevenueCatState(forceRefresh = false) {
@@ -190,12 +214,12 @@ async function refreshRevenueCatState(forceRefresh = false) {
 }
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
-  const setupError = setupErrorMessage();
+  const apiKey = await getRevenueCatApiKey();
+  const setupError = setupErrorMessage(apiKey);
   if (setupError) {
     publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: setupError });
     return;
   }
-  const apiKey = REVENUECAT_API_KEY;
   if (!apiKey) return;
 
   try {

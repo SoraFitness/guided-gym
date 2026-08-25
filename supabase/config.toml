@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.finalize-weekly-reports]
 verify_jwt = false
+
+[functions.revenuecat-config]
+verify_jwt = false
