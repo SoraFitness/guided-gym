@@ -28,7 +28,7 @@ import {
   type PlanPrices,
 } from "@/lib/subscription";
 import { useProfile } from "@/lib/profile";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { syncProfileToCloud } from "@/lib/profileSync";
 import { consumeSubscriptionResumePath } from "@/lib/subscriptionResume";
 import {
@@ -78,6 +78,7 @@ function PaywallScreen() {
   const { source } = Route.useSearch();
   const { profile, updateProfile } = useProfile();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const subscription = useSubscription();
   const scanOffer = source === "body-scan" || source === "face-scan";
   const faceScanOffer = source === "face-scan";
@@ -136,8 +137,8 @@ function PaywallScreen() {
     updateProfile({ referralCode: code });
     setReferralSaving(true);
     try {
-      if (session && session !== "loading") {
-        await syncProfileToCloud(session.userId, nextProfile);
+      if (accountSession) {
+        await syncProfileToCloud(accountSession.userId, nextProfile);
       }
       setReferralApplied(true);
     } catch (error) {

@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { createLocalProgressPhoto } from "@/lib/progressPhotos.local";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export const Route = createFileRoute("/_app/photos/new")({
 function NewPhoto() {
   const navigate = useNavigate();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -51,9 +52,9 @@ function NewPhoto() {
       const weightNum = weight.trim() ? Number(weight.replace(",", ".")) : null;
       const weight_kg = Number.isFinite(weightNum) ? (weightNum as number) : null;
 
-      if (session && session !== "loading") {
+      if (accountSession) {
         const uuid = createClientId();
-        const path = `${session.userId}/${uuid}.jpg`;
+        const path = `${accountSession.userId}/${uuid}.jpg`;
         const { error: upErr } = await supabase.storage
           .from("progress-photos")
           .upload(path, blob, { contentType: "image/jpeg", upsert: false });
@@ -100,7 +101,7 @@ function NewPhoto() {
         <h1 className="text-2xl font-bold">Add Progress Photo</h1>
       </header>
 
-      {session === null && (
+      {!accountSession && (
         <div className="mt-5">
           <SoftAccountPrompt
             title="Save photos across devices"

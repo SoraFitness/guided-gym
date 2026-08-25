@@ -8,7 +8,7 @@ import {
   listLocalProgressPhotos,
   syncLocalProgressPhotosToCloud,
 } from "@/lib/progressPhotos.local";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { PhotoCard } from "@/components/photos/PhotoCard";
 import { formatPhotoDate } from "@/components/photos/photoUtils";
@@ -22,18 +22,19 @@ type Group = "Week" | "Month" | "Year";
 
 function PhotosIndex() {
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
   const [view, setView] = useState<View>("gallery");
   const [group, setGroup] = useState<Group>("Month");
 
   useEffect(() => {
     if (session === "loading") return;
-    if (!session) {
+    if (!accountSession) {
       setPhotos(listLocalProgressPhotos());
       return;
     }
 
-    syncLocalProgressPhotosToCloud(session.userId)
+    syncLocalProgressPhotosToCloud(accountSession.userId)
       .then((result) => {
         if (result.synced > 0) toast.success("Progress photos synced");
       })
@@ -44,7 +45,7 @@ function PhotosIndex() {
         toast.error("Couldn't load photos");
         setPhotos([]);
       });
-  }, [session]);
+  }, [accountSession, session]);
 
   const isEmpty = photos !== null && photos.length === 0;
 
@@ -70,7 +71,7 @@ function PhotosIndex() {
         </Link>
       </header>
 
-      {!session && (
+      {!accountSession && (
         <div className="mt-5">
           <SoftAccountPrompt
             title="Save photos to your account"

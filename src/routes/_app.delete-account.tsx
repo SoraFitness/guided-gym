@@ -15,7 +15,7 @@ import {
 import { LegalList, LegalPage, LegalSection } from "@/components/legal/LegalPage";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAscendrAccount } from "@/lib/account.functions";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
 
 const DELETE_REQUEST_URL =
@@ -39,13 +39,14 @@ function clearLocalAscendrData() {
 function DeleteAccountPage() {
   const navigate = useNavigate();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const { setProfile } = useProfile();
   const removeAccount = deleteAscendrAccount;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function confirmDeletion() {
-    if (!session || session === "loading" || deleting) return;
+    if (!accountSession || deleting) return;
     setDeleting(true);
     try {
       await removeAccount();
@@ -94,7 +95,7 @@ function DeleteAccountPage() {
             <div className="flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> Checking your account
             </div>
-          ) : session ? (
+          ) : accountSession ? (
             <button
               type="button"
               onClick={() => setConfirmOpen(true)}

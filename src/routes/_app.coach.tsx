@@ -21,9 +21,8 @@ import { toast } from "sonner";
 import { useProfile, GOAL_LABELS, EQUIPMENT_LABELS } from "@/lib/profile";
 import { buildCoachContext } from "@/lib/coachContext";
 import { getCoachThread, clearCoachThread, importCoachMessages } from "@/lib/coach.functions";
-import { useAuthSession, type AuthSession } from "@/lib/authSession";
+import { startAnonymousSession, useAuthSession, type AuthSession } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
-import { createClientId } from "@/lib/clientId";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,13 +65,30 @@ const COACH_STARTERS: Array<{
   },
 ];
 
-const GUEST_THREAD_KEY = "fitness:guest-coach-thread-id";
 const GUEST_MESSAGES_KEY = "fitness:guest-coach-messages";
 
 function CoachPage() {
   const session = useAuthSession();
+  const [guestSessionError, setGuestSessionError] = useState<string | null>(null);
 
-  if (session === "loading") {
+  useEffect(() => {
+    if (session !== null) return;
+
+    let active = true;
+    setGuestSessionError(null);
+    void startAnonymousSession().catch((error: unknown) => {
+      console.error("[coach] Couldn't start secure guest access", error);
+      if (active) {
+        setGuestSessionError("Coach is unavailable right now. Please try again later.");
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [session]);
+
+  if (session === "loading" || (session === null && !guestSessionError)) {
     return (
       <div className="px-5 pt-8 flex justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -80,15 +96,20 @@ function CoachPage() {
     );
   }
 
-  return <CoachChat key={session?.userId ?? "guest"} session={session} />;
-}
+  if (session === null) {
+    return (
+      <div className="px-5 pt-8">
+        <div className="rounded-3xl border border-destructive/25 bg-destructive/[0.06] p-5 text-center">
+          <p className="text-sm font-semibold">{guestSessionError}</p>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Check your connection, then reopen Coach.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-function getGuestThreadId() {
-  const existing = localStorage.getItem(GUEST_THREAD_KEY);
-  if (existing) return existing;
-  const id = `guest-${createClientId()}`;
-  localStorage.setItem(GUEST_THREAD_KEY, id);
-  return id;
+  return <CoachChat key={session.userId} session={session} />;
 }
 
 function readGuestMessages(): UIMessage[] {
@@ -104,7 +125,7 @@ function writeGuestMessages(messages: UIMessage[]) {
   localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify(messages));
 }
 
-function CoachChat({ session }: { session: AuthSession | null }) {
+function CoachChat({ session }: { session: AuthSession }) {
   const { profile } = useProfile();
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
@@ -117,13 +138,6 @@ function CoachChat({ session }: { session: AuthSession | null }) {
   useEffect(() => {
     hydratedRef.current = false;
     setLoaded(false);
-
-    if (!session) {
-      setThreadId(getGuestThreadId());
-      setInitialMessages(readGuestMessages());
-      setLoaded(true);
-      return;
-    }
 
     const localMessages = readGuestMessages()
       .filter((message) => message.role === "user" || message.role === "assistant")
@@ -166,11 +180,8 @@ function CoachChat({ session }: { session: AuthSession | null }) {
     return new DefaultChatTransport({
       api: "/api/coach",
       prepareSendMessagesRequest: ({ messages, body }) => {
-        const headers: Record<string, string> = session
-          ? { Authorization: `Bearer ${session.accessToken}` }
-          : {};
         return {
-          headers,
+          headers: { Authorization: `Bearer ${session.accessToken}` },
           body: { messages, threadId, userContext: buildCoachContext(profile ?? null), ...body },
         };
       },
@@ -191,11 +202,6 @@ function CoachChat({ session }: { session: AuthSession | null }) {
   }, [initialMessages, loaded, setMessages]);
 
   useEffect(() => {
-    if (!loaded || session || !hydratedRef.current) return;
-    writeGuestMessages(messages);
-  }, [loaded, messages, session]);
-
-  useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, status]);
 
@@ -214,8 +220,7 @@ function CoachChat({ session }: { session: AuthSession | null }) {
     if (!threadId) return;
     if (!confirm("Clear this conversation?")) return;
     try {
-      if (session) await clearCoachThread({ data: { threadId } });
-      else writeGuestMessages([]);
+      await clearCoachThread({ data: { threadId } });
       setMessages([]);
       toast.success("Chat cleared");
     } catch (e) {
@@ -248,11 +253,11 @@ function CoachChat({ session }: { session: AuthSession | null }) {
             Your AI Coach
           </h1>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">
-            {profile
-              ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
-              : session
-                ? "Ask about training, nutrition, recovery, or progress"
-                : "Guest mode · coach memory stays on this device"}
+            {session.isAnonymous
+              ? "Guest mode · save an account to back up your coach memory"
+              : profile
+                ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
+                : "Ask about training, nutrition, recovery, or progress"}
           </p>
         </div>
         {messages.length > 0 && (
@@ -266,7 +271,7 @@ function CoachChat({ session }: { session: AuthSession | null }) {
         )}
       </header>
 
-      {!session && (
+      {session.isAnonymous && (
         <div className="px-4 pb-3">
           <SoftAccountPrompt
             title="Save your coach memory"

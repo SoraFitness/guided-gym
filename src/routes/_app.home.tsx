@@ -33,7 +33,7 @@ import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 import { QuickLogFab } from "@/components/weekly/QuickLogFab";
 import { listNotifications } from "@/lib/weeklyReport.functions";
 import { cn } from "@/lib/utils";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, isGuestSession, useAuthSession } from "@/lib/authSession";
 import { useSubscription } from "@/lib/subscription";
 import { hasUnreadAccountBackupNotification } from "@/lib/accountBackupReminder";
 import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
@@ -60,7 +60,7 @@ function HomePage() {
   const { profile } = useProfile();
   const session = useAuthSession();
   const subscription = useSubscription();
-  const signedIn = session !== null && session !== "loading";
+  const signedIn = isAccountSession(session);
   const displayName =
     profile?.name?.trim().toLowerCase() === "sahil" ? "Admin" : getDisplayName(profile?.name);
   const { totals, goals, todayEntries } = useNutrition();
@@ -120,7 +120,9 @@ function HomePage() {
   });
   const unread =
     (notifs ?? []).filter((notification) => !notification.read_at).length +
-    (session === null && subscription.active && hasUnreadAccountBackupNotification() ? 1 : 0);
+    (isGuestSession(session) && subscription.active && hasUnreadAccountBackupNotification()
+      ? 1
+      : 0);
 
   const subtitle = profile
     ? (GOAL_SUBTITLES[profile.goal] ?? "Keep building toward your goal")

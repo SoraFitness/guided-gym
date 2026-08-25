@@ -6,25 +6,26 @@ import {
   listLocalProgressPhotos,
   syncLocalProgressPhotosToCloud,
 } from "@/lib/progressPhotos.local";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { formatPhotoDate } from "@/components/photos/photoUtils";
 
 export function ProgressPicturesCard() {
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
 
   useEffect(() => {
     if (session === "loading") return;
     let mounted = true;
 
-    if (!session) {
+    if (!accountSession) {
       setPhotos(listLocalProgressPhotos());
       return () => {
         mounted = false;
       };
     }
 
-    syncLocalProgressPhotosToCloud(session.userId)
+    syncLocalProgressPhotosToCloud(accountSession.userId)
       .then(() => listProgressPhotos())
       .then((p) => mounted && setPhotos(p))
       .catch(() => mounted && setPhotos([]));
@@ -32,7 +33,7 @@ export function ProgressPicturesCard() {
     return () => {
       mounted = false;
     };
-  }, [session]);
+  }, [accountSession, session]);
 
   const latest = photos?.[0];
   const count = photos?.length ?? 0;
@@ -73,7 +74,7 @@ export function ProgressPicturesCard() {
           )}
         </Link>
         <div className="flex-1 min-w-0">
-          {!session ? (
+          {!accountSession ? (
             <p className="text-sm text-muted-foreground">
               Saved on this device. Sign in later to sync.
             </p>

@@ -15,7 +15,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { deleteScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/scan/body/")({
@@ -26,18 +26,15 @@ export const Route = createFileRoute("/_app/scan/body/")({
 function BodyScanIntro() {
   const navigate = useNavigate();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const listHistory = useServerFn(listScanSubmissions);
   const deleteSubmission = useServerFn(deleteScanSubmission);
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const historyQuery = useQuery({
-    queryKey: [
-      "scan-submissions",
-      "body",
-      session && session !== "loading" ? session.userId : "guest",
-    ],
+    queryKey: ["scan-submissions", "body", accountSession?.userId ?? "guest"],
     queryFn: () => listHistory({ data: { scanType: "body" } }),
-    enabled: Boolean(session && session !== "loading"),
+    enabled: Boolean(accountSession),
   });
 
   async function removeScan(id: string) {

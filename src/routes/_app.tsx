@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tan
 import { useEffect, useState } from "react";
 import { Home, Dumbbell, Apple, Sparkles, ChartNoAxesCombined, ScanLine } from "lucide-react";
 import { useProfile } from "@/lib/profile";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { startCloudSync } from "@/lib/cloudSync";
 import { claimLocalDataOwnership, localDataBelongsToAccount } from "@/lib/accountOwnership";
 import { useSubscription } from "@/lib/subscription";
@@ -66,9 +66,9 @@ function AppShell() {
   const tourCompleted = useTourCompleted();
   const [tourOpen, setTourOpen] = useState(false);
   const subscriptionExempt = SUBSCRIPTION_EXEMPT_PATHS.has(pathname);
-  const userId = session && session !== "loading" ? session.userId : null;
-  const signedIn = userId !== null;
-  const localDataOwnerMatches = userId ? localDataBelongsToAccount(userId) : false;
+  const accountUserId = isAccountSession(session) ? session.userId : null;
+  const signedIn = accountUserId !== null;
+  const localDataOwnerMatches = accountUserId ? localDataBelongsToAccount(accountUserId) : false;
   const hasPremiumAccess =
     (!signedIn || localDataOwnerMatches) &&
     ready &&
@@ -132,7 +132,9 @@ function AppShell() {
 
     return (
       <>
-        {userId && subscription.ready && subscription.active && <CloudSyncGate userId={userId} />}
+        {accountUserId && subscription.ready && subscription.active && (
+          <CloudSyncGate userId={accountUserId} />
+        )}
         <AccessGate message={message} />
       </>
     );
@@ -140,7 +142,7 @@ function AppShell() {
 
   return (
     <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background">
-      {hasPremiumAccess && userId && <CloudSyncGate userId={userId} />}
+      {hasPremiumAccess && accountUserId && <CloudSyncGate userId={accountUserId} />}
       <div
         className="app-shell__content min-w-0 flex-1"
         style={{

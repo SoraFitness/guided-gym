@@ -1,13 +1,42 @@
 import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface AuthSession {
   userId: string;
   accessToken: string;
   email: string | null;
+  isAnonymous: boolean;
 }
 
 export type AuthSessionState = AuthSession | null | "loading";
+
+function toAuthSession(session: Session | null): AuthSession | null {
+  if (!session) return null;
+  return {
+    userId: session.user.id,
+    accessToken: session.access_token,
+    email: session.user.email ?? null,
+    isAnonymous: session.user.is_anonymous === true,
+  };
+}
+
+export function isGuestSession(session: AuthSessionState) {
+  return session === null || (session !== "loading" && session.isAnonymous);
+}
+
+export function isAccountSession(session: AuthSessionState): session is AuthSession {
+  return session !== null && session !== "loading" && !session.isAnonymous;
+}
+
+export async function startAnonymousSession() {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) throw error;
+
+  const session = toAuthSession(data.session);
+  if (!session) throw new Error("Couldn't start a secure guest session.");
+  return session;
+}
 
 export function useAuthSession(): AuthSessionState {
   const [session, setSession] = useState<AuthSessionState>("loading");
@@ -25,15 +54,7 @@ export function useAuthSession(): AuthSessionState {
         .getSession()
         .then(({ data }) => {
           if (!mounted) return;
-          setSession(
-            data.session
-              ? {
-                  userId: data.session.user.id,
-                  accessToken: data.session.access_token,
-                  email: data.session.user.email ?? null,
-                }
-              : null,
-          );
+          setSession(toAuthSession(data.session));
         })
         .catch((error: unknown) => {
           console.warn("[auth] Session is unavailable; continuing locally", error);
@@ -42,15 +63,7 @@ export function useAuthSession(): AuthSessionState {
 
       const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
         if (!mounted) return;
-        setSession(
-          nextSession
-            ? {
-                userId: nextSession.user.id,
-                accessToken: nextSession.access_token,
-                email: nextSession.user.email ?? null,
-              }
-            : null,
-        );
+        setSession(toAuthSession(nextSession));
       });
 
       return () => {

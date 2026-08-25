@@ -18,6 +18,11 @@ interface SoftAccountPromptProps {
   onSignedIn?: () => void;
 }
 
+type ConfirmationState = {
+  email: string;
+  type: "signup" | "email_change";
+};
+
 export function SoftAccountPrompt({
   title,
   description,
@@ -39,6 +44,7 @@ export function SoftAccountPrompt({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
 
   if (dismissible && dismissed) return null;
 
@@ -51,10 +57,21 @@ export function SoftAccountPrompt({
   async function withGoogle() {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + redirectPath,
-      });
-      if (result.error) toast.error("Google sign-in failed");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const result = session?.user.is_anonymous
+        ? await supabase.auth.linkIdentity({
+            provider: "google",
+            options: { redirectTo: window.location.origin + redirectPath },
+          })
+        : await lovable.auth.signInWithOAuth("google", {
+            redirect_uri: window.location.origin + redirectPath,
+          });
+      if (result.error) toast.error(result.error.message);
+    } catch (error) {
+      console.error("[auth] Google sign-in failed", error);
+      toast.error("Google sign-in failed. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -62,22 +79,80 @@ export function SoftAccountPrompt({
 
   async function withEmail() {
     if (!email.trim() || !password) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRedirectTo = window.location.origin + redirectPath;
     setBusy(true);
     try {
-      const fn = mode === "signin" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-      const { error } = await fn.call(supabase.auth, {
-        email: email.trim(),
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.user.is_anonymous && mode === "signup") {
+        const { data, error } = await supabase.auth.updateUser(
+          { email: normalizedEmail, password },
+          { emailRedirectTo },
+        );
+        if (error) toast.error(error.message);
+        else if (data.user.email_confirmed_at) {
+          toast.success("Your Ascendr account is saved.");
+          onSignedIn?.();
+        } else {
+          setConfirmation({ email: normalizedEmail, type: "email_change" });
+          toast.success("We sent a confirmation email.");
+        }
+        return;
+      }
+
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: { emailRedirectTo },
+        });
+        if (error) {
+          toast.error(error.message);
+        } else if (data.session) {
+          toast.success("Your Ascendr account is saved.");
+          onSignedIn?.();
+        } else if (data.user) {
+          setConfirmation({ email: normalizedEmail, type: "signup" });
+          toast.success("We sent a confirmation email.");
+        } else {
+          toast.error("We couldn't create your account. Please try again.");
+        }
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
         password,
-        ...(mode === "signup"
-          ? { options: { emailRedirectTo: window.location.origin + redirectPath } }
-          : {}),
-      } as never);
+      });
       if (error) toast.error(error.message);
-      else if (mode === "signup") toast.success("Check your email to confirm.");
       else {
         toast.success("Welcome back.");
         onSignedIn?.();
       }
+    } catch (error) {
+      console.error("[auth] Email authentication failed", error);
+      toast.error("We couldn't reach account services. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    if (!confirmation) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: confirmation.type,
+        email: confirmation.email,
+        options: { emailRedirectTo: window.location.origin + redirectPath },
+      });
+      if (error) toast.error(error.message);
+      else toast.success("Confirmation email sent again.");
+    } catch (error) {
+      console.error("[auth] Confirmation resend failed", error);
+      toast.error("We couldn't resend the confirmation email. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -128,6 +203,38 @@ export function SoftAccountPrompt({
               Later
             </Button>
           )}
+        </div>
+      ) : confirmation ? (
+        <div
+          className="mt-3 rounded-2xl border border-neon/20 bg-background/50 p-3"
+          aria-live="polite"
+        >
+          <p className="text-sm font-semibold">Confirm your email to finish saving your account</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            We sent a confirmation link to{" "}
+            <span className="font-medium text-foreground">{confirmation.email}</span>. Open it on
+            this device to save your account and sync your data.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resendConfirmation}
+              disabled={busy}
+              className="h-9 flex-1 rounded-full border-border bg-surface/70 text-xs"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : "Resend email"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmation(null)}
+              disabled={busy}
+              className="h-9 rounded-full text-xs"
+            >
+              Use another email
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="mt-3 space-y-2">

@@ -19,7 +19,7 @@ import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
 import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
 import { SoftAccountPrompt } from "@/components/SoftAccountPrompt";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { analyzeFaceScan, type FaceScanResult } from "@/lib/faceScan.functions";
 import { saveScanSubmission } from "@/lib/scanSubmissions";
 import { deleteScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
@@ -43,6 +43,7 @@ function FaceScanPage() {
   const navigate = useNavigate();
   const { pending } = Route.useSearch();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const subscription = useSubscription();
   const analyze = useServerFn(analyzeFaceScan);
   const listHistory = useServerFn(listScanSubmissions);
@@ -60,18 +61,14 @@ function FaceScanPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingLoading, setPendingLoading] = useState(pending === "onboarding");
   const historyQuery = useQuery({
-    queryKey: [
-      "scan-submissions",
-      "face",
-      session && session !== "loading" ? session.userId : "guest",
-    ],
+    queryKey: ["scan-submissions", "face", accountSession?.userId ?? "guest"],
     queryFn: () => listHistory({ data: { scanType: "face" } }),
-    enabled: Boolean(session && session !== "loading"),
+    enabled: Boolean(accountSession),
   });
   const quotaQuery = useQuery({
-    queryKey: ["scan-quota", "face", session && session !== "loading" ? session.userId : "guest"],
+    queryKey: ["scan-quota", "face", accountSession?.userId ?? "guest"],
     queryFn: () => loadQuota({ data: { scanType: "face" } }),
-    enabled: Boolean(session && session !== "loading"),
+    enabled: Boolean(accountSession),
   });
   const weeklyLimitReached = quotaQuery.data?.remaining === 0;
 
@@ -106,7 +103,7 @@ function FaceScanPage() {
         navigate({ to: "/paywall", search: { source: "face-scan" } });
         return;
       }
-      if (!session) {
+      if (!accountSession) {
         const message = "Sign in or create an account first so we can save and analyze your scan.";
         setError(message);
         toast.info(message);
@@ -129,7 +126,7 @@ function FaceScanPage() {
         let currentId = submissionId;
         if (!currentId) {
           const submission = await saveScanSubmission({
-            userId: session.userId,
+            userId: accountSession.userId,
             scanType: "face",
             photos: { face: selectedPhoto },
             status: "ready_for_analysis",
@@ -160,6 +157,7 @@ function FaceScanPage() {
     [
       analyze,
       busy,
+      accountSession,
       navigate,
       pending,
       photo,
@@ -198,8 +196,7 @@ function FaceScanPage() {
       pending !== "onboarding" ||
       pendingLoading ||
       !subscription.active ||
-      !session ||
-      session === "loading" ||
+      !accountSession ||
       !photo ||
       autoScanStarted.current
     ) {
@@ -207,7 +204,7 @@ function FaceScanPage() {
     }
     autoScanStarted.current = true;
     void runScan(photo);
-  }, [pending, pendingLoading, photo, runScan, session, subscription.active]);
+  }, [accountSession, pending, pendingLoading, photo, runScan, subscription.active]);
 
   async function removeScan(id: string) {
     setDeletingId(id);
@@ -306,7 +303,7 @@ function FaceScanPage() {
               <ScanFace className="size-4 text-neon" /> View sample report
             </button>
 
-            {session === null && (
+            {!accountSession && (
               <div id="face-scan-account" className="mt-5 scroll-mt-5">
                 <SoftAccountPrompt
                   title="Save your scan privately"
@@ -376,7 +373,7 @@ function FaceScanPage() {
             >
               {busy ? (
                 <Loader2 className="size-5 animate-spin" />
-              ) : weeklyLimitReached || session === null ? (
+              ) : weeklyLimitReached || !accountSession ? (
                 <LockKeyhole className="size-5" />
               ) : error ? (
                 <RefreshCcw className="size-5" />
@@ -387,7 +384,7 @@ function FaceScanPage() {
                 ? "Starting Analysis"
                 : weeklyLimitReached
                   ? "Weekly Limit Reached"
-                  : session === null
+                  : !accountSession
                     ? "Sign In to Analyze"
                     : error
                       ? "Try Analysis Again"

@@ -8,7 +8,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/weeklyReport.functions";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, isGuestSession, useAuthSession } from "@/lib/authSession";
 import { useSubscription } from "@/lib/subscription";
 import {
   hasUnreadAccountBackupNotification,
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_app/notifications")({
 function NotificationsPage() {
   const session = useAuthSession();
   const subscription = useSubscription();
-  const signedIn = session !== null && session !== "loading";
+  const signedIn = isAccountSession(session);
   const [accountBackupUnread, setAccountBackupUnread] = useState(() =>
     hasUnreadAccountBackupNotification(),
   );
@@ -40,7 +40,7 @@ function NotificationsPage() {
     queryFn: () => list(),
     enabled: signedIn,
   });
-  const showAccountBackupNotification = session === null && subscription.active;
+  const showAccountBackupNotification = isGuestSession(session) && subscription.active;
   const hasNotifications = showAccountBackupNotification || (data?.length ?? 0) > 0;
 
   async function markAllRead() {

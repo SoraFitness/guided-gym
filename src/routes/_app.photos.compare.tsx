@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Sparkles, GitCompareArrows, ChevronsLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import {
   listLocalProgressPhotos,
   syncLocalProgressPhotosToCloud,
@@ -31,6 +31,7 @@ interface AiFeedback {
 
 function ComparePage() {
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const [photos, setPhotos] = useState<ProgressPhotoRow[] | null>(null);
   const [beforeId, setBeforeId] = useState<string | null>(null);
   const [afterId, setAfterId] = useState<string | null>(null);
@@ -40,7 +41,7 @@ function ComparePage() {
 
   useEffect(() => {
     if (session === "loading") return;
-    if (!session) {
+    if (!accountSession) {
       const localPhotos = listLocalProgressPhotos();
       setPhotos(localPhotos);
       if (localPhotos.length >= 2) {
@@ -50,7 +51,7 @@ function ComparePage() {
       return;
     }
 
-    syncLocalProgressPhotosToCloud(session.userId)
+    syncLocalProgressPhotosToCloud(accountSession.userId)
       .then((result) => {
         if (result.synced > 0) toast.success("Progress photos synced");
       })
@@ -67,14 +68,14 @@ function ComparePage() {
         toast.error("Couldn't load photos");
         setPhotos([]);
       });
-  }, [session]);
+  }, [accountSession, session]);
 
   const before = useMemo(() => photos?.find((p) => p.id === beforeId) ?? null, [photos, beforeId]);
   const after = useMemo(() => photos?.find((p) => p.id === afterId) ?? null, [photos, afterId]);
 
   async function runAI() {
     if (!before || !after || aiBusy) return;
-    if (!session || before.id.startsWith("guest-") || after.id.startsWith("guest-")) {
+    if (!accountSession || before.id.startsWith("guest-") || after.id.startsWith("guest-")) {
       toast.info("Save and sync your photos to unlock AI feedback.");
       return;
     }
@@ -151,7 +152,7 @@ function ComparePage() {
         Tip: compare the same pose &amp; angle (front vs front) for the most honest read.
       </p>
 
-      {!session && (
+      {!accountSession && (
         <div className="mt-5">
           <SoftAccountPrompt
             title="Sync for AI photo feedback"

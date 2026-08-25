@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Trash2, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useAuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import {
   deleteLocalProgressPhoto,
   getLocalProgressPhoto,
@@ -39,6 +39,7 @@ function PhotoDetail() {
   const { photoId } = Route.useParams();
   const navigate = useNavigate();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const [photo, setPhoto] = useState<ProgressPhotoRow | null | "loading">("loading");
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -46,7 +47,7 @@ function PhotoDetail() {
 
   useEffect(() => {
     if (session === "loading") return;
-    if (!session || photoId.startsWith("guest-")) {
+    if (!accountSession || photoId.startsWith("guest-")) {
       setPhoto(getLocalProgressPhoto(photoId));
       return;
     }
@@ -58,11 +59,11 @@ function PhotoDetail() {
         toast.error("Couldn't load photo");
         setPhoto(null);
       });
-  }, [photoId, session]);
+  }, [accountSession, photoId, session]);
 
   async function handleDelete() {
     try {
-      if (!session || photoId.startsWith("guest-")) {
+      if (!accountSession || photoId.startsWith("guest-")) {
         deleteLocalProgressPhoto(photoId);
       } else {
         await deleteProgressPhoto({ data: { id: photoId } });
@@ -126,7 +127,7 @@ function PhotoDetail() {
       ) : (
         <EditView
           photo={photo}
-          cloud={!!session && !photo.id.startsWith("guest-")}
+          cloud={Boolean(accountSession) && !photo.id.startsWith("guest-")}
           onCancel={() => setEditing(false)}
           onSaved={(updated) => {
             setPhoto({ ...photo, ...updated });

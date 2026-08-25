@@ -32,7 +32,7 @@ import {
   EXPERIENCE_LABELS,
   deriveEquipmentSetup,
 } from "@/lib/profile";
-import { useAuthSession, type AuthSession } from "@/lib/authSession";
+import { isAccountSession, useAuthSession, type AuthSession } from "@/lib/authSession";
 import { importCoachMessages, type StoredCoachMessage } from "@/lib/coach.functions";
 import { syncProfileToCloud } from "@/lib/profileSync";
 import { syncLocalProgressPhotosToCloud } from "@/lib/progressPhotos.local";
@@ -80,6 +80,7 @@ type SheetKind = null | "goal" | "workoutSplit" | "equipment" | "injuries" | "de
 function ProfilePage() {
   const { profile, setProfile, updateProfile } = useProfile();
   const session = useAuthSession();
+  const accountSession = isAccountSession(session) ? session : null;
   const navigate = useNavigate();
   const [goals, setGoalsState] = useState<NutritionGoals>(loadGoals());
   const [saved, setSaved] = useState(false);
@@ -92,8 +93,8 @@ function ProfilePage() {
   const syncAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!session || session === "loading" || syncAttemptedRef.current) return;
-    const signedInSession = session;
+    if (!accountSession || syncAttemptedRef.current) return;
+    const signedInSession = accountSession;
     const guestCoachMessagesKey = "fitness:guest-coach-messages";
     syncAttemptedRef.current = true;
 
@@ -138,14 +139,14 @@ function ProfilePage() {
       console.error(error);
       toast.error("Couldn't sync all guest data yet");
     });
-  }, [session]);
+  }, [accountSession]);
 
   useEffect(() => {
-    if (!session || session === "loading" || !profile) return;
+    if (!accountSession || !profile) return;
 
     let active = true;
     setProfileSyncState("syncing");
-    syncProfileToCloud(session.userId, profile)
+    syncProfileToCloud(accountSession.userId, profile)
       .then(() => {
         if (active) setProfileSyncState("synced");
       })
@@ -157,7 +158,7 @@ function ProfilePage() {
     return () => {
       active = false;
     };
-  }, [profile, session]);
+  }, [accountSession, profile]);
 
   async function signOut() {
     setSigningOut(true);
@@ -176,7 +177,7 @@ function ProfilePage() {
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
         <span className="text-sm text-muted-foreground">Checking account status...</span>
       </section>
-    ) : !session ? (
+    ) : !accountSession ? (
       <div className="mt-5">
         <SoftAccountPrompt
           title="You're a guest right now"
