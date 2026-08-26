@@ -34,9 +34,24 @@ export interface Subscription {
 }
 
 export const PLAN_PRICES: PlanPrices = {
-  weekly: { label: "Weekly", price: "—", per: "", subtitle: "Loading your local price…" },
-  monthly: { label: "Monthly", price: "—", per: "", subtitle: "Loading your local price…" },
-  yearly: { label: "Yearly", price: "—", per: "", subtitle: "Loading your local price…" },
+  weekly: {
+    label: "Weekly",
+    price: "US$9.99",
+    per: "/week",
+    subtitle: "Billed weekly in USD",
+  },
+  monthly: {
+    label: "Monthly",
+    price: "US$19.99",
+    per: "/month",
+    subtitle: "Billed monthly in USD",
+  },
+  yearly: {
+    label: "Yearly",
+    price: "US$49.99",
+    per: "/year",
+    subtitle: "US$4.17/month · billed yearly in USD",
+  },
 };
 
 const PLAN_ORDER: Plan[] = ["yearly", "monthly", "weekly"];
@@ -158,24 +173,9 @@ function calculateYearlyDiscount(
   return Math.round((1 - yearlyPrice / annualMonthlyCost) * 100);
 }
 
-function createPlanPrice(
-  plan: Plan,
-  aPackage: PurchasesPackage,
-  yearlyDiscount: number | null,
-): PlanPrice {
-  const product = aPackage.product;
-  const period = plan === "yearly" ? "/year" : plan === "monthly" ? "/month" : "/week";
-  const monthlyPrice = product.pricePerMonthString;
-  const subtitle =
-    plan === "yearly" && monthlyPrice
-      ? `${monthlyPrice}/month`
-      : `Billed ${plan === "yearly" ? "yearly" : plan}`;
-
+function createPlanPrice(plan: Plan, yearlyDiscount: number | null): PlanPrice {
   return {
-    label: PLAN_PRICES[plan].label,
-    price: product.priceString,
-    per: period,
-    subtitle,
+    ...PLAN_PRICES[plan],
     badge: plan === "yearly" && yearlyDiscount ? `SAVE ${yearlyDiscount}%` : undefined,
   };
 }
@@ -209,8 +209,7 @@ function applyOfferings(availablePackages: PurchasesPackage[]) {
 
   const yearlyDiscount = calculateYearlyDiscount(nextPackages.yearly, nextPackages.monthly);
   for (const plan of PLAN_ORDER) {
-    const aPackage = nextPackages[plan];
-    if (aPackage) prices[plan] = createPlanPrice(plan, aPackage, yearlyDiscount);
+    if (nextPackages[plan]) prices[plan] = createPlanPrice(plan, yearlyDiscount);
   }
 
   packagesByPlan = nextPackages;

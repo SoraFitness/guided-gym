@@ -378,7 +378,7 @@ function PaywallScreen() {
           <div>
             <p className="text-sm font-black">Choose your membership</p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              Full access, cancel whenever you need.
+              Prices shown in USD. Cancel whenever you need.
             </p>
           </div>
           <span className="rounded-full border border-neon/20 bg-neon/[0.06] px-2.5 py-1 text-[9px] font-bold text-neon">
