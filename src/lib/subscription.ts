@@ -1,5 +1,11 @@
 import { Capacitor } from "@capacitor/core";
-import type { CustomerInfo, LOG_LEVEL, PurchasesPackage } from "@revenuecat/purchases-capacitor";
+import {
+  LOG_LEVEL,
+  PACKAGE_TYPE,
+  Purchases,
+  type CustomerInfo,
+  type PurchasesPackage,
+} from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
 
@@ -69,8 +75,7 @@ let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
 let runtimeApiKeyPromise: Promise<string | null> | null = null;
-type PurchasesClient = (typeof import("@revenuecat/purchases-capacitor"))["Purchases"];
-let purchasesPromise: Promise<PurchasesClient> | null = null;
+type PurchasesClient = typeof Purchases;
 
 function publish(next: Subscription) {
   subscription = next;
@@ -95,10 +100,7 @@ function hasBrowserPreviewAccess(email: string | null) {
 }
 
 async function getPurchases() {
-  if (!purchasesPromise) {
-    purchasesPromise = import("@revenuecat/purchases-capacitor").then(({ Purchases }) => Purchases);
-  }
-  return purchasesPromise;
+  return Purchases;
 }
 
 function planFromIdentifier(identifier: string): Plan | null {
@@ -117,11 +119,11 @@ function planFromIdentifier(identifier: string): Plan | null {
 
 function planFromPackage(aPackage: PurchasesPackage): Plan | null {
   switch (aPackage.packageType) {
-    case "ANNUAL":
+    case PACKAGE_TYPE.ANNUAL:
       return "yearly";
-    case "MONTHLY":
+    case PACKAGE_TYPE.MONTHLY:
       return "monthly";
-    case "WEEKLY":
+    case PACKAGE_TYPE.WEEKLY:
       return "weekly";
     default:
       return planFromIdentifier(`${aPackage.identifier} ${aPackage.product.identifier}`);
@@ -357,7 +359,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     );
 
     if (!configured) {
-      if (import.meta.env.DEV) await purchases.setLogLevel({ level: "DEBUG" as LOG_LEVEL });
+      if (import.meta.env.DEV) await purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
       await withTimeout(
         purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey }),
         PURCHASES_OPERATION_TIMEOUT_MS,
