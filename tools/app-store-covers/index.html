@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ascendr App Store Covers</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 1290px;
+        height: 2796px;
+        margin: 0;
+        overflow: hidden;
+        background: #eef4ff;
+      }
+
+      .cover {
+        --ink: #182443;
+        --blue: #3f72df;
+        --lime: #a7f947;
+        --stage: #eef4ff;
+        --orb: #aac6ff;
+        display: none;
+        position: relative;
+        width: 1290px;
+        height: 2796px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 7% 21%, rgba(137, 180, 255, 0.52), transparent 18%),
+          radial-gradient(circle at 90% 14%, rgba(255, 216, 122, 0.52), transparent 13%),
+          radial-gradient(circle at 54% 74%, rgba(166, 249, 71, 0.16), transparent 31%),
+          linear-gradient(180deg, #f5f8ff 0%, var(--stage) 100%);
+      }
+
+      .cover.is-active { display: block; }
+
+      .capture-slice .cover.is-active {
+        transform: translateY(calc(-1 * var(--capture-offset)));
+      }
+
+      .cover::before,
+      .cover::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(14px);
+        opacity: 0.78;
+        pointer-events: none;
+      }
+
+      .cover::before {
+        width: 210px;
+        height: 210px;
+        right: 74px;
+        top: 378px;
+        background: rgba(123, 175, 255, 0.52);
+      }
+
+      .cover::after {
+        width: 170px;
+        height: 170px;
+        left: -50px;
+        top: 710px;
+        background: rgba(255, 202, 112, 0.45);
+      }
+
+      .cover.nutrition { --stage: #f0f5ff; --orb: #b6c9ff; }
+      .cover.home { --stage: #eef5ff; --orb: #a9d8ff; }
+      .cover.workouts { --stage: #f2f5ff; --orb: #b8c8ff; }
+      .cover.coach { --stage: #f0f5ff; --orb: #c4b9ff; }
+      .cover.progress { --stage: #eef6ff; --orb: #9ecbff; }
+
+      .hero {
+        position: absolute;
+        z-index: 2;
+        top: 184px;
+        left: 96px;
+        width: 1098px;
+        text-align: center;
+      }
+
+      .eyebrow {
+        margin: 0 0 28px;
+        color: var(--blue);
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+      }
+
+      h1 {
+        max-width: 1050px;
+        margin: 0 auto;
+        color: var(--ink);
+        font-size: 104px;
+        font-weight: 850;
+        letter-spacing: -0.075em;
+        line-height: 0.94;
+      }
+
+      h1 span { color: var(--blue); }
+
+      .hero-copy {
+        max-width: 830px;
+        margin: 34px auto 0;
+        color: rgba(24, 36, 67, 0.7);
+        font-size: 35px;
+        font-weight: 560;
+        letter-spacing: -0.025em;
+        line-height: 1.16;
+      }
+
+      .phone {
+        position: absolute;
+        z-index: 1;
+        top: 748px;
+        left: 90px;
+        width: 1110px;
+        height: 2050px;
+        overflow: hidden;
+        border: 13px solid #1f2940;
+        border-bottom: 0;
+        border-radius: 118px 118px 0 0;
+        background: #fbfcff;
+        box-shadow:
+          0 42px 76px rgba(34, 57, 113, 0.28),
+          0 6px 0 rgba(255, 255, 255, 0.95) inset,
+          0 0 0 5px rgba(255, 255, 255, 0.74);
+      }
+
+      .phone::before {
+        content: "";
+        position: absolute;
+        z-index: 6;
+        top: 34px;
+        left: 363px;
+        width: 360px;
+        height: 76px;
+        border-radius: 60px;
+        background: #161c2c;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 136px;
+        padding: 39px 56px 14px;
+        color: #16213d;
+        font-size: 25px;
+        font-weight: 750;
+      }
+
+      .status-icons {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 21px;
+      }
+
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 5px 54px 22px;
+      }
+
+      .app-mark {
+        width: 92px;
+        height: auto;
+        object-fit: contain;
+      }
+
+      .circle-button {
+        display: grid;
+        width: 58px;
+        height: 58px;
+        place-items: center;
+        border: 1px solid #d8e1f2;
+        border-radius: 50%;
+        background: #fff;
+        color: #61708d;
+        font-size: 27px;
+        font-weight: 700;
+      }
+
+      .phone-body { padding: 0 52px 130px; }
+
+      .phone h2,
+      .phone h3,
+      .phone p { margin: 0; }
+
+      .screen-title {
+        color: #1a2645;
+        font-size: 54px;
+        font-weight: 780;
+        letter-spacing: -0.055em;
+        line-height: 0.98;
+      }
+
+      .screen-subtitle {
+        margin-top: 14px !important;
+        color: #72809a;
+        font-size: 26px;
+        font-weight: 560;
+        letter-spacing: -0.02em;
+      }
+
+      .soft-card {
+        border: 1px solid #d9e3f3;
+        border-radius: 31px;
+        background: #fff;
+        box-shadow: 0 13px 30px rgba(52, 76, 133, 0.08);
+      }
+
+      .top-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 34px;
+        padding: 14px 20px;
+        border-radius: 99px;
+        background: #edf3ff;
+        color: #5571ae;
+        font-size: 20px;
+        font-weight: 750;
+      }
+
+      .top-chip i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--lime);
+        box-shadow: 0 0 0 5px rgba(167, 249, 71, 0.2);
+      }
+
+      .photo-card {
+        position: relative;
+        height: 582px;
+        margin-top: 32px;
+        overflow: hidden;
+        border: 1px solid rgba(81, 125, 217, 0.2);
+        border-radius: 36px;
+        background: #17213c;
+      }
+
+      .photo-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 24%;
+        opacity: 0.86;
+      }
+
+      .photo-card::before {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        inset: 0;
+        background:
+          linear-gradient(rgba(160, 250, 81, 0.28) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(160, 250, 81, 0.28) 1px, transparent 1px),
+          linear-gradient(180deg, transparent 0%, rgba(9, 16, 34, 0.46) 100%);
+        background-size: 55px 55px, 55px 55px, 100% 100%;
+      }
+
+      .scan-line {
+        position: absolute;
+        z-index: 2;
+        right: 0;
+        left: 0;
+        top: 273px;
+        height: 4px;
+        background: var(--lime);
+        box-shadow: 0 0 22px 8px rgba(167, 249, 71, 0.62);
+      }
+
+      .scan-label {
+        position: absolute;
+        z-index: 3;
+        top: 27px;
+        left: 28px;
+        padding: 12px 16px;
+        border-radius: 99px;
+        background: rgba(10, 21, 42, 0.74);
+        color: #f7fbff;
+        font-size: 19px;
+        font-weight: 760;
+      }
+
+      .scan-score {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 22px;
+        margin-top: 28px;
+        padding: 30px;
+      }
+
+      .scan-score small,
+      .metric-label,
+      .section-label {
+        color: #7a88a3;
+        font-size: 18px;
+        font-weight: 780;
+        letter-spacing: 0.09em;
+      }
+
+      .scan-number {
+        margin-top: 8px;
+        color: #1b2948;
+        font-size: 92px;
+        font-weight: 830;
+        letter-spacing: -0.08em;
+        line-height: 0.82;
+      }
+
+      .scan-number b { color: #6a84cc; font-size: 30px; letter-spacing: -0.04em; }
+
+      .scan-note {
+        max-width: 306px;
+        color: #63718d;
+        font-size: 23px;
+        font-weight: 620;
+        line-height: 1.18;
+      }
+
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      .metric {
+        min-height: 153px;
+        padding: 22px 18px;
+        border-radius: 26px;
+        background: #f4f7ff;
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 14px;
+        color: #1c2948;
+        font-size: 37px;
+        letter-spacing: -0.06em;
+      }
+
+      .metric:nth-child(2) strong { color: #4b75d8; }
+      .metric:nth-child(3) strong { color: #71b52f; }
+
+      .energy-card {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 24px;
+        min-height: 455px;
+        margin-top: 35px;
+        padding: 34px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #f9fbff, #e7efff);
+      }
+
+      .energy-card::after {
+        content: "";
+        position: absolute;
+        width: 230px;
+        height: 230px;
+        right: -74px;
+        bottom: -104px;
+        border-radius: 50%;
+        background: rgba(132, 180, 255, 0.28);
+      }
+
+      .energy-copy { position: relative; z-index: 1; }
+
+      .energy-total {
+        margin: 21px 0 8px;
+        color: #1a2747;
+        font-size: 77px;
+        font-weight: 820;
+        letter-spacing: -0.085em;
+      }
+
+      .energy-total span { color: #74829d; font-size: 26px; font-weight: 680; letter-spacing: -0.03em; }
+
+      .bar-track {
+        width: 100%;
+        height: 17px;
+        margin-top: 24px;
+        overflow: hidden;
+        border-radius: 99px;
+        background: #d6deef;
+      }
+
+      .bar-fill {
+        width: 68%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #4f7ee4, #92a8ff);
+      }
+
+      .ring {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        width: 245px;
+        height: 245px;
+        place-items: center;
+        align-self: center;
+        border-radius: 50%;
+        background: conic-gradient(#668ae6 0 246deg, #cfd9ef 246deg 360deg);
+      }
+
+      .ring::before {
+        content: "";
+        position: absolute;
+        inset: 25px;
+        border-radius: 50%;
+        background: #f8fbff;
+      }
+
+      .ring b,
+      .ring span { position: relative; z-index: 1; }
+      .ring b { color: #1b2948; font-size: 51px; letter-spacing: -0.07em; }
+      .ring span { margin-top: -78px; color: #71809a; font-size: 19px; font-weight: 730; }
+
+      .macro-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 22px;
+      }
+
+      .macro { padding: 22px; }
+      .macro strong { display: block; margin-top: 13px; color: #1c2948; font-size: 42px; letter-spacing: -0.07em; }
+      .macro small { color: #7c89a2; font-size: 18px; font-weight: 700; }
+
+      .primary-action {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 90px;
+        margin-top: 28px;
+        border-radius: 28px;
+        background: var(--lime);
+        color: #243225;
+        font-size: 27px;
+        font-weight: 800;
+      }
+
+      .greeting { margin: 14px 0 34px; color: #1c2948; font-size: 58px; font-weight: 810; letter-spacing: -0.065em; }
+      .greeting span { color: #557bd9; }
+
+      .today-card {
+        padding: 33px;
+        background: linear-gradient(135deg, #24375f, #365caa);
+        color: #fff;
+      }
+
+      .today-card .section-label { color: rgba(236, 243, 255, 0.66); }
+      .today-card h3 { max-width: 540px; margin-top: 17px; font-size: 53px; line-height: 0.96; letter-spacing: -0.06em; }
+      .today-card p { max-width: 580px; margin-top: 19px; color: rgba(255, 255, 255, 0.72); font-size: 25px; font-weight: 560; line-height: 1.2; }
+
+      .today-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 38px; }
+      .today-footer b { display: inline-flex; padding: 15px 20px; border-radius: 99px; background: var(--lime); color: #253424; font-size: 20px; }
+      .today-footer span { color: rgba(255, 255, 255, 0.76); font-size: 22px; font-weight: 650; }
+
+      .schedule-title { margin: 36px 0 20px; color: #1d2a49; font-size: 33px; font-weight: 790; letter-spacing: -0.045em; }
+
+      .schedule-item {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        min-height: 131px;
+        margin-top: 16px;
+        padding: 20px;
+      }
+
+      .schedule-icon {
+        display: grid;
+        width: 83px;
+        height: 83px;
+        place-items: center;
+        border-radius: 24px;
+        background: #e6edff;
+        color: #577bd7;
+        font-size: 31px;
+      }
+
+      .schedule-item strong { display: block; color: #1e2b4b; font-size: 27px; letter-spacing: -0.035em; }
+      .schedule-item small { display: block; margin-top: 7px; color: #7c89a2; font-size: 20px; font-weight: 650; }
+      .schedule-item > span { margin-left: auto; color: #6980b7; font-size: 26px; }
+
+      .workout-summary {
+        display: flex;
+        gap: 18px;
+        margin: 29px 0 25px;
+      }
+
+      .workout-summary div { flex: 1; padding: 22px; border-radius: 25px; background: #edf3ff; }
+      .workout-summary span { display: block; color: #77849e; font-size: 18px; font-weight: 750; }
+      .workout-summary strong { display: block; margin-top: 10px; color: #1d2a49; font-size: 31px; letter-spacing: -0.045em; }
+
+      .exercise-card {
+        display: flex;
+        align-items: center;
+        gap: 21px;
+        min-height: 148px;
+        margin-top: 17px;
+        padding: 19px;
+      }
+
+      .exercise-icon {
+        position: relative;
+        width: 98px;
+        height: 98px;
+        flex: none;
+        border-radius: 28px;
+        background: linear-gradient(135deg, #405f9e, #8aa4ef);
+      }
+
+      .exercise-icon::before,
+      .exercise-icon::after {
+        content: "";
+        position: absolute;
+        left: 25px;
+        width: 48px;
+        height: 10px;
+        border-radius: 99px;
+        background: #fff;
+        transform: rotate(-33deg);
+      }
+
+      .exercise-icon::before { top: 35px; }
+      .exercise-icon::after { top: 54px; }
+      .exercise-card strong { display: block; color: #1c2948; font-size: 28px; letter-spacing: -0.04em; }
+      .exercise-card small { display: block; margin-top: 7px; color: #7b88a2; font-size: 20px; font-weight: 650; }
+      .exercise-card b { margin-left: auto; color: #5578d3; font-size: 22px; }
+
+      .coach-banner {
+        padding: 30px;
+        background: linear-gradient(135deg, #273b69, #547ed8);
+        color: #fff;
+      }
+
+      .coach-banner .section-label { color: rgba(241, 246, 255, 0.66); }
+      .coach-banner h3 { margin-top: 15px; font-size: 47px; letter-spacing: -0.06em; line-height: 0.97; }
+      .coach-banner p { margin-top: 17px; color: rgba(255, 255, 255, 0.75); font-size: 23px; font-weight: 570; line-height: 1.19; }
+
+      .chat-row { display: flex; gap: 15px; margin-top: 27px; }
+      .coach-avatar { display: grid; width: 57px; height: 57px; flex: none; place-items: center; border-radius: 20px; background: var(--lime); color: #2c3b27; font-size: 25px; font-weight: 900; }
+      .bubble { max-width: 672px; padding: 20px 24px; border-radius: 25px 25px 25px 8px; color: #33415e; font-size: 24px; font-weight: 610; line-height: 1.2; }
+      .bubble.incoming { background: #edf3ff; }
+      .bubble.outgoing { margin-left: 145px; border-radius: 25px 25px 8px 25px; background: #dce8ff; color: #405e9f; }
+
+      .suggestion { display: flex; align-items: center; justify-content: space-between; margin-top: 25px; padding: 26px; }
+      .suggestion strong { display: block; color: #1c2948; font-size: 26px; letter-spacing: -0.035em; }
+      .suggestion small { display: block; margin-top: 8px; color: #78859f; font-size: 20px; font-weight: 630; }
+      .suggestion b { color: #5a7bd2; font-size: 28px; }
+
+      .goal-card { margin-top: 29px; padding: 30px; }
+      .goal-card h3 { margin-top: 15px; color: #1c2948; font-size: 43px; letter-spacing: -0.06em; }
+      .goal-card p { margin-top: 12px; color: #77849d; font-size: 23px; font-weight: 580; }
+
+      .chart {
+        position: relative;
+        height: 292px;
+        margin-top: 27px;
+        overflow: hidden;
+        border-radius: 25px;
+        background:
+          linear-gradient(rgba(126, 146, 188, 0.13) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(126, 146, 188, 0.13) 1px, transparent 1px),
+          #f4f7ff;
+        background-size: 100% 73px, 145px 100%, auto;
+      }
+
+      .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+      .progress-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 22px; }
+      .progress-stat { padding: 26px; }
+      .progress-stat strong { display: block; margin-top: 13px; color: #1c2948; font-size: 44px; letter-spacing: -0.07em; }
+      .progress-stat:nth-child(2) strong { color: #5d83de; }
+
+      .tabbar {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        height: 158px;
+        padding: 19px 38px 29px;
+        border-top: 1px solid #dbe4f4;
+        background: rgba(250, 252, 255, 0.95);
+        color: #92a0ba;
+      }
+
+      .tabbar span { display: grid; place-items: center; gap: 7px; font-size: 18px; font-weight: 720; }
+      .tabbar b { color: #6686d9; font-size: 28px; }
+      .tabbar span.active { color: #385ba9; }
+    </style>
+  </head>
+  <body>
+    <section class="cover scan" data-cover="scan">
+      <div class="hero">
+        <p class="eyebrow">AI BODY SCAN</p>
+        <h1>See your physique.<br><span>Know your next move.</span></h1>
+        <p class="hero-copy">Personalized body insights, built from one photo.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌁</span></div>
+        <div class="phone-body">
+          <h2 class="screen-title">Body Scan</h2>
+          <p class="screen-subtitle">Your tailored physique snapshot</p>
+          <div class="top-chip"><i></i> Scan complete</div>
+          <div class="photo-card"><img src="assets/body-scan-photo.png" alt="Body scan reference"><span class="scan-label">AI analysis</span><span class="scan-line"></span></div>
+          <div class="soft-card scan-score"><div><small>OVERALL SCORE</small><div class="scan-number">78 <b>/ 100</b></div></div><p class="scan-note">Strong foundation. Focus your plan on consistent progression.</p></div>
+          <div class="metrics-grid"><div class="metric"><span class="metric-label">BUILD</span><strong>88</strong></div><div class="metric"><span class="metric-label">BALANCE</span><strong>85</strong></div><div class="metric"><span class="metric-label">GOAL FIT</span><strong>91</strong></div></div>
+        </div>
+        <div class="tabbar"><span><b>⌂</b>Today</span><span><b>◴</b>Plan</span><span class="active"><b>◉</b>Scan</span><span><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <section class="cover nutrition" data-cover="nutrition">
+      <div class="hero">
+        <p class="eyebrow">SMART NUTRITION</p>
+        <h1>Calories made<br><span>effortless.</span></h1>
+        <p class="hero-copy">A clearer way to fuel your training and your progress.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌕</span></div>
+        <div class="phone-body">
+          <h2 class="screen-title">Today’s nutrition</h2>
+          <p class="screen-subtitle">Wednesday, October 15</p>
+          <div class="soft-card energy-card"><div class="energy-copy"><span class="section-label">DAILY ENERGY</span><div class="energy-total">1,920 <span>kcal</span></div><p class="screen-subtitle">580 kcal remaining</p><div class="bar-track"><div class="bar-fill"></div></div></div><div class="ring"><b>68%</b><span>complete</span></div></div>
+          <div class="macro-grid"><div class="soft-card macro"><small>PROTEIN</small><strong>144g</strong></div><div class="soft-card macro"><small>CARBS</small><strong>182g</strong></div><div class="soft-card macro"><small>FATS</small><strong>58g</strong></div></div>
+          <div class="primary-action">＋ Log food</div>
+          <h3 class="schedule-title">Today’s meals</h3>
+          <div class="soft-card schedule-item"><span class="schedule-icon">☀</span><div><strong>Breakfast</strong><small>480 kcal · 36g protein</small></div><span>›</span></div>
+          <div class="soft-card schedule-item"><span class="schedule-icon">◐</span><div><strong>Lunch</strong><small>620 kcal · 48g protein</small></div><span>›</span></div>
+        </div>
+        <div class="tabbar"><span><b>⌂</b>Today</span><span><b>◴</b>Plan</span><span class="active"><b>◉</b>Nutrition</span><span><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <section class="cover home" data-cover="home">
+      <div class="hero">
+        <p class="eyebrow">YOUR DAILY PLAN</p>
+        <h1>Your next win<br>is <span>ready.</span></h1>
+        <p class="hero-copy">Everything you need to move forward, in one place.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌁</span></div>
+        <div class="phone-body">
+          <p class="screen-subtitle">Wednesday, October 15</p>
+          <h2 class="greeting">Good morning,<br><span>Alex.</span></h2>
+          <div class="soft-card today-card"><span class="section-label">TODAY’S FOCUS</span><h3>Upper body strength.</h3><p>Build your pressing power with a focused 45 minute session.</p><div class="today-footer"><b>Start workout</b><span>45 min · 6 exercises</span></div></div>
+          <h3 class="schedule-title">Your day</h3>
+          <div class="soft-card schedule-item"><span class="schedule-icon">⚡</span><div><strong>Workout</strong><small>Upper body · 45 min</small></div><span>›</span></div>
+          <div class="soft-card schedule-item"><span class="schedule-icon">◒</span><div><strong>Nutrition</strong><small>580 kcal remaining</small></div><span>›</span></div>
+          <div class="soft-card schedule-item"><span class="schedule-icon">◌</span><div><strong>Check in</strong><small>Weekly review due today</small></div><span>›</span></div>
+        </div>
+        <div class="tabbar"><span class="active"><b>⌂</b>Today</span><span><b>◴</b>Plan</span><span><b>◉</b>Scan</span><span><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <section class="cover workouts" data-cover="workouts">
+      <div class="hero">
+        <p class="eyebrow">CUSTOM WORKOUTS</p>
+        <h1>Every workout,<br><span>tailored.</span></h1>
+        <p class="hero-copy">Train with a plan that adapts to your goals and recovery.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌕</span></div>
+        <div class="phone-body">
+          <h2 class="screen-title">Upper body<br>strength</h2>
+          <p class="screen-subtitle">Built around your goals · 45 min</p>
+          <div class="workout-summary"><div><span>EXERCISES</span><strong>6</strong></div><div><span>WORKING SETS</span><strong>18</strong></div><div><span>LEVEL</span><strong>INT.</strong></div></div>
+          <div class="primary-action">Start today’s workout</div>
+          <h3 class="schedule-title">Your session</h3>
+          <div class="soft-card exercise-card"><span class="exercise-icon"></span><div><strong>Barbell bench press</strong><small>4 sets · 6–8 reps</small></div><b>›</b></div>
+          <div class="soft-card exercise-card"><span class="exercise-icon"></span><div><strong>Incline dumbbell press</strong><small>3 sets · 8–10 reps</small></div><b>›</b></div>
+          <div class="soft-card exercise-card"><span class="exercise-icon"></span><div><strong>Seated shoulder press</strong><small>3 sets · 10–12 reps</small></div><b>›</b></div>
+          <div class="soft-card exercise-card"><span class="exercise-icon"></span><div><strong>Cable lateral raises</strong><small>3 sets · 12–15 reps</small></div><b>›</b></div>
+        </div>
+        <div class="tabbar"><span><b>⌂</b>Today</span><span class="active"><b>◴</b>Plan</span><span><b>◉</b>Scan</span><span><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <section class="cover coach" data-cover="coach">
+      <div class="hero">
+        <p class="eyebrow">ASCENDR AI COACH</p>
+        <h1>Coaching that<br><span>keeps up.</span></h1>
+        <p class="hero-copy">A smart coach that helps you stay consistent every day.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌁</span></div>
+        <div class="phone-body">
+          <h2 class="screen-title">Your AI coach</h2>
+          <p class="screen-subtitle">Here when you need direction</p>
+          <div class="soft-card coach-banner"><span class="section-label">TODAY’S CHECK-IN</span><h3>Let’s make your plan work for you.</h3><p>Ask about your workout, recovery, nutrition, or next best step.</p></div>
+          <div class="chat-row"><span class="coach-avatar">A</span><div class="bubble incoming">You’ve got upper body today. Want me to adjust it for your shoulder recovery?</div></div>
+          <div class="bubble outgoing">Yes, keep it challenging but pain-free.</div>
+          <div class="soft-card suggestion"><div><strong>Adapted your session</strong><small>Updated exercise order and loading</small></div><b>›</b></div>
+          <div class="soft-card suggestion"><div><strong>Nutrition check</strong><small>Protein is 32g below your target</small></div><b>›</b></div>
+        </div>
+        <div class="tabbar"><span><b>⌂</b>Today</span><span><b>◴</b>Plan</span><span class="active"><b>✦</b>Coach</span><span><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <section class="cover progress" data-cover="progress">
+      <div class="hero">
+        <p class="eyebrow">VISIBLE PROGRESS</p>
+        <h1>See the proof.<br><span>Keep climbing.</span></h1>
+        <p class="hero-copy">The metrics that make every week of work visible.</p>
+      </div>
+      <div class="phone">
+        <div class="status-row"><span>9:41</span><div class="status-icons"><span>▮▮▮</span><span>◒</span><span>▰</span></div></div>
+        <div class="app-header"><img class="app-mark" src="assets/ascendr-logo.png" alt="Ascendr"><span class="circle-button">⌁</span></div>
+        <div class="phone-body">
+          <h2 class="screen-title">Your progress</h2>
+          <p class="screen-subtitle">Small wins. Big momentum.</p>
+          <div class="soft-card goal-card"><span class="section-label">CURRENT GOAL</span><h3>Build strength</h3><p>On track for your October target</p><div class="bar-track"><div class="bar-fill" style="width: 78%"></div></div></div>
+          <h3 class="schedule-title">Strength trend</h3>
+          <div class="chart"><svg viewBox="0 0 880 292" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#789cf0" stop-opacity="0.4"/><stop offset="100%" stop-color="#789cf0" stop-opacity="0"/></linearGradient></defs><path d="M0 245 C90 223 120 210 178 216 S280 183 350 194 S465 137 525 145 S653 116 705 98 S800 62 880 36 L880 292 L0 292 Z" fill="url(#area)"/><path d="M0 245 C90 223 120 210 178 216 S280 183 350 194 S465 137 525 145 S653 116 705 98 S800 62 880 36" fill="none" stroke="#547bdb" stroke-linecap="round" stroke-width="11"/></svg></div>
+          <div class="progress-grid"><div class="soft-card progress-stat"><span class="metric-label">VOLUME</span><strong>+18%</strong></div><div class="soft-card progress-stat"><span class="metric-label">STREAK</span><strong>14 days</strong></div></div>
+          <div class="soft-card suggestion"><div><strong>Weekly report is ready</strong><small>Review your strength, nutrition, and recovery</small></div><b>›</b></div>
+        </div>
+        <div class="tabbar"><span><b>⌂</b>Today</span><span><b>◴</b>Plan</span><span><b>◉</b>Scan</span><span class="active"><b>◌</b>Progress</span></div>
+      </div>
+    </section>
+
+    <script>
+      const searchParams = new URLSearchParams(window.location.search);
+      const selectedCover = searchParams.get("cover") || "scan";
+      const captureOffset = Number(searchParams.get("offset") || 0);
+      const cover = document.querySelector(`[data-cover="${selectedCover}"]`) || document.querySelector(".cover");
+      if (captureOffset > 0) {
+        document.body.classList.add("capture-slice");
+        document.body.style.setProperty("--capture-offset", `${captureOffset}px`);
+      }
+      cover.classList.add("is-active");
+    </script>
+  </body>
+</html>

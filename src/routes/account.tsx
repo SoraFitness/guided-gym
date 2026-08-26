@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { AscendrLogo } from "@/components/AscendrLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthRedirectUrl, isAccountSession, useAuthSession } from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
@@ -170,7 +169,7 @@ function AccountScreen() {
       const redirectTo = getAuthRedirectUrl(destination);
       const result = isLegacyAnonymousSession
         ? await supabase.auth.linkIdentity({ provider, options: { redirectTo } })
-        : await lovable.auth.signInWithOAuth(provider, { redirect_uri: redirectTo });
+        : await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (result.error) throw result.error;
     } catch (error) {
       console.error(`[account] ${providerName} sign-in failed`, error);

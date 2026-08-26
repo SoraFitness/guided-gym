@@ -14,7 +14,6 @@ variables.
 | `OPENROUTER_API_KEY` | Secret | Coach, scans, food scan, reports, workout plans, cron | `ai-gateway`, `finalize-weekly-reports` |
 | `OPENROUTER_FACE_SCAN_API_KEY` | Secret | Face Scan | `ai-gateway` |
 | `OPENROUTER_BODY_SCAN_API_KEY` | Secret | Body Scan | `ai-gateway` |
-| `LOVABLE_API_KEY` | Secret | Food Scan, progress photos, reports, cron | `ai-gateway`, `finalize-weekly-reports` |
 | `NUTRITIONIX_APP_ID` | Secret credential | Nutrition search | `food-provider` |
 | `NUTRITIONIX_API_KEY` | Secret | Nutrition search | `food-provider` |
 | `USDA_API_KEY` | Secret | USDA food search | `food-provider` |
@@ -49,7 +48,6 @@ npx supabase secrets set --project-ref adzfzimuranhrllbxfyf REVENUECAT_ENTITLEME
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf OPENROUTER_API_KEY=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf OPENROUTER_FACE_SCAN_API_KEY=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf OPENROUTER_BODY_SCAN_API_KEY=<your-value>
-npx supabase secrets set --project-ref adzfzimuranhrllbxfyf LOVABLE_API_KEY=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf NUTRITIONIX_APP_ID=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf NUTRITIONIX_API_KEY=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf USDA_API_KEY=<your-value>
@@ -89,3 +87,11 @@ npx supabase functions serve ai-gateway --env-file supabase/.env.local
 ```
 
 The browser only needs the public values documented in the root `.env.example`.
+
+## Codemagic client configuration
+
+In Codemagic, open the `production` environment-variable group and set
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. These are public
+client configuration values, not server secrets. The iOS workflow fails before
+building if either value is absent, preventing a TestFlight build with an
+unconfigured Supabase client.

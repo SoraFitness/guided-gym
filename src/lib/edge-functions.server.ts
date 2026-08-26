@@ -10,6 +10,30 @@ export type AiGatewayOperation =
   | "workout-plan"
   | "coach";
 
+const LOCAL_PREVIEW_AI_OPERATIONS = {
+  "body-scan-preview": {
+    model: "qwen/qwen3-vl-32b-instruct",
+    maxTokens: 500,
+    title: "Ascendr Body Scan Preview",
+  },
+  "body-scan": {
+    model: "qwen/qwen3-vl-32b-instruct",
+    maxTokens: 2600,
+    title: "Ascendr Body Scan",
+  },
+  "face-scan": {
+    model: "qwen/qwen3-vl-32b-instruct",
+    maxTokens: 1200,
+    title: "Ascendr Face Scan",
+  },
+  coach: {
+    model: "qwen/qwen3.5-flash-02-23",
+    maxTokens: 600,
+    title: "Ascendr Fitness Coach",
+  },
+} as const;
+type LocalPreviewAiOperation = keyof typeof LOCAL_PREVIEW_AI_OPERATIONS;
+
 function edgeConfig() {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -30,10 +54,38 @@ function edgeHeaders(accessToken?: string, operation?: AiGatewayOperation) {
   };
 }
 
+function localPreviewAiConfig(operation: AiGatewayOperation) {
+  if (!import.meta.env.DEV || !isLocalPreviewAiOperation(operation)) return null;
+
+  const apiKey =
+    operation === "face-scan"
+      ? process.env.OPENROUTER_FACE_SCAN_API_KEY || process.env.OPENROUTER_API_KEY
+      : operation === "coach"
+        ? process.env.OPENROUTER_API_KEY
+      : process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
+  return apiKey ? { apiKey, ...LOCAL_PREVIEW_AI_OPERATIONS[operation] } : null;
+}
+
+function isLocalPreviewAiOperation(operation: AiGatewayOperation): operation is LocalPreviewAiOperation {
+  return operation in LOCAL_PREVIEW_AI_OPERATIONS;
+}
+
 export function createAscendrAiProvider(
   accessToken: string | undefined,
   operation: AiGatewayOperation,
 ) {
+  const previewConfig = localPreviewAiConfig(operation);
+  if (previewConfig) {
+    return createOpenAICompatible({
+      name: "openrouter",
+      baseURL: "https://openrouter.ai/api/v1",
+      headers: {
+        Authorization: `Bearer ${previewConfig.apiKey}`,
+        "X-Title": previewConfig.title,
+      },
+    });
+  }
+
   return createOpenAICompatible({
     name: "ascendr-ai-gateway",
     baseURL: edgeFunctionUrl("ai-gateway"),
@@ -46,6 +98,25 @@ export async function fetchAscendrAi(
   operation: AiGatewayOperation,
   payload: unknown,
 ) {
+  const previewConfig = localPreviewAiConfig(operation);
+  if (previewConfig) {
+    const requestPayload =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    return fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${previewConfig.apiKey}`,
+        "X-Title": previewConfig.title,
+      },
+      body: JSON.stringify({
+        ...requestPayload,
+        model: previewConfig.model,
+        max_tokens: previewConfig.maxTokens,
+      }),
+    });
+  }
+
   return fetch(`${edgeFunctionUrl("ai-gateway")}/chat/completions`, {
     method: "POST",
     headers: { ...edgeHeaders(accessToken, operation), "Content-Type": "application/json" },

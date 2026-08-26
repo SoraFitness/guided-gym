@@ -49,21 +49,18 @@ async function generateSummary(input: {
   weightChange: number | null;
   score: number;
 }) {
-  const lovableKey = optionalEnv("LOVABLE_API_KEY");
   const openRouterKey = optionalEnv("OPENROUTER_API_KEY");
-  if (!lovableKey && !openRouterKey) {
+  if (!openRouterKey) {
     return fallbackSummary(input.workouts, input.goals, input.proteinDays);
   }
-  const upstreamUrl = lovableKey
-    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-    : "https://openrouter.ai/api/v1/chat/completions";
-  const headers: Record<string, string> = lovableKey
-    ? { "Content-Type": "application/json", "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" }
-    : { "Content-Type": "application/json", Authorization: `Bearer ${openRouterKey}`, "X-Title": "Ascendr Weekly Report" };
   try {
-    const response = await fetch(upstreamUrl, {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openRouterKey}`,
+        "X-Title": "Ascendr Weekly Report",
+      },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         max_tokens: 900,

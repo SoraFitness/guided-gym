@@ -97,7 +97,7 @@ export const foodLookupService = {
 };
 
 // AI food image scanning lives in src/lib/foodScan.functions.ts and runs
-// against the Lovable AI Gateway. No mock results.
+// against the Supabase AI gateway. No mock results.
 
 export function resultToCustom(r: LookupResult, source: "manual" | "barcode" | "image") {
   return {

@@ -1,11 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import {
-  LOG_LEVEL,
-  PACKAGE_TYPE,
-  Purchases,
-  type CustomerInfo,
-  type PurchasesPackage,
-} from "@revenuecat/purchases-capacitor";
+import type { CustomerInfo, LOG_LEVEL, PurchasesPackage } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
 
@@ -58,6 +52,9 @@ const EMPTY_SUBSCRIPTION: Subscription = {
 };
 const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.trim();
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
+const BROWSER_PREVIEW_ACCESS_EMAIL = import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL
+  ?.trim()
+  .toLowerCase();
 const RUNTIME_CONFIG_TIMEOUT_MS = 8_000;
 const RUNTIME_CONFIG_RETRY_MS = 15_000;
 const RUNTIME_CONFIG_URL =
@@ -70,6 +67,8 @@ let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
 let runtimeApiKeyPromise: Promise<string | null> | null = null;
+type PurchasesClient = typeof import("@revenuecat/purchases-capacitor")["Purchases"];
+let purchasesPromise: Promise<PurchasesClient> | null = null;
 
 function publish(next: Subscription) {
   subscription = next;
@@ -82,6 +81,24 @@ function updateSubscription(next: Partial<Subscription>) {
 
 function isNativePlatform() {
   return typeof window !== "undefined" && Capacitor.isNativePlatform();
+}
+
+function hasBrowserPreviewAccess(email: string | null) {
+  return (
+    import.meta.env.DEV &&
+    !isNativePlatform() &&
+    typeof email === "string" &&
+    email.toLowerCase() === BROWSER_PREVIEW_ACCESS_EMAIL
+  );
+}
+
+async function getPurchases() {
+  if (!purchasesPromise) {
+    purchasesPromise = import("@revenuecat/purchases-capacitor").then(
+      ({ Purchases }) => Purchases,
+    );
+  }
+  return purchasesPromise;
 }
 
 function planFromIdentifier(identifier: string): Plan | null {
@@ -100,11 +117,11 @@ function planFromIdentifier(identifier: string): Plan | null {
 
 function planFromPackage(aPackage: PurchasesPackage): Plan | null {
   switch (aPackage.packageType) {
-    case PACKAGE_TYPE.ANNUAL:
+    case "ANNUAL":
       return "yearly";
-    case PACKAGE_TYPE.MONTHLY:
+    case "MONTHLY":
       return "monthly";
-    case PACKAGE_TYPE.WEEKLY:
+    case "WEEKLY":
       return "weekly";
     default:
       return planFromIdentifier(`${aPackage.identifier} ${aPackage.product.identifier}`);
@@ -262,10 +279,11 @@ async function getRevenueCatApiKey(): Promise<string | null> {
 }
 
 async function refreshRevenueCatState(forceRefresh = false) {
-  if (forceRefresh) await Purchases.invalidateCustomerInfoCache();
+  const purchases = await getPurchases();
+  if (forceRefresh) await purchases.invalidateCustomerInfoCache();
   const [{ customerInfo }, offerings] = await Promise.all([
-    Purchases.getCustomerInfo(),
-    Purchases.getOfferings(),
+    purchases.getCustomerInfo(),
+    purchases.getOfferings(),
   ]);
   applyCustomerInfo(customerInfo);
   applyOfferings(offerings.current?.availablePackages ?? []);
@@ -273,6 +291,18 @@ async function refreshRevenueCatState(forceRefresh = false) {
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
   try {
+    if (hasBrowserPreviewAccess(email)) {
+      publish({
+        ...EMPTY_SUBSCRIPTION,
+        active: true,
+        plan: "yearly",
+        since: new Date().toISOString(),
+        expiresAt: null,
+        ready: true,
+      });
+      return;
+    }
+
     const apiKey = await getRevenueCatApiKey();
     const setupError = setupErrorMessage(apiKey);
     if (setupError) {
@@ -281,27 +311,29 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     }
     if (!apiKey) return;
 
+    const purchases = await getPurchases();
+
     if (!configured) {
-      if (import.meta.env.DEV) await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-      await Purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey });
+      if (import.meta.env.DEV) await purchases.setLogLevel({ level: "DEBUG" as LOG_LEVEL });
+      await purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey });
       configured = true;
       configuredUserId = userId;
-      await Purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
+      await purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
-      const result = await Purchases.logIn({ appUserID: userId });
+      const result = await purchases.logIn({ appUserID: userId });
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
-      const result = await Purchases.logOut();
+      const result = await purchases.logOut();
       configuredUserId = null;
       applyCustomerInfo(result.customerInfo);
     }
 
-    if (userId && email) await Purchases.setEmail({ email });
+    if (userId && email) await purchases.setEmail({ email });
     await refreshRevenueCatState();
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
@@ -405,14 +437,16 @@ export async function purchaseSubscription(plan: Plan): Promise<Subscription> {
     throw new Error("This subscription option is unavailable. Please try again later.");
   }
 
-  const { customerInfo } = await Purchases.purchasePackage({ aPackage });
+  const purchases = await getPurchases();
+  const { customerInfo } = await purchases.purchasePackage({ aPackage });
   applyCustomerInfo(customerInfo);
   return getSubscription();
 }
 
 export async function restorePurchases(): Promise<Subscription> {
   await requireConfiguredRevenueCat();
-  const { customerInfo } = await Purchases.restorePurchases();
+  const purchases = await getPurchases();
+  const { customerInfo } = await purchases.restorePurchases();
   applyCustomerInfo(customerInfo);
   return getSubscription();
 }

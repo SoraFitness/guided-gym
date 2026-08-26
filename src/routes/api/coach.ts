@@ -16,12 +16,21 @@ type Body = {
   userContext?: unknown;
 };
 
+const BROWSER_PREVIEW_ACCESS_USER_ID =
+  import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_USER_ID?.trim();
+
 const SYSTEM_PROMPT = `You are "Coach", the in-app AI fitness coach for the Ascendr fitness app.
 
 PERSONALITY
 - Friendly, direct, motivating. Talk like a smart trainer, not a robot.
-- Concise. Use short paragraphs and bullet lists. Bold key numbers.
+- Concise and easy to scan on a phone. Use short paragraphs, ample blank lines, and bullet lists.
 - Encouraging but honest. Celebrate small wins. Call out unrealistic plans gently.
+
+RESPONSE FORMAT
+- Begin with one short, direct answer or encouragement.
+- Use a clear heading only when it helps, followed by 2-4 short bullet points for the actionable advice.
+- Leave a blank line between sections and avoid dense blocks of text.
+- Bold only the most important numbers or action phrases. End with one simple next question when needed.
 
 WHAT YOU HELP WITH
 - Workout planning, exercise swaps, equipment limitations, form tips.
@@ -102,18 +111,22 @@ export const Route = createFileRoute("/api/coach")({
         }
         const userId = claims.claims.sub as string;
 
-        try {
-          const subscription = await getSubscriptionAccess(token);
-          if (!subscription.active) {
-            return new Response("An active subscription is required.", { status: 402 });
+        const hasBrowserPreviewAccess =
+          import.meta.env.DEV && userId === BROWSER_PREVIEW_ACCESS_USER_ID;
+        if (!hasBrowserPreviewAccess) {
+          try {
+            const subscription = await getSubscriptionAccess(token);
+            if (!subscription.active) {
+              return new Response("An active subscription is required.", { status: 402 });
+            }
+          } catch (error) {
+            if (!(error instanceof SubscriptionVerificationError)) {
+              console.error("[coach] Subscription verification failed", error);
+            }
+            return new Response("Subscription verification is temporarily unavailable.", {
+              status: 503,
+            });
           }
-        } catch (error) {
-          if (!(error instanceof SubscriptionVerificationError)) {
-            console.error("[coach] Subscription verification failed", error);
-          }
-          return new Response("Subscription verification is temporarily unavailable.", {
-            status: 503,
-          });
         }
 
         try {

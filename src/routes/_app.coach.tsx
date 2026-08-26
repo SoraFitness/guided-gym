@@ -25,6 +25,7 @@ import { isAccountSession, useAuthSession, type AuthSession } from "@/lib/authSe
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AscendrLogo } from "@/components/AscendrLogo";
 import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/coach")({
@@ -219,18 +220,22 @@ function CoachChat({ session }: { session: AuthSession }) {
         height: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5.25rem)",
       }}
     >
-      <header className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
-        <div className="min-w-0">
+      <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="size-12 shrink-0 overflow-hidden rounded-2xl border border-neon/30 bg-surface shadow-[0_0_24px_-10px_var(--color-neon)]">
+            <AscendrLogo decorative className="size-full" />
+          </div>
+          <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">
-              Ascendr intelligence
+              Personal training intelligence
             </p>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/10 px-2 py-0.5 text-[8px] font-bold text-emerald-300">
               <span className="size-1.5 rounded-full bg-emerald-300" /> Online
             </span>
           </div>
           <h1 className="mt-1 text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
-            Your AI Coach
+            Ascendr Coach
           </h1>
           <p className="mt-1 truncate text-[11px] text-muted-foreground">
             {session.isAnonymous
@@ -239,6 +244,7 @@ function CoachChat({ session }: { session: AuthSession }) {
                 ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
                 : "Ask about training, nutrition, recovery, or progress"}
           </p>
+        </div>
         </div>
         {messages.length > 0 && (
           <button
@@ -262,8 +268,8 @@ function CoachChat({ session }: { session: AuthSession }) {
             <div className="relative overflow-hidden rounded-[28px] border border-neon/20 bg-gradient-to-br from-neon/[0.12] via-surface to-surface p-5">
               <div className="absolute -right-10 -top-10 size-32 rounded-full bg-neon/10 blur-3xl" />
               <div className="relative flex items-start gap-4">
-                <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground shadow-[0_0_28px_-12px_var(--color-neon)]">
-                  <Brain className="size-6" />
+                <div className="size-12 shrink-0 overflow-hidden rounded-2xl border border-neon/30 bg-surface shadow-[0_0_28px_-12px_var(--color-neon)]">
+                  <AscendrLogo decorative className="size-full" />
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
@@ -390,16 +396,16 @@ function MessageBubble({
   return (
     <div className={cn("flex items-start gap-2.5", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-neon text-neon-foreground">
-          <Brain className="size-4" />
+        <span className="mt-0.5 size-9 shrink-0 overflow-hidden rounded-xl border border-neon/25 bg-surface">
+          <AscendrLogo decorative className="size-full" />
         </span>
       )}
       <div
         className={cn(
-          "max-w-[85%] space-y-2",
+          "max-w-[88%] space-y-3",
           isUser
-            ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5"
-            : "rounded-2xl rounded-tl-md border border-white/[0.055] bg-surface px-4 py-3 text-foreground",
+            ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-3"
+            : "rounded-2xl rounded-tl-md border border-white/[0.055] bg-surface px-4 py-4 text-foreground",
         )}
       >
         {parts.map((p, i) => {
@@ -408,8 +414,8 @@ function MessageBubble({
               <div
                 key={i}
                 className={cn(
-                  "text-sm leading-relaxed prose prose-invert prose-sm max-w-none",
-                  isUser && "prose-p:m-0",
+                  "prose prose-invert prose-sm max-w-none text-[14px] leading-6 prose-p:my-0 prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-0 prose-headings:font-bold prose-ul:my-3 prose-ul:space-y-2 prose-ul:pl-5 prose-ol:my-3 prose-ol:space-y-2 prose-ol:pl-5 prose-li:my-0 prose-li:marker:text-neon prose-strong:font-bold prose-strong:text-white",
+                  isUser && "prose-p:mb-0 prose-ul:mb-0 prose-ol:mb-0",
                 )}
               >
                 <ReactMarkdown>{p.text ?? ""}</ReactMarkdown>

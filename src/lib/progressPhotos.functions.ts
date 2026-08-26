@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createAscendrAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { claimRateLimit } from "@/lib/rateLimit.server";
 import { generateText } from "ai";
@@ -214,7 +214,7 @@ export const compareProgressPhotosAI = createServerFn({ method: "POST" })
     const afterUrl = signed?.find((s) => s.path === after.image_path)?.signedUrl;
     if (!beforeUrl || !afterUrl) throw new Error("Could not load images");
 
-    const gateway = createLovableAiGatewayProvider(context.accessToken, "progress-photo-compare");
+    const gateway = createAscendrAiGatewayProvider(context.accessToken, "progress-photo-compare");
     const model = gateway("google/gemini-2.5-flash");
 
     const beforeDate = new Date(before.taken_on as string);

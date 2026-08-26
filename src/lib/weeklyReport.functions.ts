@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createAscendrAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { generateText } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -446,7 +446,7 @@ async function generateAiText(
   accessToken: string,
 ): Promise<string> {
   try {
-    const gateway = createLovableAiGatewayProvider(accessToken, "weekly-report");
+    const gateway = createAscendrAiGatewayProvider(accessToken, "weekly-report");
     const model = gateway("google/gemini-3-flash-preview");
     const system = `You are a supportive, realistic fitness coach writing a short weekly recap.
 RULES:

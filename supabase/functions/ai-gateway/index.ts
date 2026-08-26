@@ -103,26 +103,20 @@ Deno.serve(async (request) => {
       await requireActiveSubscription(user.id);
     }
 
-    const lovableKey = optionalEnv("LOVABLE_API_KEY");
     const openRouterKey = openRouterKeyFor(operation);
-    const useLovable = ["food-scan", "progress-photo-compare", "weekly-report"].includes(operation) &&
-      Boolean(lovableKey);
-    const apiKey = useLovable ? lovableKey : openRouterKey;
-    if (!apiKey) return jsonResponse({ error: "AI is not configured" }, 503);
+    if (!openRouterKey) return jsonResponse({ error: "AI is not configured" }, 503);
 
     const requestedTokens = Number(payload.max_tokens ?? payload.maxTokens ?? definition.maxTokens);
     const maxTokens = Number.isFinite(requestedTokens)
       ? Math.max(1, Math.min(Math.floor(requestedTokens), definition.maxTokens))
       : definition.maxTokens;
-    const upstreamUrl = useLovable
-      ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-      : "https://openrouter.ai/api/v1/chat/completions";
-    const headers: Record<string, string> = useLovable
-      ? { "Content-Type": "application/json", "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" }
-      : { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, "X-Title": definition.title };
-    const upstream = await fetch(upstreamUrl, {
+    const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openRouterKey}`,
+        "X-Title": definition.title,
+      },
       body: JSON.stringify({ ...payload, model: definition.model, max_tokens: maxTokens }),
     });
     return new Response(upstream.body, { status: upstream.status, headers: responseHeaders(upstream) });

@@ -60,6 +60,14 @@ workflows:
             *) echo "ASCENDR_APP_URL must begin with https://"; exit 1 ;;
           esac
           curl --fail --silent --show-error --location --max-time 20 "$ASCENDR_APP_URL" > /dev/null
+      - name: Verify Supabase client configuration
+        script: |
+          SUPABASE_CLIENT_URL="${VITE_SUPABASE_URL:-${SUPABASE_URL:-}}"
+          SUPABASE_CLIENT_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-${SUPABASE_PUBLISHABLE_KEY:-}}"
+          if [ -z "$SUPABASE_CLIENT_URL" ] || [ -z "$SUPABASE_CLIENT_KEY" ]; then
+            echo "Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the Codemagic production group."
+            exit 1
+          fi
       - name: Install locked dependencies
         script: npm ci --include=dev
       - name: Run Ascendr release checks
