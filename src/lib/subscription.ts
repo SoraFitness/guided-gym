@@ -324,11 +324,9 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       );
       configured = true;
       configuredUserId = userId;
-      await withTimeout(
-        purchases.addCustomerInfoUpdateListener(applyCustomerInfo),
-        PURCHASES_OPERATION_TIMEOUT_MS,
-        "RevenueCat customer updates timed out.",
-      );
+      void purchases.addCustomerInfoUpdateListener(applyCustomerInfo).catch((error: unknown) => {
+        console.warn("[revenuecat] Customer update listener is unavailable", error);
+      });
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
