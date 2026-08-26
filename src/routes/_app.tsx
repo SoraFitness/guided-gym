@@ -78,12 +78,15 @@ function AppShell() {
     subscription.active;
 
   useEffect(() => {
-    if (subscriptionExempt || !ready || session === "loading") return;
+    if (subscriptionExempt || !ready) return;
     if (!profile) {
       navigate({ to: "/onboarding", replace: true });
       return;
     }
-    if (!subscription.ready) return;
+    if (!subscription.ready || session === "loading") {
+      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      return;
+    }
     if (!subscription.active) {
       const resumePath =
         typeof window === "undefined"

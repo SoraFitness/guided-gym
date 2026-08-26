@@ -29,16 +29,23 @@ function IndexRedirect() {
   }, [ready, session, subscription.ready]);
 
   useEffect(() => {
-    if (startupTimedOut) {
-      if (profile) {
-        navigate({ to: "/paywall", search: { source: undefined }, replace: true });
-      } else {
-        navigate({ to: "/onboarding", replace: true });
-      }
+    if (!ready) return;
+
+    if (!profile) {
+      navigate({ to: "/onboarding", replace: true });
       return;
     }
 
-    if (!ready || !subscription.ready || session === "loading") return;
+    if (startupTimedOut) {
+      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      return;
+    }
+
+    if (!subscription.ready || session === "loading") {
+      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      return;
+    }
+
     if (profile && subscription.active && !isAccountSession(session)) {
       navigate({ to: "/account", search: { next: "/home" }, replace: true });
       return;
@@ -56,7 +63,7 @@ function IndexRedirect() {
       });
       return;
     }
-    navigate({ to: profile ? "/home" : "/onboarding", replace: true });
+    navigate({ to: "/home", replace: true });
   }, [ready, profile, navigate, session, startupTimedOut, subscription.active, subscription.ready]);
 
   return (

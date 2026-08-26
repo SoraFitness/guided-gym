@@ -54,7 +54,7 @@ const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
 const BROWSER_PREVIEW_ACCESS_EMAIL =
   import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL?.trim().toLowerCase();
-const RUNTIME_CONFIG_TIMEOUT_MS = 8_000;
+const RUNTIME_CONFIG_TIMEOUT_MS = 4_000;
 const RUNTIME_CONFIG_RETRY_MS = 15_000;
 const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
 const RUNTIME_CONFIG_URL =
@@ -309,7 +309,11 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     }
     if (!apiKey) return;
 
-    const purchases = await getPurchases();
+    const purchases = await withTimeout(
+      getPurchases(),
+      PURCHASES_OPERATION_TIMEOUT_MS,
+      "RevenueCat checkout could not be loaded.",
+    );
 
     if (!configured) {
       if (import.meta.env.DEV) await purchases.setLogLevel({ level: "DEBUG" as LOG_LEVEL });
@@ -320,7 +324,11 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       );
       configured = true;
       configuredUserId = userId;
-      await purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
+      await withTimeout(
+        purchases.addCustomerInfoUpdateListener(applyCustomerInfo),
+        PURCHASES_OPERATION_TIMEOUT_MS,
+        "RevenueCat customer updates timed out.",
+      );
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
@@ -376,8 +384,6 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const email = session && session !== "loading" ? session.email : null;
 
   useEffect(() => {
-    if (session === "loading") return;
-
     const synchronize = () => {
       configureQueue = configureQueue
         .catch(() => undefined)
