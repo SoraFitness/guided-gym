@@ -52,11 +52,11 @@ const EMPTY_SUBSCRIPTION: Subscription = {
 };
 const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.trim();
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
-const BROWSER_PREVIEW_ACCESS_EMAIL = import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL
-  ?.trim()
-  .toLowerCase();
+const BROWSER_PREVIEW_ACCESS_EMAIL =
+  import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL?.trim().toLowerCase();
 const RUNTIME_CONFIG_TIMEOUT_MS = 8_000;
 const RUNTIME_CONFIG_RETRY_MS = 15_000;
+const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
 const RUNTIME_CONFIG_URL =
   "https://adzfzimuranhrllbxfyf.supabase.co/functions/v1/revenuecat-config";
 
@@ -67,7 +67,7 @@ let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
 let runtimeApiKeyPromise: Promise<string | null> | null = null;
-type PurchasesClient = typeof import("@revenuecat/purchases-capacitor")["Purchases"];
+type PurchasesClient = (typeof import("@revenuecat/purchases-capacitor"))["Purchases"];
 let purchasesPromise: Promise<PurchasesClient> | null = null;
 
 function publish(next: Subscription) {
@@ -94,9 +94,7 @@ function hasBrowserPreviewAccess(email: string | null) {
 
 async function getPurchases() {
   if (!purchasesPromise) {
-    purchasesPromise = import("@revenuecat/purchases-capacitor").then(
-      ({ Purchases }) => Purchases,
-    );
+    purchasesPromise = import("@revenuecat/purchases-capacitor").then(({ Purchases }) => Purchases);
   }
   return purchasesPromise;
 }
@@ -315,26 +313,48 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
 
     if (!configured) {
       if (import.meta.env.DEV) await purchases.setLogLevel({ level: "DEBUG" as LOG_LEVEL });
-      await purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey });
+      await withTimeout(
+        purchases.configure(userId ? { apiKey, appUserID: userId } : { apiKey }),
+        PURCHASES_OPERATION_TIMEOUT_MS,
+        "RevenueCat setup timed out.",
+      );
       configured = true;
       configuredUserId = userId;
       await purchases.addCustomerInfoUpdateListener(applyCustomerInfo);
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
-      const result = await purchases.logIn({ appUserID: userId });
+      const result = await withTimeout(
+        purchases.logIn({ appUserID: userId }),
+        PURCHASES_OPERATION_TIMEOUT_MS,
+        "RevenueCat account sync timed out.",
+      );
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
       packagesByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
-      const result = await purchases.logOut();
+      const result = await withTimeout(
+        purchases.logOut(),
+        PURCHASES_OPERATION_TIMEOUT_MS,
+        "RevenueCat sign-out timed out.",
+      );
       configuredUserId = null;
       applyCustomerInfo(result.customerInfo);
     }
 
-    if (userId && email) await purchases.setEmail({ email });
-    await refreshRevenueCatState();
+    if (userId && email) {
+      await withTimeout(
+        purchases.setEmail({ email }),
+        PURCHASES_OPERATION_TIMEOUT_MS,
+        "RevenueCat account sync timed out.",
+      );
+    }
+    await withTimeout(
+      refreshRevenueCatState(),
+      PURCHASES_OPERATION_TIMEOUT_MS,
+      "RevenueCat subscription check timed out.",
+    );
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
     publish({
@@ -381,7 +401,15 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === "hidden") return;
       configureQueue = configureQueue
         .catch(() => undefined)
-        .then(() => (configured && configuredUserId ? refreshRevenueCatState(true) : undefined))
+        .then(() =>
+          configured && configuredUserId
+            ? withTimeout(
+                refreshRevenueCatState(true),
+                PURCHASES_OPERATION_TIMEOUT_MS,
+                "RevenueCat subscription refresh timed out.",
+              )
+            : undefined,
+        )
         .catch((error) => {
           console.error("[revenuecat] Could not refresh subscription state", error);
           updateSubscription({

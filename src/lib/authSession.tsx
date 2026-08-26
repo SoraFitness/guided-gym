@@ -13,6 +13,7 @@ export interface AuthSession {
 
 export type AuthSessionState = AuthSession | null | "loading";
 export const NATIVE_AUTH_CALLBACK_URL = "ascendr://auth/callback";
+const AUTH_SESSION_TIMEOUT_MS = 8_000;
 
 type NativeAuthCallback =
   | { type: "code"; code: string }
@@ -107,6 +108,16 @@ export function useAuthSession(): AuthSessionState {
 
   useEffect(() => {
     let mounted = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!mounted) return;
+      console.warn("[auth] Session lookup timed out; continuing signed out");
+      setSession(null);
+    }, AUTH_SESSION_TIMEOUT_MS);
+
+    const setResolvedSession = (nextSession: AuthSession | null) => {
+      window.clearTimeout(timeoutId);
+      if (mounted) setSession(nextSession);
+    };
 
     try {
       void startNativeAuthCallbackListener().catch((error: unknown) => {
@@ -121,30 +132,30 @@ export function useAuthSession(): AuthSessionState {
       void supabase.auth
         .getSession()
         .then(({ data }) => {
-          if (!mounted) return;
-          setSession(toAuthSession(data.session));
+          setResolvedSession(toAuthSession(data.session));
         })
         .catch((error: unknown) => {
           console.warn("[auth] Session is unavailable; continuing locally", error);
-          if (mounted) setSession(null);
+          setResolvedSession(null);
         });
 
       const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        if (!mounted) return;
-        setSession(toAuthSession(nextSession));
+        setResolvedSession(toAuthSession(nextSession));
       });
 
       return () => {
         mounted = false;
+        window.clearTimeout(timeoutId);
         sub.subscription.unsubscribe();
       };
     } catch (error) {
       console.warn("[auth] Supabase is unavailable; continuing locally", error);
-      setSession(null);
+      setResolvedSession(null);
     }
 
     return () => {
       mounted = false;
+      window.clearTimeout(timeoutId);
     };
   }, []);
 
