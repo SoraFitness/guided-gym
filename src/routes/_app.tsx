@@ -32,6 +32,7 @@ const SUBSCRIPTION_EXEMPT_PATHS = new Set([
   "/privacy",
   "/terms",
 ]);
+const STARTUP_RECOVERY_TIMEOUT_MS = 20_000;
 
 function CloudSyncGate({ userId }: { userId: string }) {
   useEffect(() => {
@@ -110,6 +111,20 @@ function AppShell() {
     subscription.ready,
     subscriptionExempt,
   ]);
+
+  useEffect(() => {
+    if (subscriptionExempt || (ready && subscription.ready && session !== "loading")) return;
+
+    const timeoutId = window.setTimeout(() => {
+      if (profile) {
+        navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      } else {
+        navigate({ to: "/onboarding", replace: true });
+      }
+    }, STARTUP_RECOVERY_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [navigate, profile, ready, session, subscription.ready, subscriptionExempt]);
 
   // auto-open tour the first time the user lands in the app with a profile
   useEffect(() => {

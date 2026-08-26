@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useProfile } from "@/lib/profile";
 import { getOnboardingPaywallCheckpoint } from "@/lib/onboardingResume";
 import { useSubscription } from "@/lib/subscription";
@@ -9,13 +9,35 @@ export const Route = createFileRoute("/")({
   component: IndexRedirect,
 });
 
+const STARTUP_RECOVERY_TIMEOUT_MS = 20_000;
+
 function IndexRedirect() {
   const navigate = useNavigate();
   const { profile, ready } = useProfile();
   const subscription = useSubscription();
   const session = useAuthSession();
+  const [startupTimedOut, setStartupTimedOut] = useState(false);
 
   useEffect(() => {
+    if (ready && subscription.ready && session !== "loading") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setStartupTimedOut(true);
+    }, STARTUP_RECOVERY_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [ready, session, subscription.ready]);
+
+  useEffect(() => {
+    if (startupTimedOut) {
+      if (profile) {
+        navigate({ to: "/paywall", search: { source: undefined }, replace: true });
+      } else {
+        navigate({ to: "/onboarding", replace: true });
+      }
+      return;
+    }
+
     if (!ready || !subscription.ready || session === "loading") return;
     if (profile && subscription.active && !isAccountSession(session)) {
       navigate({ to: "/account", search: { next: "/home" }, replace: true });
@@ -35,7 +57,7 @@ function IndexRedirect() {
       return;
     }
     navigate({ to: profile ? "/home" : "/onboarding", replace: true });
-  }, [ready, profile, navigate, session, subscription.active, subscription.ready]);
+  }, [ready, profile, navigate, session, startupTimedOut, subscription.active, subscription.ready]);
 
   return (
     <div className="min-h-dvh bg-background flex items-center justify-center">
