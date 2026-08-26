@@ -57,6 +57,8 @@ const BROWSER_PREVIEW_ACCESS_EMAIL =
 const RUNTIME_CONFIG_TIMEOUT_MS = 4_000;
 const RUNTIME_CONFIG_RETRY_MS = 15_000;
 const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
+const OFFERINGS_REQUEST_TIMEOUT_MS = 6_000;
+const OFFERINGS_RETRY_DELAY_MS = 400;
 const RUNTIME_CONFIG_URL =
   "https://adzfzimuranhrllbxfyf.supabase.co/functions/v1/revenuecat-config";
 
@@ -276,15 +278,54 @@ async function getRevenueCatApiKey(): Promise<string | null> {
   return runtimeApiKeyPromise;
 }
 
+function waitFor(delayMs: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+async function loadOfferings(purchases: PurchasesClient) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await withTimeout(
+        purchases.getOfferings(),
+        OFFERINGS_REQUEST_TIMEOUT_MS,
+        "App Store prices timed out.",
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await waitFor(OFFERINGS_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError;
+}
+
 async function refreshRevenueCatState(forceRefresh = false) {
   const purchases = await getPurchases();
   if (forceRefresh) await purchases.invalidateCustomerInfoCache();
-  const [{ customerInfo }, offerings] = await Promise.all([
-    purchases.getCustomerInfo(),
-    purchases.getOfferings(),
-  ]);
-  applyCustomerInfo(customerInfo);
+  const offerings = await loadOfferings(purchases);
   applyOfferings(offerings.current?.availablePackages ?? []);
+
+  try {
+    const { customerInfo } = await withTimeout(
+      purchases.getCustomerInfo(),
+      PURCHASES_OPERATION_TIMEOUT_MS,
+      "RevenueCat subscription check timed out.",
+    );
+    applyCustomerInfo(customerInfo);
+  } catch (error) {
+    console.warn("[revenuecat] Could not refresh customer information", error);
+    updateSubscription({
+      active: false,
+      plan: null,
+      since: null,
+      expiresAt: null,
+      renewalRequired: false,
+      ready: true,
+      error: null,
+    });
+  }
 }
 
 async function syncRevenueCatUser(userId: string | null, email: string | null) {
@@ -356,11 +397,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
         "RevenueCat account sync timed out.",
       );
     }
-    await withTimeout(
-      refreshRevenueCatState(),
-      PURCHASES_OPERATION_TIMEOUT_MS,
-      "RevenueCat subscription check timed out.",
-    );
+    await refreshRevenueCatState();
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
     publish({
