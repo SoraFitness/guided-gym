@@ -217,11 +217,16 @@ function applyOfferings(availablePackages: PurchasesPackage[]) {
   updateSubscription({
     availablePlans,
     prices,
+    ready: true,
     error:
       availablePackages.length === 0 && !subscription.active
         ? "Subscriptions are not available yet. Please try again later."
         : null,
   });
+}
+
+function hasAvailablePlans() {
+  return PLAN_ORDER.some((plan) => subscription.availablePlans[plan]);
 }
 
 function setupErrorMessage(apiKey: string | null) {
@@ -393,11 +398,13 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     }
 
     if (userId && email) {
-      await withTimeout(
+      void withTimeout(
         purchases.setEmail({ email }),
         PURCHASES_OPERATION_TIMEOUT_MS,
         "RevenueCat account sync timed out.",
-      );
+      ).catch((error: unknown) => {
+        console.warn("[revenuecat] Could not sync subscriber email", error);
+      });
     }
     await refreshRevenueCatState();
   } catch (error) {
@@ -433,7 +440,7 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     if (!isNativePlatform()) return;
 
     const retryId = window.setInterval(() => {
-      if (!configured) synchronize();
+      if (!configured || (!subscription.active && !hasAvailablePlans())) synchronize();
     }, RUNTIME_CONFIG_RETRY_MS);
 
     return () => window.clearInterval(retryId);
