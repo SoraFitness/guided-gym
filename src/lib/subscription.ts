@@ -421,6 +421,8 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const email = session && session !== "loading" ? session.email : null;
 
   useEffect(() => {
+    if (session === "loading") return;
+
     const synchronize = () => {
       configureQueue = configureQueue
         .catch(() => undefined)
