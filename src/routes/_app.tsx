@@ -83,10 +83,7 @@ function AppShell() {
       navigate({ to: "/onboarding", replace: true });
       return;
     }
-    if (!subscription.ready || session === "loading") {
-      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
-      return;
-    }
+    if (!subscription.ready || session === "loading") return;
     if (!subscription.active) {
       const resumePath =
         typeof window === "undefined"

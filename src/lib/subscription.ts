@@ -1,11 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import {
-  LOG_LEVEL,
-  PACKAGE_TYPE,
-  Purchases,
-  type CustomerInfo,
-  type PurchasesPackage,
-} from "@revenuecat/purchases-capacitor";
+import type { CustomerInfo, PurchasesPackage } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
 
@@ -89,12 +83,20 @@ const CHECKOUT_OFFERING_ERROR =
 const CHECKOUT_PRODUCTS_ERROR =
   "Apple did not return any purchasable Ascendr subscriptions. [RC-EMPTY-PRODUCTS]";
 
+type RevenueCatModule = typeof import("@revenuecat/purchases-capacitor");
+
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
 let packagesByPlan: Partial<Record<Plan, PurchasesPackage>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
+let revenueCatModule: RevenueCatModule | null = null;
+
+async function getRevenueCatModule() {
+  revenueCatModule ??= await import("@revenuecat/purchases-capacitor");
+  return revenueCatModule;
+}
 
 function publish(next: Subscription) {
   subscription = next;
@@ -133,12 +135,12 @@ function planFromIdentifier(identifier: string): Plan | null {
 }
 
 function planFromPackage(aPackage: PurchasesPackage): Plan | null {
-  switch (aPackage.packageType) {
-    case PACKAGE_TYPE.ANNUAL:
+  switch (String(aPackage.packageType)) {
+    case "ANNUAL":
       return "yearly";
-    case PACKAGE_TYPE.MONTHLY:
+    case "MONTHLY":
       return "monthly";
-    case PACKAGE_TYPE.WEEKLY:
+    case "WEEKLY":
       return "weekly";
     default:
       return planFromIdentifier(`${aPackage.identifier} ${aPackage.product.identifier}`);
@@ -254,6 +256,7 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: strin
 }
 
 async function loadCurrentOffering() {
+  const { Purchases } = await getRevenueCatModule();
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -274,6 +277,7 @@ async function loadCurrentOffering() {
 }
 
 async function refreshSubscription(forceRefresh = false) {
+  const { Purchases } = await getRevenueCatModule();
   if (forceRefresh) await Purchases.invalidateCustomerInfoCache();
   const offerings = await loadCurrentOffering();
   applyOfferings(offerings.current?.availablePackages ?? []);
@@ -317,6 +321,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   }
 
   try {
+    const { LOG_LEVEL, Purchases } = await getRevenueCatModule();
     if (!configured) {
       if (import.meta.env.DEV) await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
       await withTimeout(
@@ -439,6 +444,7 @@ async function requireConfiguredRevenueCat() {
 
 export async function purchaseSubscription(plan: Plan): Promise<Subscription> {
   await requireConfiguredRevenueCat();
+  const { Purchases } = await getRevenueCatModule();
   const aPackage = packagesByPlan[plan];
   if (!aPackage) throw new Error(subscription.error ?? CHECKOUT_PRODUCTS_ERROR);
 
@@ -449,6 +455,7 @@ export async function purchaseSubscription(plan: Plan): Promise<Subscription> {
 
 export async function restorePurchases(): Promise<Subscription> {
   await requireConfiguredRevenueCat();
+  const { Purchases } = await getRevenueCatModule();
   const { customerInfo } = await Purchases.restorePurchases();
   applyCustomerInfo(customerInfo);
   return getSubscription();

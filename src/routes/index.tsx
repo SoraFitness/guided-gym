@@ -41,10 +41,7 @@ function IndexRedirect() {
       return;
     }
 
-    if (!subscription.ready || session === "loading") {
-      navigate({ to: "/paywall", search: { source: undefined }, replace: true });
-      return;
-    }
+    if (!subscription.ready || session === "loading") return;
 
     if (profile && subscription.active && !isAccountSession(session)) {
       navigate({ to: "/account", search: { next: "/home" }, replace: true });

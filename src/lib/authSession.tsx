@@ -108,6 +108,8 @@ export function useAuthSession(): AuthSessionState {
 
   useEffect(() => {
     let mounted = true;
+    let initialSessionResolved = false;
+    let pendingSession: AuthSession | null = null;
     const timeoutId = window.setTimeout(() => {
       if (!mounted) return;
       console.warn("[auth] Session lookup timed out; continuing signed out");
@@ -120,28 +122,32 @@ export function useAuthSession(): AuthSessionState {
     };
 
     try {
-      void startNativeAuthCallbackListener().catch((error: unknown) => {
-        console.warn("[auth] Native callback listener is unavailable", error);
-      });
-
-      // The core training experience must still open in builds without
-      // optional Supabase client credentials (for example a TestFlight build
-      // using the hosted web app). The proxy throws synchronously when those
-      // values are absent, so keep auth as an unavailable, signed-out state
-      // instead of letting the route error boundary replace the paywall.
-      void supabase.auth
-        .getSession()
-        .then(({ data }) => {
-          setResolvedSession(toAuthSession(data.session));
-        })
-        .catch((error: unknown) => {
-          console.warn("[auth] Session is unavailable; continuing locally", error);
-          setResolvedSession(null);
-        });
-
       const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        setResolvedSession(toAuthSession(nextSession));
+        const next = toAuthSession(nextSession);
+        if (!initialSessionResolved) {
+          pendingSession = next;
+          return;
+        }
+        setResolvedSession(next);
       });
+
+      void (async () => {
+        try {
+          await startNativeAuthCallbackListener();
+        } catch (error: unknown) {
+          console.warn("[auth] Native callback listener is unavailable", error);
+        }
+
+        try {
+          const { data } = await supabase.auth.getSession();
+          initialSessionResolved = true;
+          setResolvedSession(toAuthSession(data.session) ?? pendingSession);
+        } catch (error: unknown) {
+          console.warn("[auth] Session is unavailable; continuing locally", error);
+          initialSessionResolved = true;
+          setResolvedSession(pendingSession);
+        }
+      })();
 
       return () => {
         mounted = false;
