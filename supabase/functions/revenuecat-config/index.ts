@@ -20,15 +20,15 @@ interface StoreProductConfig {
   productIdentifier: string;
 }
 
-async function getStoreProducts(): Promise<StoreProductConfig[]> {
-  const secretApiKey = Deno.env.get("REVENUECAT_SECRET_API_KEY")?.trim();
-  if (!secretApiKey) return [];
-
+async function getStoreProducts(apiKey: string): Promise<StoreProductConfig[]> {
   try {
     const response = await fetch(
       "https://api.revenuecat.com/v1/subscribers/ascendr-storekit-fallback/offerings",
       {
-        headers: { Authorization: `Bearer ${secretApiKey}` },
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "X-Platform": "ios",
+        },
         cache: "no-store",
       },
     );
@@ -71,5 +71,5 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "RevenueCat iOS configuration is unavailable" }, 503);
   }
 
-  return jsonResponse({ apiKey, storeProducts: await getStoreProducts() });
+  return jsonResponse({ apiKey, storeProducts: await getStoreProducts(apiKey) });
 });
