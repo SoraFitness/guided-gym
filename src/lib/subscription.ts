@@ -1,10 +1,8 @@
 import { Capacitor } from "@capacitor/core";
 import {
   LOG_LEVEL,
-  PACKAGE_TYPE,
   Purchases,
   type CustomerInfo,
-  type PurchasesPackage,
   type PurchasesStoreProduct,
 } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
@@ -78,25 +76,25 @@ const BROWSER_PREVIEW_ACCESS_EMAIL =
   import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL?.trim().toLowerCase();
 const REVENUECAT_RETRY_MS = 15_000;
 const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
-const OFFERINGS_REQUEST_TIMEOUT_MS = 6_000;
-const OFFERINGS_RETRY_DELAY_MS = 400;
-const STOREKIT_PRODUCT_CONFIGS: FallbackStoreProductConfig[] = [
-  { packageIdentifier: "$rc_annual", productIdentifier: "ascendr.pro.annual" },
-  { packageIdentifier: "$rc_monthly", productIdentifier: "ascendr.pro.monthly" },
-  { packageIdentifier: "$rc_weekly", productIdentifier: "ascendr.pro.weekly" },
+const STOREKIT_PRODUCT_REQUEST_TIMEOUT_MS = 25_000;
+const STOREKIT_PRODUCT_RETRY_DELAY_MS = 750;
+const CHECKOUT_UNAVAILABLE_MESSAGE =
+  "App Store subscription options are unavailable. Check your connection and try again.";
+const STOREKIT_PRODUCT_CONFIGS: StoreProductConfig[] = [
+  { productIdentifier: "ascendr.pro.annual" },
+  { productIdentifier: "ascendr.pro.monthly" },
+  { productIdentifier: "ascendr.pro.weekly" },
 ];
 
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
-let packagesByPlan: Partial<Record<Plan, PurchasesPackage>> = {};
 let storeProductsByPlan: Partial<Record<Plan, PurchasesStoreProduct>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
 type PurchasesClient = typeof Purchases;
 
-interface FallbackStoreProductConfig {
-  packageIdentifier: string;
+interface StoreProductConfig {
   productIdentifier: string;
 }
 
@@ -140,52 +138,8 @@ function planFromIdentifier(identifier: string): Plan | null {
   return null;
 }
 
-function planFromPackage(aPackage: PurchasesPackage): Plan | null {
-  switch (aPackage.packageType) {
-    case PACKAGE_TYPE.ANNUAL:
-      return "yearly";
-    case PACKAGE_TYPE.MONTHLY:
-      return "monthly";
-    case PACKAGE_TYPE.WEEKLY:
-      return "weekly";
-    default:
-      return planFromIdentifier(`${aPackage.identifier} ${aPackage.product.identifier}`);
-  }
-}
-
 function planFromProductIdentifier(productIdentifier: string): Plan | null {
-  const configuredPlan = PLAN_ORDER.find(
-    (plan) => packagesByPlan[plan]?.product.identifier === productIdentifier,
-  );
-  return configuredPlan ?? planFromIdentifier(productIdentifier);
-}
-
-function calculateYearlyDiscount(
-  yearlyPackage: PurchasesPackage | undefined,
-  monthlyPackage: PurchasesPackage | undefined,
-) {
-  const yearlyPrice = yearlyPackage?.product.price;
-  const monthlyPrice = monthlyPackage?.product.price;
-  if (
-    typeof yearlyPrice !== "number" ||
-    typeof monthlyPrice !== "number" ||
-    yearlyPrice <= 0 ||
-    monthlyPrice <= 0
-  ) {
-    return null;
-  }
-
-  const annualMonthlyCost = monthlyPrice * 12;
-  if (yearlyPrice >= annualMonthlyCost) return null;
-
-  return Math.round((1 - yearlyPrice / annualMonthlyCost) * 100);
-}
-
-function createPlanPrice(plan: Plan, yearlyDiscount: number | null): PlanPrice {
-  return {
-    ...PLAN_PRICES[plan],
-    badge: plan === "yearly" && yearlyDiscount ? `SAVE ${yearlyDiscount}%` : undefined,
-  };
+  return planFromIdentifier(productIdentifier);
 }
 
 function applyCustomerInfo(customerInfo: CustomerInfo) {
@@ -203,38 +157,6 @@ function applyCustomerInfo(customerInfo: CustomerInfo) {
   });
 }
 
-function applyOfferings(availablePackages: PurchasesPackage[]) {
-  const nextPackages: Partial<Record<Plan, PurchasesPackage>> = {};
-  const prices = { ...PLAN_PRICES };
-  const availablePlans = { ...EMPTY_AVAILABLE_PLANS };
-
-  for (const aPackage of availablePackages) {
-    const plan = planFromPackage(aPackage);
-    if (!plan || nextPackages[plan]) continue;
-    nextPackages[plan] = aPackage;
-    availablePlans[plan] = true;
-  }
-
-  const yearlyDiscount = calculateYearlyDiscount(nextPackages.yearly, nextPackages.monthly);
-  for (const plan of PLAN_ORDER) {
-    if (nextPackages[plan]) prices[plan] = createPlanPrice(plan, yearlyDiscount);
-  }
-
-  packagesByPlan = nextPackages;
-  storeProductsByPlan = {};
-  updateSubscription({
-    availablePlans,
-    prices,
-    ready: true,
-    error:
-      availablePackages.length === 0 && !subscription.active
-        ? "Subscriptions are not available yet. Please try again later."
-        : null,
-  });
-
-  return PLAN_ORDER.some((plan) => availablePlans[plan]);
-}
-
 function hasAvailablePlans() {
   return PLAN_ORDER.some((plan) => subscription.availablePlans[plan]);
 }
@@ -245,7 +167,6 @@ function applyStoreProducts(nextProducts: Partial<Record<Plan, PurchasesStorePro
     availablePlans[plan] = Boolean(nextProducts[plan]);
   }
 
-  packagesByPlan = {};
   storeProductsByPlan = nextProducts;
   updateSubscription({
     availablePlans,
@@ -287,65 +208,46 @@ function waitFor(delayMs: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
 }
 
-async function loadOfferings(purchases: PurchasesClient) {
-  let lastError: unknown;
+async function loadStoreProducts(purchases: PurchasesClient) {
+  const plansByProductIdentifier = new Map<string, Plan>();
+  for (const config of STOREKIT_PRODUCT_CONFIGS) {
+    const plan = planFromIdentifier(config.productIdentifier);
+    if (plan) plansByProductIdentifier.set(config.productIdentifier, plan);
+  }
+  if (plansByProductIdentifier.size === 0) throw new Error("No App Store products are configured.");
 
+  let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await withTimeout(
-        purchases.getOfferings(),
-        OFFERINGS_REQUEST_TIMEOUT_MS,
-        "App Store prices timed out.",
+      const { products } = await withTimeout(
+        purchases.getProducts({ productIdentifiers: [...plansByProductIdentifier.keys()] }),
+        STOREKIT_PRODUCT_REQUEST_TIMEOUT_MS,
+        "App Store products timed out.",
       );
+      const nextProducts: Partial<Record<Plan, PurchasesStoreProduct>> = {};
+      for (const product of products) {
+        const plan = plansByProductIdentifier.get(product.identifier);
+        if (plan && !nextProducts[plan]) nextProducts[plan] = product;
+      }
+      if (Object.keys(nextProducts).length === 0) {
+        throw new Error("Apple did not return any configured subscription products.");
+      }
+
+      applyStoreProducts(nextProducts);
+      return;
     } catch (error) {
       lastError = error;
-      if (attempt === 0) await waitFor(OFFERINGS_RETRY_DELAY_MS);
+      if (attempt === 0) await waitFor(STOREKIT_PRODUCT_RETRY_DELAY_MS);
     }
   }
 
   throw lastError;
 }
 
-async function loadStoreProducts(
-  purchases: PurchasesClient,
-  storeProductConfigs: FallbackStoreProductConfig[],
-) {
-  const plansByProductIdentifier = new Map<string, Plan>();
-  for (const config of storeProductConfigs) {
-    const plan =
-      planFromIdentifier(config.packageIdentifier) ?? planFromIdentifier(config.productIdentifier);
-    if (plan) plansByProductIdentifier.set(config.productIdentifier, plan);
-  }
-  if (plansByProductIdentifier.size === 0) return false;
-
-  const { products } = await withTimeout(
-    purchases.getProducts({ productIdentifiers: [...plansByProductIdentifier.keys()] }),
-    OFFERINGS_REQUEST_TIMEOUT_MS,
-    "App Store products timed out.",
-  );
-  const nextProducts: Partial<Record<Plan, PurchasesStoreProduct>> = {};
-  for (const product of products) {
-    const plan = plansByProductIdentifier.get(product.identifier);
-    if (plan && !nextProducts[plan]) nextProducts[plan] = product;
-  }
-  if (Object.keys(nextProducts).length === 0) return false;
-
-  applyStoreProducts(nextProducts);
-  return true;
-}
-
 async function refreshRevenueCatState(forceRefresh = false) {
   const purchases = await getPurchases();
   if (forceRefresh) await purchases.invalidateCustomerInfoCache();
-  const loadedStoreProducts = await loadStoreProducts(purchases, STOREKIT_PRODUCT_CONFIGS).catch(
-    () => false,
-  );
-
-  if (!loadedStoreProducts) {
-    const offerings = await loadOfferings(purchases);
-    const loadedPackages = applyOfferings(offerings.current?.availablePackages ?? []);
-    if (!loadedPackages) throw new Error("No App Store products were returned.");
-  }
+  if (!hasAvailablePlans()) await loadStoreProducts(purchases);
 
   try {
     const { customerInfo } = await withTimeout(
@@ -409,7 +311,6 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
         console.warn("[revenuecat] Customer update listener is unavailable", error);
       });
     } else if (userId && configuredUserId !== userId) {
-      packagesByPlan = {};
       storeProductsByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
       const result = await withTimeout(
@@ -420,7 +321,6 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
-      packagesByPlan = {};
       storeProductsByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
       const result = await withTimeout(
@@ -444,6 +344,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     await refreshRevenueCatState();
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
+    const checkoutReady = configured && hasAvailablePlans();
     publish({
       ...subscription,
       active: false,
@@ -452,7 +353,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       expiresAt: null,
       renewalRequired: false,
       ready: true,
-      error: "We couldn't verify your subscription. Please try again.",
+      error: checkoutReady ? null : CHECKOUT_UNAVAILABLE_MESSAGE,
     });
   }
 }
@@ -499,13 +400,14 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
         )
         .catch((error) => {
           console.error("[revenuecat] Could not refresh subscription state", error);
+          const checkoutReady = configured && hasAvailablePlans();
           updateSubscription({
             active: false,
             plan: null,
             since: null,
             renewalRequired: false,
             ready: true,
-            error: "We couldn't verify your subscription. Please try again.",
+            error: checkoutReady ? null : CHECKOUT_UNAVAILABLE_MESSAGE,
           });
         });
     };
@@ -547,16 +449,13 @@ async function requireConfiguredRevenueCat() {
 
 export async function purchaseSubscription(plan: Plan): Promise<Subscription> {
   await requireConfiguredRevenueCat();
-  const aPackage = packagesByPlan[plan];
   const storeProduct = storeProductsByPlan[plan];
-  if (!aPackage && !storeProduct) {
+  if (!storeProduct) {
     throw new Error("This subscription option is unavailable. Please try again later.");
   }
 
   const purchases = await getPurchases();
-  const { customerInfo } = aPackage
-    ? await purchases.purchasePackage({ aPackage })
-    : await purchases.purchaseStoreProduct({ product: storeProduct! });
+  const { customerInfo } = await purchases.purchaseStoreProduct({ product: storeProduct });
   applyCustomerInfo(customerInfo);
   return getSubscription();
 }

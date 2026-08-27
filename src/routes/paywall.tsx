@@ -196,8 +196,7 @@ function PaywallScreen() {
     }
   };
 
-  const purchaseUnavailable =
-    !subscription.ready || !subscription.availablePlans[selected] || Boolean(subscription.error);
+  const purchaseUnavailable = !subscription.ready || !subscription.availablePlans[selected];
   const revenueCatPurchaseStatus =
     subscription.error ??
     (!subscription.ready
