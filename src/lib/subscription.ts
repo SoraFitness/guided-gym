@@ -1,8 +1,10 @@
 import { Capacitor } from "@capacitor/core";
 import {
   LOG_LEVEL,
+  PACKAGE_TYPE,
   Purchases,
   type CustomerInfo,
+  type PurchasesPackage,
   type PurchasesStoreProduct,
 } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
@@ -76,6 +78,7 @@ const BROWSER_PREVIEW_ACCESS_EMAIL =
   import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL?.trim().toLowerCase();
 const REVENUECAT_RETRY_MS = 15_000;
 const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
+const OFFERINGS_REQUEST_TIMEOUT_MS = 12_000;
 const STOREKIT_PRODUCT_REQUEST_TIMEOUT_MS = 25_000;
 const STOREKIT_PRODUCT_RETRY_DELAY_MS = 750;
 const CHECKOUT_UNAVAILABLE_MESSAGE =
@@ -88,6 +91,7 @@ const STOREKIT_PRODUCT_CONFIGS: StoreProductConfig[] = [
 
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
+let packagesByPlan: Partial<Record<Plan, PurchasesPackage>> = {};
 let storeProductsByPlan: Partial<Record<Plan, PurchasesStoreProduct>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
@@ -139,7 +143,64 @@ function planFromIdentifier(identifier: string): Plan | null {
 }
 
 function planFromProductIdentifier(productIdentifier: string): Plan | null {
-  return planFromIdentifier(productIdentifier);
+  const configuredPlan = PLAN_ORDER.find(
+    (plan) => packagesByPlan[plan]?.product.identifier === productIdentifier,
+  );
+  return configuredPlan ?? planFromIdentifier(productIdentifier);
+}
+
+function planFromPackage(aPackage: PurchasesPackage): Plan | null {
+  switch (aPackage.packageType) {
+    case PACKAGE_TYPE.ANNUAL:
+      return "yearly";
+    case PACKAGE_TYPE.MONTHLY:
+      return "monthly";
+    case PACKAGE_TYPE.WEEKLY:
+      return "weekly";
+    default:
+      return planFromIdentifier(`${aPackage.identifier} ${aPackage.product.identifier}`);
+  }
+}
+
+function calculateYearlyDiscount(
+  yearlyPackage: PurchasesPackage | undefined,
+  monthlyPackage: PurchasesPackage | undefined,
+) {
+  const yearlyPrice = yearlyPackage?.product.price;
+  const monthlyPrice = monthlyPackage?.product.price;
+  if (
+    typeof yearlyPrice !== "number" ||
+    typeof monthlyPrice !== "number" ||
+    yearlyPrice <= 0 ||
+    monthlyPrice <= 0
+  ) {
+    return null;
+  }
+
+  const annualMonthlyCost = monthlyPrice * 12;
+  if (yearlyPrice >= annualMonthlyCost) return null;
+
+  return Math.round((1 - yearlyPrice / annualMonthlyCost) * 100);
+}
+
+function createPlanPrice(
+  plan: Plan,
+  aPackage: PurchasesPackage,
+  yearlyDiscount: number | null,
+): PlanPrice {
+  const period = plan === "yearly" ? "/year" : plan === "monthly" ? "/month" : "/week";
+  const monthlyPrice = aPackage.product.pricePerMonthString;
+
+  return {
+    label: PLAN_PRICES[plan].label,
+    price: aPackage.product.priceString,
+    per: period,
+    subtitle:
+      plan === "yearly" && monthlyPrice
+        ? `${monthlyPrice}/month`
+        : `Billed ${plan === "yearly" ? "yearly" : plan}`,
+    badge: plan === "yearly" && yearlyDiscount ? `SAVE ${yearlyDiscount}%` : undefined,
+  };
 }
 
 function applyCustomerInfo(customerInfo: CustomerInfo) {
@@ -161,12 +222,45 @@ function hasAvailablePlans() {
   return PLAN_ORDER.some((plan) => subscription.availablePlans[plan]);
 }
 
+function applyOfferings(availablePackages: PurchasesPackage[]) {
+  const nextPackages: Partial<Record<Plan, PurchasesPackage>> = {};
+  const availablePlans = { ...EMPTY_AVAILABLE_PLANS };
+  const prices = { ...PLAN_PRICES };
+
+  for (const aPackage of availablePackages) {
+    const plan = planFromPackage(aPackage);
+    if (!plan || nextPackages[plan]) continue;
+    nextPackages[plan] = aPackage;
+    availablePlans[plan] = true;
+  }
+
+  const yearlyDiscount = calculateYearlyDiscount(nextPackages.yearly, nextPackages.monthly);
+  for (const plan of PLAN_ORDER) {
+    const aPackage = nextPackages[plan];
+    if (aPackage) prices[plan] = createPlanPrice(plan, aPackage, yearlyDiscount);
+  }
+
+  packagesByPlan = nextPackages;
+  storeProductsByPlan = {};
+  updateSubscription({
+    availablePlans,
+    prices,
+    ready: true,
+    error: PLAN_ORDER.some((plan) => availablePlans[plan])
+      ? null
+      : "Subscriptions are not available yet. Please try again later.",
+  });
+
+  return PLAN_ORDER.some((plan) => availablePlans[plan]);
+}
+
 function applyStoreProducts(nextProducts: Partial<Record<Plan, PurchasesStoreProduct>>) {
   const availablePlans = { ...EMPTY_AVAILABLE_PLANS };
   for (const plan of PLAN_ORDER) {
     availablePlans[plan] = Boolean(nextProducts[plan]);
   }
 
+  packagesByPlan = {};
   storeProductsByPlan = nextProducts;
   updateSubscription({
     availablePlans,
@@ -244,10 +338,41 @@ async function loadStoreProducts(purchases: PurchasesClient) {
   throw lastError;
 }
 
+async function loadOfferings(purchases: PurchasesClient) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await withTimeout(
+        purchases.getOfferings(),
+        OFFERINGS_REQUEST_TIMEOUT_MS,
+        "RevenueCat offerings timed out.",
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await waitFor(STOREKIT_PRODUCT_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError;
+}
+
 async function refreshRevenueCatState(forceRefresh = false) {
   const purchases = await getPurchases();
   if (forceRefresh) await purchases.invalidateCustomerInfoCache();
-  if (!hasAvailablePlans()) await loadStoreProducts(purchases);
+  if (!hasAvailablePlans()) {
+    try {
+      const offerings = await loadOfferings(purchases);
+      if (!applyOfferings(offerings.current?.availablePackages ?? [])) {
+        await loadStoreProducts(purchases);
+      }
+    } catch (offeringsError) {
+      console.warn(
+        "[revenuecat] Could not load offerings; using StoreKit fallback",
+        offeringsError,
+      );
+      await loadStoreProducts(purchases);
+    }
+  }
 
   try {
     const { customerInfo } = await withTimeout(
@@ -311,6 +436,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
         console.warn("[revenuecat] Customer update listener is unavailable", error);
       });
     } else if (userId && configuredUserId !== userId) {
+      packagesByPlan = {};
       storeProductsByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
       const result = await withTimeout(
@@ -321,6 +447,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
+      packagesByPlan = {};
       storeProductsByPlan = {};
       publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
       const result = await withTimeout(
@@ -449,13 +576,16 @@ async function requireConfiguredRevenueCat() {
 
 export async function purchaseSubscription(plan: Plan): Promise<Subscription> {
   await requireConfiguredRevenueCat();
+  const aPackage = packagesByPlan[plan];
   const storeProduct = storeProductsByPlan[plan];
-  if (!storeProduct) {
+  if (!aPackage && !storeProduct) {
     throw new Error("This subscription option is unavailable. Please try again later.");
   }
 
   const purchases = await getPurchases();
-  const { customerInfo } = await purchases.purchaseStoreProduct({ product: storeProduct });
+  const { customerInfo } = aPackage
+    ? await purchases.purchasePackage({ aPackage })
+    : await purchases.purchaseStoreProduct({ product: storeProduct! });
   applyCustomerInfo(customerInfo);
   return getSubscription();
 }
