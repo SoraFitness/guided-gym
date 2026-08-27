@@ -68,6 +68,15 @@ workflows:
             echo "Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the Codemagic production group."
             exit 1
           fi
+      - name: Verify RevenueCat iOS configuration
+        script: |
+          case "$VITE_REVENUECAT_IOS_API_KEY" in
+            appl_*) ;;
+            *)
+              echo "Set VITE_REVENUECAT_IOS_API_KEY to the public iOS SDK key in the Codemagic production group."
+              exit 1
+              ;;
+          esac
       - name: Install locked dependencies
         script: npm ci --include=dev
       - name: Run Ascendr release checks

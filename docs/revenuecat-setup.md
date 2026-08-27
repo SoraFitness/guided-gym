@@ -1,9 +1,10 @@
 # RevenueCat setup
 
 The iOS SDK uses the public RevenueCat iOS SDK key and entitlement identifier
-`VITE_REVENUECAT_ENTITLEMENT_ID`. The app uses `VITE_REVENUECAT_IOS_API_KEY` for local and
-bundled builds, then falls back to the `revenuecat-config` Supabase Edge Function for hosted
-mobile builds. The iOS SDK key is public app configuration, not a RevenueCat secret API key.
+`VITE_REVENUECAT_ENTITLEMENT_ID`. Every iOS build must include
+`VITE_REVENUECAT_IOS_API_KEY`; subscription products load directly through the RevenueCat iOS
+SDK and Apple StoreKit, without a Supabase checkout request. The iOS SDK key is public app
+configuration, not a RevenueCat secret API key.
 
 RevenueCat verification happens only in the `subscription-access` Supabase Edge Function.
 Configure these Supabase Edge Function secrets yourself:

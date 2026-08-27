@@ -76,13 +76,15 @@ const BUNDLED_REVENUECAT_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY?.
 const ENTITLEMENT_ID = import.meta.env.VITE_REVENUECAT_ENTITLEMENT_ID?.trim() || "pro";
 const BROWSER_PREVIEW_ACCESS_EMAIL =
   import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_EMAIL?.trim().toLowerCase();
-const RUNTIME_CONFIG_TIMEOUT_MS = 4_000;
-const RUNTIME_CONFIG_RETRY_MS = 15_000;
+const REVENUECAT_RETRY_MS = 15_000;
 const PURCHASES_OPERATION_TIMEOUT_MS = 12_000;
 const OFFERINGS_REQUEST_TIMEOUT_MS = 6_000;
 const OFFERINGS_RETRY_DELAY_MS = 400;
-const RUNTIME_CONFIG_URL =
-  "https://adzfzimuranhrllbxfyf.supabase.co/functions/v1/revenuecat-config";
+const STOREKIT_PRODUCT_CONFIGS: FallbackStoreProductConfig[] = [
+  { packageIdentifier: "$rc_annual", productIdentifier: "ascendr.pro.annual" },
+  { packageIdentifier: "$rc_monthly", productIdentifier: "ascendr.pro.monthly" },
+  { packageIdentifier: "$rc_weekly", productIdentifier: "ascendr.pro.weekly" },
+];
 
 const listeners = new Set<() => void>();
 let subscription = EMPTY_SUBSCRIPTION;
@@ -91,17 +93,11 @@ let storeProductsByPlan: Partial<Record<Plan, PurchasesStoreProduct>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
 let configureQueue: Promise<void> = Promise.resolve();
-let runtimeConfigPromise: Promise<RevenueCatRuntimeConfig> | null = null;
 type PurchasesClient = typeof Purchases;
 
 interface FallbackStoreProductConfig {
   packageIdentifier: string;
   productIdentifier: string;
-}
-
-interface RevenueCatRuntimeConfig {
-  apiKey: string | null;
-  storeProducts: FallbackStoreProductConfig[];
 }
 
 function publish(next: Subscription) {
@@ -283,55 +279,8 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: strin
   });
 }
 
-function parseStoreProductConfigs(value: unknown): FallbackStoreProductConfig[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const { packageIdentifier, productIdentifier } = item as Record<string, unknown>;
-    return typeof packageIdentifier === "string" && typeof productIdentifier === "string"
-      ? [{ packageIdentifier, productIdentifier }]
-      : [];
-  });
-}
-
-async function loadRuntimeRevenueCatConfig(): Promise<RevenueCatRuntimeConfig> {
-  try {
-    const response = await withTimeout(
-      fetch(RUNTIME_CONFIG_URL, { method: "POST" }),
-      RUNTIME_CONFIG_TIMEOUT_MS,
-      "RevenueCat checkout configuration timed out.",
-    );
-    if (!response.ok) {
-      throw new Error(`RevenueCat checkout configuration failed (${response.status}).`);
-    }
-    const data = (await response.json()) as { apiKey?: unknown; storeProducts?: unknown };
-    const apiKey = typeof data?.apiKey === "string" ? data.apiKey.trim() : "";
-    if (!apiKey.startsWith("appl_")) throw new Error("Invalid RevenueCat iOS configuration.");
-    return { apiKey, storeProducts: parseStoreProductConfigs(data.storeProducts) };
-  } catch (error) {
-    console.error("[revenuecat] Could not load iOS checkout configuration", error);
-    return { apiKey: null, storeProducts: [] };
-  }
-}
-
-function getRuntimeRevenueCatConfig() {
-  if (!runtimeConfigPromise) {
-    const request = loadRuntimeRevenueCatConfig();
-    runtimeConfigPromise = request;
-    void request.then((config) => {
-      if (!config.apiKey && runtimeConfigPromise === request) {
-        runtimeConfigPromise = null;
-      }
-    });
-  }
-
-  return runtimeConfigPromise;
-}
-
-async function getRevenueCatApiKey(): Promise<string | null> {
-  if (BUNDLED_REVENUECAT_API_KEY) return BUNDLED_REVENUECAT_API_KEY;
-  return (await getRuntimeRevenueCatConfig()).apiKey;
+function getRevenueCatApiKey() {
+  return BUNDLED_REVENUECAT_API_KEY || null;
 }
 
 function waitFor(delayMs: number) {
@@ -385,25 +334,17 @@ async function loadStoreProducts(
   return true;
 }
 
-async function refreshRevenueCatState(
-  forceRefresh = false,
-  storeProductsPromise: Promise<FallbackStoreProductConfig[]> = Promise.resolve([]),
-) {
+async function refreshRevenueCatState(forceRefresh = false) {
   const purchases = await getPurchases();
   if (forceRefresh) await purchases.invalidateCustomerInfoCache();
-  try {
+  const loadedStoreProducts = await loadStoreProducts(purchases, STOREKIT_PRODUCT_CONFIGS).catch(
+    () => false,
+  );
+
+  if (!loadedStoreProducts) {
     const offerings = await loadOfferings(purchases);
     const loadedPackages = applyOfferings(offerings.current?.availablePackages ?? []);
-    if (!loadedPackages) {
-      const loadedStoreProducts = await loadStoreProducts(purchases, await storeProductsPromise);
-      if (!loadedStoreProducts) throw new Error("No App Store products were returned.");
-    }
-  } catch (error) {
-    const loadedStoreProducts = await loadStoreProducts(
-      purchases,
-      await storeProductsPromise,
-    ).catch(() => false);
-    if (!loadedStoreProducts) throw error;
+    if (!loadedPackages) throw new Error("No App Store products were returned.");
   }
 
   try {
@@ -441,9 +382,6 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       return;
     }
 
-    const storeProductsPromise = getRuntimeRevenueCatConfig().then(
-      (config) => config.storeProducts,
-    );
     const apiKey = await getRevenueCatApiKey();
     const setupError = setupErrorMessage(apiKey);
     if (setupError) {
@@ -503,7 +441,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
         console.warn("[revenuecat] Could not sync subscriber email", error);
       });
     }
-    await refreshRevenueCatState(false, storeProductsPromise);
+    await refreshRevenueCatState();
   } catch (error) {
     console.error("[revenuecat] Could not load subscription state", error);
     publish({
@@ -538,7 +476,7 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
 
     const retryId = window.setInterval(() => {
       if (!configured || (!subscription.active && !hasAvailablePlans())) synchronize();
-    }, RUNTIME_CONFIG_RETRY_MS);
+    }, REVENUECAT_RETRY_MS);
 
     return () => window.clearInterval(retryId);
   }, [email, session, userId]);
@@ -553,10 +491,7 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
         .then(() =>
           configured && configuredUserId
             ? withTimeout(
-                refreshRevenueCatState(
-                  true,
-                  getRuntimeRevenueCatConfig().then((config) => config.storeProducts),
-                ),
+                refreshRevenueCatState(true),
                 PURCHASES_OPERATION_TIMEOUT_MS,
                 "RevenueCat subscription refresh timed out.",
               )
