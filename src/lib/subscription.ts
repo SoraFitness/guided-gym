@@ -20,6 +20,7 @@ export interface Subscription {
   plan: Plan | null;
   since: string | null;
   expiresAt: string | null;
+  willRenew: boolean | null;
   renewalRequired: boolean;
   ready: boolean;
   availablePlans: Record<Plan, boolean>;
@@ -61,6 +62,7 @@ const EMPTY_SUBSCRIPTION: Subscription = {
   plan: null,
   since: null,
   expiresAt: null,
+  willRenew: null,
   renewalRequired: false,
   ready: false,
   availablePlans: EMPTY_AVAILABLE_PLANS,
@@ -204,9 +206,17 @@ function applyCustomerInfo(customerInfo: CustomerInfo) {
     plan: active ? planFromProductIdentifier(entitlement.productIdentifier) : null,
     since: active ? entitlement.latestPurchaseDate : null,
     expiresAt: entitlement?.expirationDate ?? null,
+    willRenew: active ? entitlement.willRenew : null,
     renewalRequired: !active && Boolean(entitlement?.expirationDate),
     ready: true,
   });
+}
+
+export function getSubscriptionDaysRemaining(expiresAt: string | null, now = Date.now()) {
+  if (!expiresAt) return null;
+  const expiresAtMs = Date.parse(expiresAt);
+  if (Number.isNaN(expiresAtMs)) return null;
+  return Math.max(0, Math.ceil((expiresAtMs - now) / (24 * 60 * 60 * 1000)));
 }
 
 function applyOfferings(availablePackages: PurchasesPackage[]) {

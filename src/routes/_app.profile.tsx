@@ -19,6 +19,9 @@ import {
   Loader2,
   Layers3,
   MessageCircleQuestion,
+  CalendarDays,
+  CreditCard,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +45,7 @@ import { loadGoals, type NutritionGoals } from "@/lib/foods";
 import { setNutritionGoals } from "@/lib/nutritionStore";
 import { suggestNutrition } from "@/lib/nutritionService";
 import { resetTour } from "@/lib/tourStore";
+import { getSubscriptionDaysRemaining, useSubscription } from "@/lib/subscription";
 import {
   Sheet,
   SheetContent,
@@ -80,6 +84,7 @@ function ProfilePage() {
   const { profile, setProfile, updateProfile } = useProfile();
   const session = useAuthSession();
   const accountSession = isAccountSession(session) ? session : null;
+  const subscription = useSubscription();
   const navigate = useNavigate();
   const [goals, setGoalsState] = useState<NutritionGoals>(loadGoals());
   const [saved, setSaved] = useState(false);
@@ -211,6 +216,83 @@ function ProfilePage() {
       </section>
     );
 
+  const daysRemaining = getSubscriptionDaysRemaining(subscription.expiresAt);
+  const subscriptionPlan = subscription.plan
+    ? `${subscription.plan.charAt(0).toUpperCase()}${subscription.plan.slice(1)}`
+    : "Premium";
+  const subscriptionDate = subscription.expiresAt ? new Date(subscription.expiresAt) : null;
+  const hasValidSubscriptionDate =
+    subscriptionDate !== null && !Number.isNaN(subscriptionDate.getTime());
+  const subscriptionDateLabel = hasValidSubscriptionDate
+    ? new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(subscriptionDate)
+    : null;
+  const subscriptionStatus = !subscription.ready
+    ? "Checking your Ascendr Pro membership..."
+    : subscription.active && daysRemaining !== null
+      ? subscription.willRenew === false
+        ? daysRemaining === 0
+          ? "Your access ends today"
+          : `Your access ends in ${daysRemaining} ${daysRemaining === 1 ? "day" : "days"}`
+        : daysRemaining === 0
+          ? "Renews today"
+          : `Renews in ${daysRemaining} ${daysRemaining === 1 ? "day" : "days"}`
+      : subscription.active
+        ? "Your Ascendr Pro access is active"
+        : subscription.renewalRequired
+          ? "Your Ascendr Pro access has ended"
+          : "No active Ascendr Pro subscription";
+
+  const subscriptionSection = (
+    <section className="mt-4 overflow-hidden rounded-3xl border border-neon/20 bg-surface">
+      <div className="flex items-start gap-3 p-4">
+        <div className="grid size-10 place-items-center rounded-2xl bg-neon/15 text-neon">
+          <CreditCard className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+                Membership
+              </p>
+              <h3 className="mt-0.5 text-sm font-bold">Ascendr Pro · {subscriptionPlan}</h3>
+            </div>
+            {subscription.ready && subscription.active && (
+              <span className="rounded-full border border-neon/25 bg-neon/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-neon">
+                Active
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{subscriptionStatus}</p>
+          {subscriptionDateLabel && (
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <CalendarDays className="size-3.5 text-neon" />
+              {subscription.willRenew === false ? "Access through" : "Next billing date"}{" "}
+              {subscriptionDateLabel}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="border-t border-white/[0.06] p-3">
+        <a
+          href="https://apps.apple.com/account/subscriptions"
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-border bg-background text-sm font-semibold text-foreground transition active:scale-[0.98]"
+        >
+          Manage subscription
+          <ExternalLink className="size-4" />
+        </a>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+          Cancel or change your plan in Apple App Store subscriptions.
+        </p>
+      </div>
+    </section>
+  );
+
   if (!profile) {
     return (
       <div className="px-4 pb-32 pt-5 animate-slide-up sm:px-5">
@@ -325,6 +407,7 @@ function ProfilePage() {
       </section>
 
       {accountSection}
+      {subscriptionSection}
 
       <section className="mt-4 grid grid-cols-3 gap-2.5">
         <Mini label="Goal" value={GOAL_LABELS[profile.goal].split(" ")[0]} />
