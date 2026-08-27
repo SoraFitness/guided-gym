@@ -16,6 +16,7 @@ export interface PlanPrice {
 export type PlanPrices = Record<Plan, PlanPrice>;
 
 export interface Subscription {
+  customerUserId: string | null;
   active: boolean;
   plan: Plan | null;
   since: string | null;
@@ -58,6 +59,7 @@ const EMPTY_AVAILABLE_PLANS: Record<Plan, boolean> = {
   yearly: false,
 };
 const EMPTY_SUBSCRIPTION: Subscription = {
+  customerUserId: null,
   active: false,
   plan: null,
   since: null,
@@ -202,6 +204,7 @@ function applyCustomerInfo(customerInfo: CustomerInfo) {
   const active = entitlement?.isActive === true;
 
   updateSubscription({
+    customerUserId: configuredUserId,
     active,
     plan: active ? planFromProductIdentifier(entitlement.productIdentifier) : null,
     since: active ? entitlement.latestPurchaseDate : null,
@@ -308,6 +311,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   if (hasBrowserPreviewAccess(email)) {
     publish({
       ...EMPTY_SUBSCRIPTION,
+      customerUserId: userId,
       active: true,
       plan: "yearly",
       since: new Date().toISOString(),
@@ -319,6 +323,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   if (!isNativePlatform()) {
     publish({
       ...EMPTY_SUBSCRIPTION,
+      customerUserId: userId,
       ready: true,
       error: "Purchases are available in the Ascendr iOS app.",
     });
@@ -326,7 +331,12 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   }
 
   if (!REVENUECAT_API_KEY?.startsWith("appl_")) {
-    publish({ ...EMPTY_SUBSCRIPTION, ready: true, error: CHECKOUT_CONFIGURATION_ERROR });
+    publish({
+      ...EMPTY_SUBSCRIPTION,
+      customerUserId: userId,
+      ready: true,
+      error: CHECKOUT_CONFIGURATION_ERROR,
+    });
     return;
   }
 
@@ -350,13 +360,13 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       });
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
-      publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
+      publish({ ...EMPTY_SUBSCRIPTION, customerUserId: userId, ready: false, error: null });
       const result = await Purchases.logIn({ appUserID: userId });
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
       packagesByPlan = {};
-      publish({ ...EMPTY_SUBSCRIPTION, ready: false, error: null });
+      publish({ ...EMPTY_SUBSCRIPTION, customerUserId: null, ready: false, error: null });
       const result = await Purchases.logOut();
       configuredUserId = null;
       applyCustomerInfo(result.customerInfo);
@@ -373,6 +383,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     console.error("[revenuecat] Could not load checkout", error);
     publish({
       ...subscription,
+      customerUserId: userId,
       active: false,
       plan: null,
       since: null,

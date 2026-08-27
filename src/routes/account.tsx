@@ -7,7 +7,12 @@ import { AscendrLogo } from "@/components/AscendrLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { getAuthRedirectUrl, isAccountSession, useAuthSession } from "@/lib/authSession";
+import {
+  getAuthRedirectUrl,
+  getPasswordRecoveryRedirectUrl,
+  isAccountSession,
+  useAuthSession,
+} from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
 import { useSubscription } from "@/lib/subscription";
 
@@ -17,6 +22,7 @@ type AuthMode = "signup" | "signin";
 type ConfirmationType = "signup" | "email_change";
 type Feedback =
   | { tone: "confirmation"; email: string; type: ConfirmationType }
+  | { tone: "password-reset"; email: string }
   | { tone: "error"; message: string }
   | null;
 
@@ -77,7 +83,12 @@ function AccountScreen() {
   const session = useAuthSession();
   const subscription = useSubscription();
   const { profile, updateProfile } = useProfile();
-  const [mode, setMode] = useState<AuthMode>("signup");
+  const [mode, setMode] = useState<AuthMode>(() => {
+    const requestedMode =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("mode") === "signin";
+    return requestedMode ? "signin" : "signup";
+  });
   const [name, setName] = useState(profile?.name === "Athlete" ? "" : (profile?.name ?? ""));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,13 +99,26 @@ function AccountScreen() {
   const destination = useMemo(() => safeDestination(next), [next]);
 
   useEffect(() => {
-    if (!isAccountSession(session) || !subscription.ready) return;
+    if (
+      !isAccountSession(session) ||
+      !subscription.ready ||
+      subscription.customerUserId !== session.userId
+    ) {
+      return;
+    }
     if (!subscription.active) {
       navigate({ to: "/paywall", search: { source: undefined }, replace: true });
       return;
     }
     window.location.replace(destination);
-  }, [destination, navigate, session, subscription.active, subscription.ready]);
+  }, [
+    destination,
+    navigate,
+    session,
+    subscription.active,
+    subscription.customerUserId,
+    subscription.ready,
+  ]);
 
   function saveDisplayName() {
     const displayName = name.trim();
@@ -198,7 +222,33 @@ function AccountScreen() {
     }
   }
 
-  const processingExistingSession = isAccountSession(session) && !subscription.ready;
+  async function requestPasswordReset() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      showError(new Error("Enter your account email first."), "Enter your account email first.");
+      return;
+    }
+
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: getPasswordRecoveryRedirectUrl(),
+      });
+      if (error) throw error;
+      setFeedback({ tone: "password-reset", email: normalizedEmail });
+      toast.success("Password reset email sent.");
+    } catch (error) {
+      console.error("[account] Password reset request failed", error);
+      showError(error, "We couldn't send a password reset email. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const processingExistingSession =
+    isAccountSession(session) &&
+    (!subscription.ready || subscription.customerUserId !== session.userId);
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-[radial-gradient(ellipse_at_50%_-14%,rgba(183,255,62,0.2),transparent_42%),linear-gradient(180deg,#111c0e_0%,#090b0a_45%,#080a09_100%)] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-foreground">
@@ -267,7 +317,7 @@ function AccountScreen() {
               <Loader2 className="size-7 animate-spin text-neon" />
               <p className="text-sm font-semibold">Connecting your Premium access…</p>
             </div>
-          ) : feedback?.tone === "confirmation" ? (
+          ) : feedback?.tone === "confirmation" || feedback?.tone === "password-reset" ? (
             <div
               className="mt-5 rounded-2xl border border-neon/25 bg-neon/[0.07] p-4"
               aria-live="polite"
@@ -277,23 +327,39 @@ function AccountScreen() {
                   <Check className="size-5" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold">Confirm your email</h2>
+                  <h2 className="text-sm font-bold">
+                    {feedback.tone === "password-reset" ? "Check your email" : "Confirm your email"}
+                  </h2>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    We sent a secure link to{" "}
+                    {feedback.tone === "password-reset"
+                      ? "We sent a password reset link to"
+                      : "We sent a secure link to"}{" "}
                     <span className="font-semibold text-foreground">{feedback.email}</span>. Open it
                     on this iPhone to return directly to Ascendr.
                   </p>
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={resendConfirmation}
-                className="mt-4 h-10 w-full rounded-full border-white/15 bg-background/60 text-xs"
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : "Resend confirmation email"}
-              </Button>
+              {feedback.tone === "confirmation" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={resendConfirmation}
+                  className="mt-4 h-10 w-full rounded-full border-white/15 bg-background/60 text-xs"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : "Resend confirmation email"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setFeedback(null)}
+                  className="mt-4 h-10 w-full rounded-full border-white/15 bg-background/60 text-xs"
+                >
+                  Back to Sign in
+                </Button>
+              )}
             </div>
           ) : (
             <div className="mt-5 space-y-3">
@@ -325,10 +391,22 @@ function AccountScreen() {
                   className="h-12 rounded-2xl border-white/10 bg-black/20"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
-                  Password
-                </span>
+              <div className="block">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Password
+                  </span>
+                  {mode === "signin" && (
+                    <button
+                      type="button"
+                      onClick={requestPasswordReset}
+                      disabled={busy}
+                      className="text-xs font-semibold text-neon transition hover:text-neon/80 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
@@ -347,7 +425,7 @@ function AccountScreen() {
                     {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
                 </div>
-              </label>
+              </div>
 
               {feedback?.tone === "error" && (
                 <p

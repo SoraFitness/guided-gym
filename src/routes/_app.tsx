@@ -68,9 +68,11 @@ function AppShell() {
   const subscriptionExempt = SUBSCRIPTION_EXEMPT_PATHS.has(pathname);
   const accountUserId = isAccountSession(session) ? session.userId : null;
   const signedIn = accountUserId !== null;
+  const subscriptionMatchesAccount = signedIn && subscription.customerUserId === accountUserId;
   const localDataOwnerMatches = accountUserId ? localDataBelongsToAccount(accountUserId) : false;
   const hasPremiumAccess =
     signedIn &&
+    subscriptionMatchesAccount &&
     localDataOwnerMatches &&
     ready &&
     Boolean(profile) &&
@@ -83,7 +85,9 @@ function AppShell() {
       navigate({ to: "/onboarding", replace: true });
       return;
     }
-    if (!subscription.ready || session === "loading") return;
+    if (!subscription.ready || session === "loading" || (signedIn && !subscriptionMatchesAccount)) {
+      return;
+    }
     if (!subscription.active) {
       const resumePath =
         typeof window === "undefined"
@@ -108,6 +112,8 @@ function AppShell() {
     session,
     signedIn,
     subscription.active,
+    subscription.customerUserId,
+    subscriptionMatchesAccount,
     subscription.ready,
     subscriptionExempt,
   ]);
@@ -144,15 +150,17 @@ function AppShell() {
     const message =
       session === "loading" || !ready
         ? "Loading Ascendr..."
-        : signedIn && !localDataOwnerMatches
-          ? "Securing this device for your account..."
-          : !profile
-            ? "Preparing your private fitness profile..."
-            : !subscription.ready
-              ? "Checking your subscription..."
-              : subscription.renewalRequired
-                ? "Your subscription has ended. Taking you to renew..."
-                : "An active subscription is required to continue.";
+        : signedIn && !subscriptionMatchesAccount
+          ? "Checking your subscription..."
+          : signedIn && !localDataOwnerMatches
+            ? "Securing this device for your account..."
+            : !profile
+              ? "Preparing your private fitness profile..."
+              : !subscription.ready
+                ? "Checking your subscription..."
+                : subscription.renewalRequired
+                  ? "Your subscription has ended. Taking you to renew..."
+                  : "An active subscription is required to continue.";
 
     return (
       <>

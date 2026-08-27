@@ -13,6 +13,7 @@ export interface AuthSession {
 
 export type AuthSessionState = AuthSession | null | "loading";
 export const NATIVE_AUTH_CALLBACK_URL = "ascendr://auth/callback";
+export const PASSWORD_RECOVERY_PATH = "/reset-password";
 const AUTH_SESSION_TIMEOUT_MS = 8_000;
 
 type NativeAuthCallback =
@@ -41,6 +42,15 @@ export function getAuthRedirectUrl(webPath: string) {
   if (Capacitor.isNativePlatform()) return NATIVE_AUTH_CALLBACK_URL;
   if (typeof window === "undefined") return webPath;
   return new URL(webPath, window.location.origin).toString();
+}
+
+export function getPasswordRecoveryRedirectUrl() {
+  return getAuthRedirectUrl(PASSWORD_RECOVERY_PATH);
+}
+
+function openPasswordRecoveryScreen() {
+  if (typeof window === "undefined" || window.location.pathname === PASSWORD_RECOVERY_PATH) return;
+  window.location.replace(PASSWORD_RECOVERY_PATH);
 }
 
 export function parseNativeAuthCallback(callbackUrl: string): NativeAuthCallback {
@@ -122,8 +132,9 @@ export function useAuthSession(): AuthSessionState {
     };
 
     try {
-      const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
         const next = toAuthSession(nextSession);
+        if (event === "PASSWORD_RECOVERY") openPasswordRecoveryScreen();
         if (!initialSessionResolved) {
           pendingSession = next;
           return;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isAccountSession, parseNativeAuthCallback, type AuthSession } from "./authSession";
+import {
+  isAccountSession,
+  PASSWORD_RECOVERY_PATH,
+  parseNativeAuthCallback,
+  type AuthSession,
+} from "./authSession";
 
 const anonymousSession: AuthSession = {
   userId: "guest-user",
@@ -36,5 +41,9 @@ describe("auth session classification", () => {
     expect(parseNativeAuthCallback("https://example.com/auth/callback?code=example-code")).toBe(
       null,
     );
+  });
+
+  it("uses a dedicated in-app route after a password recovery callback", () => {
+    expect(PASSWORD_RECOVERY_PATH).toBe("/reset-password");
   });
 });

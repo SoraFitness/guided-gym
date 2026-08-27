@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PaywallRouteImport } from './routes/paywall'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AccountRouteImport } from './routes/account'
@@ -49,6 +50,11 @@ import { Route as AppScanFaceIdRouteImport } from './routes/_app.scan.face.$id'
 import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PaywallRoute = PaywallRouteImport.update({
   id: '/paywall',
   path: '/paywall',
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/coach': typeof AppCoachRoute
   '/contact': typeof AppContactRoute
   '/delete-account': typeof AppDeleteAccountRoute
@@ -290,6 +297,7 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/coach': typeof AppCoachRoute
   '/contact': typeof AppContactRoute
   '/delete-account': typeof AppDeleteAccountRoute
@@ -331,6 +339,7 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/onboarding': typeof OnboardingRoute
   '/paywall': typeof PaywallRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/_app/coach': typeof AppCoachRoute
   '/_app/contact': typeof AppContactRoute
   '/_app/delete-account': typeof AppDeleteAccountRoute
@@ -373,6 +382,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/onboarding'
     | '/paywall'
+    | '/reset-password'
     | '/coach'
     | '/contact'
     | '/delete-account'
@@ -413,6 +423,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/onboarding'
     | '/paywall'
+    | '/reset-password'
     | '/coach'
     | '/contact'
     | '/delete-account'
@@ -453,6 +464,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/onboarding'
     | '/paywall'
+    | '/reset-password'
     | '/_app/coach'
     | '/_app/contact'
     | '/_app/delete-account'
@@ -495,6 +507,7 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   OnboardingRoute: typeof OnboardingRoute
   PaywallRoute: typeof PaywallRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   AdminOnboardingRoute: typeof AdminOnboardingRoute
   ApiCoachRoute: typeof ApiCoachRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
@@ -505,6 +518,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/paywall': {
       id: '/paywall'
       path: '/paywall'
@@ -871,6 +891,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   OnboardingRoute: OnboardingRoute,
   PaywallRoute: PaywallRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   AdminOnboardingRoute: AdminOnboardingRoute,
   ApiCoachRoute: ApiCoachRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,

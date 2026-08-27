@@ -954,7 +954,7 @@ function Onboarding() {
               {welcomeCopy.accountPrompt}{" "}
               <button
                 type="button"
-                onClick={() => navigate({ to: "/account", search: { next: "/home" } })}
+                onClick={() => window.location.assign("/account?mode=signin&next=%2Fhome")}
                 className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
               >
                 {welcomeCopy.signIn}
