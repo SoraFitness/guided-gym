@@ -17,6 +17,7 @@ import { useProfile } from "@/lib/profile";
 import { useSubscription } from "@/lib/subscription";
 
 const DEFAULT_DESTINATION = "/home";
+const ACCOUNT_ENTRY_MODE_STORAGE_KEY = "ascendr:account-entry-mode";
 
 type AuthMode = "signup" | "signin";
 type ConfirmationType = "signup" | "email_change";
@@ -69,6 +70,21 @@ function safeDestination(value: unknown) {
   return DEFAULT_DESTINATION;
 }
 
+function consumeAccountEntryMode(): AuthMode {
+  if (typeof window === "undefined") return "signup";
+
+  const modeFromUrl = new URLSearchParams(window.location.search).get("mode");
+  if (modeFromUrl === "signin") return "signin";
+
+  try {
+    const storedMode = sessionStorage.getItem(ACCOUNT_ENTRY_MODE_STORAGE_KEY);
+    sessionStorage.removeItem(ACCOUNT_ENTRY_MODE_STORAGE_KEY);
+    return storedMode === "signin" ? "signin" : "signup";
+  } catch {
+    return "signup";
+  }
+}
+
 export const Route = createFileRoute("/account")({
   validateSearch: (search: Record<string, unknown>) => ({
     next: safeDestination(search.next),
@@ -83,12 +99,7 @@ function AccountScreen() {
   const session = useAuthSession();
   const subscription = useSubscription();
   const { profile, updateProfile } = useProfile();
-  const [mode, setMode] = useState<AuthMode>(() => {
-    const requestedMode =
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("mode") === "signin";
-    return requestedMode ? "signin" : "signup";
-  });
+  const [mode, setMode] = useState<AuthMode>(consumeAccountEntryMode);
   const [name, setName] = useState(profile?.name === "Athlete" ? "" : (profile?.name ?? ""));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

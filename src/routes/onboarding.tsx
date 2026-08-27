@@ -461,6 +461,7 @@ function planInputFromProfile(profile: Profile): WorkoutPlanInput {
 }
 
 const ONBOARDING_NAME_STORAGE_KEY = "ascendr_onboarding_name";
+const ACCOUNT_ENTRY_MODE_STORAGE_KEY = "ascendr:account-entry-mode";
 const TOTAL = 6;
 
 interface StoredOnboardingProgress {
@@ -570,6 +571,11 @@ function Onboarding() {
   const personalizedName = formatFirstName(d.name);
   const selectedLanguage =
     ONBOARDING_LANGUAGES.find((option) => option.id === language) ?? ONBOARDING_LANGUAGES[0];
+
+  function openSignIn() {
+    sessionStorage.setItem(ACCOUNT_ENTRY_MODE_STORAGE_KEY, "signin");
+    navigate({ to: "/account", search: { next: "/home" } });
+  }
 
   useEffect(() => {
     document.documentElement.lang = language === "en-US" ? "en" : language.split("-")[0];
@@ -954,7 +960,7 @@ function Onboarding() {
               {welcomeCopy.accountPrompt}{" "}
               <button
                 type="button"
-                onClick={() => window.location.assign("/account?mode=signin&next=%2Fhome")}
+                onClick={openSignIn}
                 className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
               >
                 {welcomeCopy.signIn}
