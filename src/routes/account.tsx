@@ -15,7 +15,7 @@ import {
   useAuthSession,
 } from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
-import { useSubscription } from "@/lib/subscription";
+import { identifyRevenueCatUser, useSubscription } from "@/lib/subscription";
 
 const DEFAULT_DESTINATION = "/home";
 
@@ -146,11 +146,13 @@ function AccountScreen() {
     try {
       if (mode === "signin") {
         if (isLegacyAnonymousSession) await supabase.auth.signOut({ scope: "local" });
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password,
         });
         if (error) throw error;
+        if (!data.user) throw new Error("We couldn't sign you in. Please try again.");
+        await identifyRevenueCatUser(data.user.id, data.user.email ?? normalizedEmail);
         saveDisplayName();
         return;
       }
@@ -178,7 +180,13 @@ function AccountScreen() {
       });
       if (error) throw error;
       saveDisplayName();
-      if (data.session) return;
+      if (data.session) {
+        await identifyRevenueCatUser(
+          data.session.user.id,
+          data.session.user.email ?? normalizedEmail,
+        );
+        return;
+      }
       if (!data.user) throw new Error("We couldn't create your account. Please try again.");
       setFeedback({ tone: "confirmation", email: normalizedEmail, type: "signup" });
       toast.success("Check your email to finish securing your account.");

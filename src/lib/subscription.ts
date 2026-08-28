@@ -395,6 +395,14 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
   }
 }
 
+export async function identifyRevenueCatUser(userId: string, email: string | null) {
+  configureQueue = configureQueue
+    .catch(() => undefined)
+    .then(() => syncRevenueCatUser(userId, email));
+  await configureQueue;
+  return getSubscription();
+}
+
 export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const session = useAuthSession();
   const userId = session && session !== "loading" ? session.userId : null;
@@ -404,9 +412,14 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     if (session === "loading") return;
 
     const synchronize = () => {
+      if (userId) {
+        void identifyRevenueCatUser(userId, email);
+        return;
+      }
+
       configureQueue = configureQueue
         .catch(() => undefined)
-        .then(() => syncRevenueCatUser(userId, email));
+        .then(() => syncRevenueCatUser(null, null));
     };
 
     synchronize();
