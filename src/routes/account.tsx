@@ -15,6 +15,7 @@ import {
   useAuthSession,
 } from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
+import { isNativeAppleSignInAvailable, signInWithNativeApple } from "@/lib/nativeAppleSignIn";
 import { identifyRevenueCatUser, useSubscription } from "@/lib/subscription";
 
 const DEFAULT_DESTINATION = "/home";
@@ -203,6 +204,20 @@ function AccountScreen() {
     setBusy(true);
     setFeedback(null);
     try {
+      if (provider === "apple" && isNativeAppleSignInAvailable()) {
+        const result = await signInWithNativeApple({
+          linkIdentity: isLegacyAnonymousSession,
+        });
+        if (result.cancelled) return;
+        if (!result.user) throw new Error("Apple did not return an account. Please try again.");
+
+        await identifyRevenueCatUser(result.user.id, result.user.email ?? result.email);
+        if (result.fullName && profile?.name === "Athlete") {
+          updateProfile({ name: result.fullName });
+        }
+        return;
+      }
+
       const redirectTo = getAuthRedirectUrl(destination);
       const result = isLegacyAnonymousSession
         ? await supabase.auth.linkIdentity({ provider, options: { redirectTo } })

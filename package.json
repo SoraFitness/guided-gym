@@ -19,6 +19,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.48",
     "@ai-sdk/react": "^3.0.201",
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
