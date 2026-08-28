@@ -117,8 +117,6 @@ interface WelcomeCopy {
   promises: [string, string, string];
   description: string;
   getStarted: string;
-  accountPrompt: string;
-  signIn: string;
 }
 
 const ONBOARDING_LANGUAGES: Array<{
@@ -230,8 +228,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Personalized workouts, simple nutrition tracking, and AI insights—built around your life.",
     getStarted: "Get Started",
-    accountPrompt: "Already have an account?",
-    signIn: "Sign in",
   },
   es: {
     eyebrow: "TU FITNESS, POR FIN CONECTADO",
@@ -240,8 +236,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Entrenamientos personalizados, nutrición sencilla e información con IA adaptada a tu vida.",
     getStarted: "Comenzar",
-    accountPrompt: "¿Ya tienes una cuenta?",
-    signIn: "Iniciar sesión",
   },
   fr: {
     eyebrow: "VOTRE FITNESS, ENFIN CONNECTÉ",
@@ -254,8 +248,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Entraînements personnalisés, nutrition simplifiée et conseils IA adaptés à votre quotidien.",
     getStarted: "Commencer",
-    accountPrompt: "Vous avez déjà un compte ?",
-    signIn: "Se connecter",
   },
   de: {
     eyebrow: "DEINE FITNESSZIELE, ENDLICH VEREINT",
@@ -264,8 +256,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Personalisierte Workouts, einfaches Ernährungstracking und KI-Einblicke für deinen Alltag.",
     getStarted: "Loslegen",
-    accountPrompt: "Du hast bereits ein Konto?",
-    signIn: "Anmelden",
   },
   "pt-BR": {
     eyebrow: "SEU FITNESS, FINALMENTE CONECTADO",
@@ -274,8 +264,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Treinos personalizados, nutrição simples e insights de IA feitos para a sua rotina.",
     getStarted: "Começar",
-    accountPrompt: "Já tem uma conta?",
-    signIn: "Entrar",
   },
   it: {
     eyebrow: "IL TUO FITNESS, FINALMENTE CONNESSO",
@@ -284,8 +272,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     description:
       "Allenamenti personalizzati, nutrizione semplice e insight IA costruiti sulla tua vita.",
     getStarted: "Inizia",
-    accountPrompt: "Hai già un account?",
-    signIn: "Accedi",
   },
   ja: {
     eyebrow: "フィットネスを、ひとつに",
@@ -293,8 +279,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     promises: ["目的を持って鍛える。", "自信を持って食べる。", "進歩をはっきり実感する。"],
     description: "あなたの生活に合わせたワークアウト、栄養管理、AIインサイト。",
     getStarted: "始める",
-    accountPrompt: "すでにアカウントをお持ちですか？",
-    signIn: "ログイン",
   },
   ko: {
     eyebrow: "피트니스를 하나로",
@@ -302,8 +286,6 @@ const WELCOME_COPY: Record<OnboardingLanguage, WelcomeCopy> = {
     promises: ["목표 있게 운동하세요.", "자신 있게 식사하세요.", "변화를 선명하게 확인하세요."],
     description: "내 일상에 맞춘 운동, 간편한 영양 관리, AI 인사이트를 한곳에서 만나보세요.",
     getStarted: "시작하기",
-    accountPrompt: "이미 계정이 있으신가요?",
-    signIn: "로그인",
   },
 };
 
@@ -570,10 +552,6 @@ function Onboarding() {
   const personalizedName = formatFirstName(d.name);
   const selectedLanguage =
     ONBOARDING_LANGUAGES.find((option) => option.id === language) ?? ONBOARDING_LANGUAGES[0];
-
-  function openSignIn() {
-    navigate({ to: "/account", search: { next: "/home", mode: "signin" } });
-  }
 
   useEffect(() => {
     document.documentElement.lang = language === "en-US" ? "en" : language.split("-")[0];
@@ -953,18 +931,6 @@ function Onboarding() {
                   : "Continue"}
             <ArrowRight className="size-5" />
           </button>
-          {step === 0 && (
-            <p className="mt-3 text-center text-sm text-muted-foreground">
-              {welcomeCopy.accountPrompt}{" "}
-              <button
-                type="button"
-                onClick={openSignIn}
-                className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
-              >
-                {welcomeCopy.signIn}
-              </button>
-            </p>
-          )}
         </div>
       </footer>
     </div>
