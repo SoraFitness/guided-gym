@@ -100,6 +100,10 @@ function AccountScreen() {
   const destination = useMemo(() => safeDestination(next), [next]);
 
   useEffect(() => {
+    setMode(requestedMode ?? "signup");
+  }, [requestedMode]);
+
+  useEffect(() => {
     if (
       !isAccountSession(session) ||
       !subscription.ready ||

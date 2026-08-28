@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
@@ -931,6 +931,18 @@ function Onboarding() {
                   : "Continue"}
             <ArrowRight className="size-5" />
           </button>
+          {step === 0 && (
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <Link
+                to="/account"
+                search={{ next: "/home", mode: "signin" }}
+                className="font-bold text-foreground underline decoration-white/25 underline-offset-4 transition hover:text-neon"
+              >
+                Sign in
+              </Link>
+            </p>
+          )}
         </div>
       </footer>
     </div>
