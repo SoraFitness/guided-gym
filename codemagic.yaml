@@ -60,6 +60,7 @@ workflows:
             *) echo "ASCENDR_APP_URL must begin with https://"; exit 1 ;;
           esac
           curl --fail --silent --show-error --location --max-time 20 "$ASCENDR_APP_URL" > /dev/null
+
       - name: Verify Supabase client configuration
         script: |
           SUPABASE_CLIENT_URL="${VITE_SUPABASE_URL:-${SUPABASE_URL:-}}"
@@ -68,6 +69,7 @@ workflows:
             echo "Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the Codemagic production group."
             exit 1
           fi
+
       - name: Verify RevenueCat iOS configuration
         script: |
           case "$VITE_REVENUECAT_IOS_API_KEY" in
@@ -77,33 +79,47 @@ workflows:
               exit 1
               ;;
           esac
+
       - name: Install locked dependencies
         script: npm ci --include=dev
+
       - name: Run Ascendr release checks
         script: |
           npm run typecheck
           npm run lint
           npm run test
+
       - name: Sync Capacitor configuration and web shell
         script: npx cap sync ios
+
+      - name: Set App Store version
+        script: |
+          cd ios/App
+          echo "Setting iOS version to 1.2"
+          agvtool new-marketing-version 1.2
+
       - name: Apply App Store signing profiles
         script: xcode-project use-profiles
+
       - name: Set build number
         script: |
           cd ios/App
           echo "Setting iOS build number to $BUILD_NUMBER"
           agvtool new-version -all "$BUILD_NUMBER"
+
       - name: Build signed IPA
         script: |
           cd ios/App
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
+
     artifacts:
       - ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
     publishing:
       app_store_connect:
         auth: integration
