@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  LogOut,
+  Trash2,
   Settings,
   ChevronRight,
   Target,
@@ -89,7 +89,8 @@ function ProfilePage() {
   const [goals, setGoalsState] = useState<NutritionGoals>(loadGoals());
   const [saved, setSaved] = useState(false);
   const [openSheet, setOpenSheet] = useState<SheetKind>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDeleteProfile, setConfirmDeleteProfile] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [profileSyncState, setProfileSyncState] = useState<"idle" | "syncing" | "synced" | "error">(
     "idle",
@@ -338,11 +339,29 @@ function ProfilePage() {
     ? profile.equipmentItems
     : [EQUIPMENT_LABELS[profile.equipment]];
 
-  const doReset = () => {
-    setProfile(null);
-    resetTour();
-    setConfirmReset(false);
-    navigate({ to: "/onboarding" });
+  const deleteProfile = async () => {
+    setDeletingProfile(true);
+
+    try {
+      if (accountSession) {
+        const { error } = await supabase
+          .from("user_profiles")
+          .delete()
+          .eq("user_id", accountSession.userId);
+        if (error) throw error;
+      }
+
+      setProfile(null);
+      resetTour();
+      setConfirmDeleteProfile(false);
+      toast.success("Profile deleted");
+      navigate({ to: "/onboarding" });
+    } catch (error) {
+      console.error("[profile] Could not delete profile", error);
+      toast.error("We couldn't delete your profile. Please try again.");
+    } finally {
+      setDeletingProfile(false);
+    }
   };
 
   const restartTour = () => {
@@ -583,11 +602,11 @@ function ProfilePage() {
       </section>
 
       <button
-        onClick={() => setConfirmReset(true)}
+        onClick={() => setConfirmDeleteProfile(true)}
         className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full border border-destructive/15 bg-destructive/[0.035] text-xs font-semibold text-destructive"
       >
-        <LogOut className="size-5" />
-        Reset profile
+        <Trash2 className="size-5" />
+        Delete profile
       </button>
 
       <ProfileLegalFooter />
@@ -718,23 +737,32 @@ function ProfilePage() {
         }}
       />
 
-      {/* Reset confirm */}
-      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
+      <AlertDialog
+        open={confirmDeleteProfile}
+        onOpenChange={(open) => {
+          if (!deletingProfile) setConfirmDeleteProfile(open);
+        }}
+      >
         <AlertDialogContent className="bg-background border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset profile?</AlertDialogTitle>
+            <AlertDialogTitle>Delete profile?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to reset your profile? This will clear your goal, equipment,
-              injuries, onboarding answers, and app preferences.
+              Delete your profile, onboarding answers, and personalization from this device and
+              Supabase? Your Ascendr account, membership, and saved progress will remain.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingProfile}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={doReset}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingProfile}
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteProfile();
+              }}
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Reset Profile
+              {deletingProfile && <Loader2 className="size-4 animate-spin" />}
+              {deletingProfile ? "Deleting..." : "Delete Profile"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

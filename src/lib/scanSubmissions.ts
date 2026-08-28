@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/imageCompress";
+import { imageDataUrlToBlob } from "@/lib/imageDataUrl";
 import { createScanSubmission, updateScanSubmission } from "@/lib/scanSubmissions.functions";
 
 export type ScanType = "face" | "body";
@@ -39,9 +40,33 @@ function makeUuid() {
 }
 
 async function dataUrlToJpeg(dataUrl: string): Promise<Blob> {
-  const original = await fetch(dataUrl).then((response) => response.blob());
+  const original = imageDataUrlToBlob(dataUrl);
   const file = new File([original], "scan-photo", { type: original.type || "image/jpeg" });
   return compressImage(file, 1800, 0.88);
+}
+
+async function uploadScanPhoto(path: string, blob: Blob) {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { error } = await supabase.storage.from("progress-photos").upload(path, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (!error) return;
+      lastError = new Error(error.message);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Upload failed");
+    }
+
+    if (attempt < 2) {
+      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
+
+  console.error("[scan-submissions] Photo upload failed", lastError);
+  throw new Error("Couldn't upload your photo. Check your connection and try again.");
 }
 
 export async function saveScanSubmission(input: SaveScanSubmissionInput) {
@@ -54,11 +79,7 @@ export async function saveScanSubmission(input: SaveScanSubmissionInput) {
       if (!dataUrl) continue;
       const path = `${input.userId}/scans/${input.scanType}/${id}/${view}.jpg`;
       const blob = await dataUrlToJpeg(dataUrl);
-      const { error } = await supabase.storage.from("progress-photos").upload(path, blob, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
-      if (error) throw new Error(error.message);
+      await uploadScanPhoto(path, blob);
       uploadedPaths.push(path);
       photoPaths[view] = path;
     }

@@ -11,13 +11,13 @@ import {
   getAuthRedirectUrl,
   getPasswordRecoveryRedirectUrl,
   isAccountSession,
+  markPasswordRecoveryRequested,
   useAuthSession,
 } from "@/lib/authSession";
 import { useProfile } from "@/lib/profile";
 import { useSubscription } from "@/lib/subscription";
 
 const DEFAULT_DESTINATION = "/home";
-const ACCOUNT_ENTRY_MODE_STORAGE_KEY = "ascendr:account-entry-mode";
 
 type AuthMode = "signup" | "signin";
 type ConfirmationType = "signup" | "email_change";
@@ -70,24 +70,14 @@ function safeDestination(value: unknown) {
   return DEFAULT_DESTINATION;
 }
 
-function consumeAccountEntryMode(): AuthMode {
-  if (typeof window === "undefined") return "signup";
-
-  const modeFromUrl = new URLSearchParams(window.location.search).get("mode");
-  if (modeFromUrl === "signin") return "signin";
-
-  try {
-    const storedMode = sessionStorage.getItem(ACCOUNT_ENTRY_MODE_STORAGE_KEY);
-    sessionStorage.removeItem(ACCOUNT_ENTRY_MODE_STORAGE_KEY);
-    return storedMode === "signin" ? "signin" : "signup";
-  } catch {
-    return "signup";
-  }
+function accountEntryMode(value: unknown): AuthMode | undefined {
+  return value === "signin" ? "signin" : undefined;
 }
 
 export const Route = createFileRoute("/account")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { next: string; mode?: AuthMode } => ({
     next: safeDestination(search.next),
+    mode: accountEntryMode(search.mode),
   }),
   head: () => ({ meta: [{ title: "Secure your account — Ascendr" }] }),
   component: AccountScreen,
@@ -95,11 +85,11 @@ export const Route = createFileRoute("/account")({
 
 function AccountScreen() {
   const navigate = useNavigate();
-  const { next } = Route.useSearch();
+  const { next, mode: requestedMode } = Route.useSearch();
   const session = useAuthSession();
   const subscription = useSubscription();
   const { profile, updateProfile } = useProfile();
-  const [mode, setMode] = useState<AuthMode>(consumeAccountEntryMode);
+  const [mode, setMode] = useState<AuthMode>(requestedMode ?? "signup");
   const [name, setName] = useState(profile?.name === "Athlete" ? "" : (profile?.name ?? ""));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -247,6 +237,7 @@ function AccountScreen() {
         redirectTo: getPasswordRecoveryRedirectUrl(),
       });
       if (error) throw error;
+      markPasswordRecoveryRequested();
       setFeedback({ tone: "password-reset", email: normalizedEmail });
       toast.success("Password reset email sent.");
     } catch (error) {

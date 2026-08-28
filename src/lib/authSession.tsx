@@ -15,6 +15,7 @@ export type AuthSessionState = AuthSession | null | "loading";
 export const NATIVE_AUTH_CALLBACK_URL = "ascendr://auth/callback";
 export const PASSWORD_RECOVERY_PATH = "/reset-password";
 const AUTH_SESSION_TIMEOUT_MS = 8_000;
+const PASSWORD_RECOVERY_REQUEST_KEY = "ascendr:password-recovery-requested";
 
 type NativeAuthCallback =
   | { type: "code"; code: string }
@@ -46,6 +47,21 @@ export function getAuthRedirectUrl(webPath: string) {
 
 export function getPasswordRecoveryRedirectUrl() {
   return getAuthRedirectUrl(PASSWORD_RECOVERY_PATH);
+}
+
+export function markPasswordRecoveryRequested() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PASSWORD_RECOVERY_REQUEST_KEY, "true");
+}
+
+function passwordRecoveryWasRequested() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PASSWORD_RECOVERY_REQUEST_KEY) === "true";
+}
+
+function clearPasswordRecoveryRequest() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(PASSWORD_RECOVERY_REQUEST_KEY);
 }
 
 function openPasswordRecoveryScreen() {
@@ -81,6 +97,7 @@ export function parseNativeAuthCallback(callbackUrl: string): NativeAuthCallback
 async function completeNativeAuthCallback(callbackUrl: string) {
   const callback = parseNativeAuthCallback(callbackUrl);
   if (!callback) return;
+  const recoveryRequested = passwordRecoveryWasRequested();
 
   if (callback.type === "error") {
     console.warn("[auth] Native callback failed", callback.description);
@@ -94,7 +111,15 @@ async function completeNativeAuthCallback(callbackUrl: string) {
           access_token: callback.accessToken,
           refresh_token: callback.refreshToken,
         });
-  if (result.error) console.warn("[auth] Native callback session exchange failed", result.error);
+  if (result.error) {
+    console.warn("[auth] Native callback session exchange failed", result.error);
+    return;
+  }
+
+  if (recoveryRequested) {
+    clearPasswordRecoveryRequest();
+    openPasswordRecoveryScreen();
+  }
 }
 
 export function startNativeAuthCallbackListener() {
@@ -134,7 +159,10 @@ export function useAuthSession(): AuthSessionState {
     try {
       const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
         const next = toAuthSession(nextSession);
-        if (event === "PASSWORD_RECOVERY") openPasswordRecoveryScreen();
+        if (event === "PASSWORD_RECOVERY") {
+          clearPasswordRecoveryRequest();
+          openPasswordRecoveryScreen();
+        }
         if (!initialSessionResolved) {
           pendingSession = next;
           return;

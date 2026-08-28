@@ -19,7 +19,8 @@ function ResetPasswordScreen() {
   const [confirmation, setConfirmation] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function savePassword() {
@@ -32,16 +33,57 @@ function ResetPasswordScreen() {
       return;
     }
 
+    if (!isAccountSession(session) || !session.email) {
+      setError("This reset link has expired. Request a new password reset email.");
+      return;
+    }
+
+    const email = session.email;
+    let updated = false;
     setBusy(true);
     setError(null);
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
-      setSaved(true);
-      toast.success("Your password has been updated.");
+      updated = true;
+      setPasswordUpdated(true);
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
+
+      setSignedIn(true);
+      toast.success("Password updated. You're signed in.");
     } catch (updateError) {
       console.error("[reset-password] Password update failed", updateError);
-      setError("We couldn't update your password. Request a new reset link and try again.");
+      setError(
+        updated
+          ? "Your password was updated, but we couldn't sign you in. Try again below."
+          : "We couldn't update your password. Request a new reset link and try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signInAfterReset() {
+    if (!isAccountSession(session) || !session.email) {
+      setError("This reset link has expired. Request a new password reset email.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: session.email,
+        password,
+      });
+      if (signInError) throw signInError;
+      setSignedIn(true);
+      toast.success("You're signed in.");
+    } catch (signInError) {
+      console.error("[reset-password] Sign in failed after password reset", signInError);
+      setError("We couldn't sign you in. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -93,21 +135,47 @@ function ResetPasswordScreen() {
                 Back to Sign in
               </Button>
             </div>
-          ) : saved ? (
+          ) : signedIn ? (
+            <div className="mt-6 rounded-2xl border border-neon/25 bg-neon/[0.07] p-4 text-center">
+              <span className="mx-auto grid size-10 place-items-center rounded-xl bg-neon/15 text-neon">
+                <Check className="size-5" />
+              </span>
+              <h2 className="mt-3 text-sm font-bold">Password updated and signed in</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Your Ascendr account is secure. Continue back into the app.
+              </p>
+              <Button
+                type="button"
+                onClick={() => window.location.replace("/")}
+                className="mt-4 h-11 w-full rounded-full bg-neon font-bold text-neon-foreground hover:bg-neon/90"
+              >
+                Continue to Ascendr
+              </Button>
+            </div>
+          ) : passwordUpdated ? (
             <div className="mt-6 rounded-2xl border border-neon/25 bg-neon/[0.07] p-4 text-center">
               <span className="mx-auto grid size-10 place-items-center rounded-xl bg-neon/15 text-neon">
                 <Check className="size-5" />
               </span>
               <h2 className="mt-3 text-sm font-bold">Password updated</h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Your Ascendr account is secure. Continue to return to your app.
+                Sign in now to continue securely into Ascendr.
               </p>
+              {error && (
+                <p
+                  className="mt-4 rounded-xl border border-destructive/30 bg-destructive/[0.08] px-3 py-2 text-xs leading-relaxed text-destructive"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              )}
               <Button
                 type="button"
-                onClick={() => window.location.replace("/home")}
+                onClick={signInAfterReset}
+                disabled={busy}
                 className="mt-4 h-11 w-full rounded-full bg-neon font-bold text-neon-foreground hover:bg-neon/90"
               >
-                Continue to Ascendr
+                {busy ? <Loader2 className="size-5 animate-spin" /> : "Sign in to Ascendr"}
               </Button>
             </div>
           ) : (
@@ -162,7 +230,7 @@ function ResetPasswordScreen() {
                 disabled={busy || !password || !confirmation}
                 className="mt-2 h-13 w-full rounded-full bg-neon text-base font-extrabold text-neon-foreground shadow-[0_16px_34px_-16px_var(--neon)] hover:bg-neon/90"
               >
-                {busy ? <Loader2 className="size-5 animate-spin" /> : "Save new password"}
+                {busy ? <Loader2 className="size-5 animate-spin" /> : "Save password & sign in"}
               </Button>
             </div>
           )}

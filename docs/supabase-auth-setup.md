@@ -14,7 +14,7 @@ In Supabase project `adzfzimuranhrllbxfyf`, open **Authentication** > **URL Conf
 
 `https://ascendr.org` is the web fallback shown in authentication emails. The iOS app uses `ascendr://auth/callback` as its explicit redirect target and opens the confirmation link directly back in Ascendr. The Vercel URL remains allowlisted while the native app loads the hosted web shell from that domain.
 
-The Sign in screen's **Forgot password?** action uses that same native callback. Supabase marks the callback as `PASSWORD_RECOVERY`, then Ascendr opens its in-app password screen and saves the new password through Supabase Auth. No website password-reset page is used. Keep `ascendr://auth/callback` allowlisted exactly as shown above.
+The Sign in screen's **Forgot password?** action uses that same native callback. Ascendr opens its in-app password screen, requires the new password to be confirmed, then saves it and signs the user in through Supabase Auth. No website password-reset page is used. Keep `ascendr://auth/callback` allowlisted exactly as shown above.
 
 Then, in **Authentication** > **Providers**:
 
