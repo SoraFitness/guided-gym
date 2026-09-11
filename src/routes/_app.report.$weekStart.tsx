@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_app/report/$weekStart")({
 function ReportDetail() {
   const { weekStart } = Route.useParams();
   const fn = useServerFn(getWeeklyReport);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["weeklyReport", weekStart],
     queryFn: () => fn({ data: { weekStart } }),
   });
@@ -32,7 +32,11 @@ function ReportDetail() {
         </Link>
         <h1 className="font-bold">Weekly Report</h1>
       </header>
-      {isLoading || !data ? (
+      {isError ? (
+        <div className="rounded-3xl bg-surface p-6 text-center text-sm text-muted-foreground">
+          Couldn't load this report.
+        </div>
+      ) : isLoading || !data ? (
         <div className="flex justify-center py-12">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>

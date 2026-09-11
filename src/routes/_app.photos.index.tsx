@@ -53,12 +53,12 @@ function PhotosIndex() {
       <header className="flex items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">
-            {session ? "Private cloud" : "Private device"}
+            {accountSession ? "Private cloud" : "Private device"}
           </p>
           <h1 className="text-3xl font-bold mt-1">Progress Pictures</h1>
           <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
             <Lock className="size-3" />{" "}
-            {session ? "Visible only to you" : "Saved locally until you sync"}
+            {accountSession ? "Visible only to you" : "Saved locally until you sync"}
           </p>
         </div>
         <Link

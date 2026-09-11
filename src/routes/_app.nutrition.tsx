@@ -424,7 +424,7 @@ function DayStepper({
 }
 
 function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
-  const pct = Math.min(100, (consumed / goal) * 100);
+  const pct = goal > 0 ? Math.min(100, (consumed / goal) * 100) : 0;
   const C = 2 * Math.PI * 42;
   return (
     <div className="relative size-28 shrink-0">
@@ -470,7 +470,7 @@ function MacroChip({
   goal: number;
   hue: string;
 }) {
-  const pct = Math.min(100, (value / goal) * 100);
+  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0;
   return (
     <div className="rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3">
       <div className="flex items-baseline justify-between">

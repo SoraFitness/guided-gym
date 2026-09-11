@@ -68,6 +68,7 @@ function WorkoutDetail() {
         name: e.name,
         sets: e.sets,
         reps: e.reps,
+        time: e.time,
         muscleGroup: e.muscleGroup,
       })),
     [w.exercises],

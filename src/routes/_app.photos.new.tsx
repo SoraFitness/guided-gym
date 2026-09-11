@@ -221,7 +221,7 @@ function NewPhoto() {
           )}
         </Button>
         <p className="text-[11px] text-muted-foreground text-center">
-          {session
+          {accountSession
             ? "Your progress photos are private and only visible to you."
             : "Saved privately on this device."}
         </p>

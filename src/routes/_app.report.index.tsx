@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_app/report/")({
 
 function ReportPage() {
   const fetchReport = useServerFn(computeCurrentWeekReport);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["weeklyReport", "current"],
     queryFn: () => fetchReport(),
   });
@@ -39,7 +39,11 @@ function ReportPage() {
           <History className="size-4" />
         </Link>
       </header>
-      {isLoading || !data ? (
+      {isError ? (
+        <div className="rounded-3xl bg-surface p-6 text-center text-sm text-muted-foreground">
+          Couldn't load your report. Try again.
+        </div>
+      ) : isLoading || !data ? (
         <div className="flex justify-center py-12">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>

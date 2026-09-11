@@ -574,7 +574,10 @@ function EditGoalSheet({
               onSave({
                 currentWeightKg: c,
                 goalWeightKg: g,
-                goalTargetDate: new Date(dateStr).toISOString(),
+                // Local noon keeps the picked day in every time zone.
+                goalTargetDate: dateStr
+                  ? new Date(`${dateStr}T12:00:00`).toISOString()
+                  : targetDate.toISOString(),
                 activityLevel: act,
                 bodyFatPct: Number.isFinite(bfNum) && bfNum > 0 ? bfNum : undefined,
                 avgStepsPerDay: Number.isFinite(stepsNum) && stepsNum > 0 ? stepsNum : undefined,

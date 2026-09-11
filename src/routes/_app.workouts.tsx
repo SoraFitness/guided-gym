@@ -503,6 +503,8 @@ function WorkoutPlanBuilder({
         daysPerWeek: input.daysPerWeek,
         sessionMinutes: input.sessionMinutes,
         workoutSplit: input.workoutSplit ?? "auto",
+        // The active plan must match the profile's notes, so save them too.
+        injuries: response.plan.input.notes ?? "",
       });
       setResult(response.plan);
     } catch (generationError) {
@@ -1123,7 +1125,7 @@ function MonthlyTrainingCalendar({
             {visibleMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
           </p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {plannedThisMonth.length} planned Â· {completedThisMonth} complete
+            {plannedThisMonth.length} planned · {completedThisMonth} complete
           </p>
         </div>
         <button
@@ -1500,7 +1502,7 @@ function TrainingDayCard({
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {day.dayName} Â· {day.splitLabel}
+            {day.dayName} · {day.splitLabel}
           </div>
           <h3 className="mt-0.5 text-xl font-extrabold leading-tight">{day.workoutTitle}</h3>
         </div>

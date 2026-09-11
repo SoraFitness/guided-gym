@@ -189,7 +189,7 @@ function ComparePage() {
             ) : (
               <>
                 <Sparkles className="size-4 mr-2" />{" "}
-                {session ? "Get AI feedback" : "Save & sync for AI feedback"}
+                {accountSession ? "Get AI feedback" : "Save & sync for AI feedback"}
               </>
             )}
           </Button>

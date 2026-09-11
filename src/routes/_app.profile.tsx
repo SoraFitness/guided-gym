@@ -413,7 +413,7 @@ function ProfilePage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-xl font-extrabold">{profile.name}</h2>
-              {session && session !== "loading" && <ShieldCheck className="size-4 text-neon" />}
+              {accountSession && <ShieldCheck className="size-4 text-neon" />}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {profile.age} years · {profile.heightCm} cm · {profile.currentWeightKg} kg
