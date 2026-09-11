@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { ProfileProvider } from "../lib/profile";
 import { RevenueCatProvider } from "../lib/subscription";
+import { SingleDeviceGuard } from "../components/SingleDeviceGuard";
 
 function NotFoundComponent() {
   return (
@@ -161,6 +162,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <RevenueCatProvider>
         <ProfileProvider>
+          <SingleDeviceGuard />
           <Outlet />
         </ProfileProvider>
       </RevenueCatProvider>

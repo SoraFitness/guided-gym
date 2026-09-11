@@ -5,6 +5,7 @@ import {
   type Workout,
   type Difficulty,
 } from "./workouts";
+import type { SavedWorkoutPlan } from "./workoutPlanStore";
 import type { WorkoutSplitId } from "./workoutSplits";
 
 export type SplitLabel =
@@ -47,8 +48,18 @@ export interface WeeklyScheduleDay {
   isCompleted: boolean;
 }
 
+/** The part of a saved plan the calendar needs: its ordered sessions and when it started. */
+export type ScheduledPlan = Pick<SavedWorkoutPlan, "workoutIds" | "createdAt">;
+
+type ScheduleDayBase = Pick<
+  WeeklyScheduleDay,
+  "id" | "dayName" | "dateISO" | "isToday" | "isCompleted"
+>;
+
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+// Smart Split templates for members without a saved plan. Day 0 is the day the
+// member finished onboarding, not Monday, so their first day is never a rest day.
 const AUTO_SPLITS: Record<2 | 3 | 4 | 5 | 6, SplitLabel[]> = {
   2: ["Full Body Strength", "Rest", "Full Body Conditioning", "Rest", "Rest", "Rest", "Rest"],
   3: ["Push Day", "Rest", "Pull Day", "Rest", "Leg Day", "Rest", "Rest"],
@@ -76,12 +87,10 @@ const SPLIT_CYCLES: Record<Exclude<WorkoutSplitId, "auto">, SplitLabel[]> = {
 };
 
 function buildWeeklySplit(
-  splitId: WorkoutSplitId,
+  splitId: Exclude<WorkoutSplitId, "auto">,
   daysPerWeek: 2 | 3 | 4 | 5 | 6,
   weekStart: string,
 ): SplitLabel[] {
-  if (splitId === "auto") return AUTO_SPLITS[daysPerWeek];
-
   const cycle = SPLIT_CYCLES[splitId];
   const labels: SplitLabel[] = Array.from({ length: 7 }, () => "Rest");
   const epochWeek = Math.floor(new Date(`${weekStart}T00:00:00Z`).getTime() / 604_800_000);
@@ -296,29 +305,10 @@ function matchWorkoutId(label: SplitLabel, ranked: Workout[]): string | undefine
       );
     case "Full Body Conditioning":
       return pick((w) => w.id === "full-body-sweat") ?? pickCompatible();
-    case "Pull + Core":
-      return pickCompatible();
-    case "Conditioning / Core":
-      return pickCompatible();
-    case "Chest + Back":
-      return pickCompatible();
-    case "Shoulders + Arms":
-    case "Arms":
-      return pickCompatible();
-    case "Chest":
-      return pickCompatible();
-    case "Back":
-      return pickCompatible();
-    case "Shoulders":
-      return pickCompatible();
-    case "Power Upper":
-    case "Hypertrophy Upper":
-      return pickCompatible();
-    case "Power Lower":
-    case "Hypertrophy Lower":
-      return pickCompatible();
-    default:
+    case "Rest":
       return undefined;
+    default:
+      return pickCompatible();
   }
 }
 
@@ -372,6 +362,25 @@ function workoutFitsScheduledSplit(label: SplitLabel, workout: Workout): boolean
   }
 }
 
+/** Recovery sessions belong on rest days, so they never fill a training day. */
+export function isProgramWorkout(workout: Workout) {
+  return workout.category !== "Mobility";
+}
+
+/** The kind of training day a workout represents, used when a plan sets the calendar. */
+export function splitLabelForWorkout(workout: Workout): Exclude<SplitLabel, "Rest"> {
+  const muscles = new Set(workout.targetMuscles);
+  const hasUpper = muscles.has("chest") || muscles.has("back") || muscles.has("arms");
+  const hasLower = muscles.has("legs") || muscles.has("glutes");
+  if (workout.category === "HIIT" || workout.category === "Cardio") return "Full Body Conditioning";
+  if (workout.category !== "Strength" || (!hasUpper && !hasLower)) return "Conditioning / Core";
+  if ((hasUpper && hasLower) || /full body/i.test(workout.title)) return "Full Body Strength";
+  if (hasLower) return muscles.has("core") ? "Lower Body" : "Leg Day";
+  if (muscles.has("chest") && !muscles.has("back")) return "Push Day";
+  if (muscles.has("back") && !muscles.has("chest")) return "Pull Day";
+  return "Upper Body";
+}
+
 function difficultyFor(level: ExperienceLevel): Difficulty {
   return level === "beginner" ? "Beginner" : level === "advanced" ? "Advanced" : "Intermediate";
 }
@@ -388,6 +397,36 @@ function mondayFor(date: Date): Date {
   monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
   monday.setHours(0, 0, 0, 0);
   return monday;
+}
+
+function startOfLocalDay(date: Date): Date {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function parseDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((startOfLocalDay(to).getTime() - startOfLocalDay(from).getTime()) / 86_400_000);
+}
+
+/** The plan session trained on a given day, or null for a rest day. */
+function programSessionFor(
+  daysSinceStart: number,
+  daysPerWeek: 2 | 3 | 4 | 5 | 6,
+  sessions: Workout[],
+): Workout | null {
+  if (daysSinceStart < 0) return null;
+  const positions = TRAINING_POSITIONS[daysPerWeek];
+  const position = positions.indexOf(daysSinceStart % 7);
+  if (position < 0) return null;
+  const sessionNumber = Math.floor(daysSinceStart / 7) * positions.length + position;
+  return sessions[sessionNumber % sessions.length];
 }
 
 function weekStartISO(): string {
@@ -430,91 +469,115 @@ export function toggleCompletion(dayId: string): CompletionState {
   return next;
 }
 
+function restDay(day: ScheduleDayBase): WeeklyScheduleDay {
+  return {
+    ...day,
+    splitLabel: "Rest",
+    workoutTitle: "Rest & Recovery",
+    focus: "Recovery",
+    duration: 0,
+    difficulty: "Beginner",
+    equipment: "—",
+    estimatedCalories: 0,
+    exercises: [],
+    isRestDay: true,
+  };
+}
+
+function trainingDay(
+  day: ScheduleDayBase,
+  profile: Profile,
+  label: Exclude<SplitLabel, "Rest">,
+  workout: Workout | undefined,
+): WeeklyScheduleDay {
+  const duration = profile.sessionMinutes;
+  const caloriesPerMin = workout ? workout.calories / workout.duration : 7;
+  const exercises =
+    workout?.exercises.map((exercise) => exercise.name) ??
+    EXERCISE_POOLS[profile.equipment][exercisePoolLabel(label)] ??
+    [];
+  return {
+    ...day,
+    splitLabel: label,
+    workoutId: workout?.id,
+    workoutTitle: workout?.title ?? label,
+    focus: focusFor(label),
+    duration,
+    difficulty: difficultyFor(profile.experience),
+    equipment: EQUIPMENT_LABEL[profile.equipment],
+    estimatedCalories: Math.round(caloriesPerMin * duration),
+    exercises: exercises.slice(0, 5),
+    isRestDay: false,
+  };
+}
+
 export const weeklyScheduleService = {
   generateSchedule(
     profile: Profile,
-    activeWorkoutIds: string[] = [],
+    activePlan: string[] | ScheduledPlan = [],
     referenceDate: Date = new Date(),
   ): WeeklyScheduleDay[] {
     const monday = mondayFor(referenceDate);
     const scheduleWeekStart = localDateISO(monday);
     const completion = loadCompletion();
-    const split = buildWeeklySplit(
-      profile.workoutSplit ?? "auto",
-      profile.daysPerWeek,
-      scheduleWeekStart,
-    );
-    const pool = EXERCISE_POOLS[profile.equipment];
-    const ranked = workoutRecommendationService.recommend(profile, 500);
-    const savedPlanWorkouts = activeWorkoutIds
+    const splitId = profile.workoutSplit ?? "auto";
+    const planWorkouts = (Array.isArray(activePlan) ? activePlan : activePlan.workoutIds)
       .map(getWorkout)
       .filter((workout): workout is Workout => Boolean(workout));
+    // A Smart Split plan is the member's program: its sessions run in order,
+    // starting on the day the plan was made.
+    const programSessions = splitId === "auto" ? planWorkouts.filter(isProgramWorkout) : [];
+    const programStart =
+      (Array.isArray(activePlan) ? null : parseDate(activePlan.createdAt)) ??
+      parseDate(profile.completedAt) ??
+      monday;
+    const split =
+      splitId === "auto" ? null : buildWeeklySplit(splitId, profile.daysPerWeek, scheduleWeekStart);
+    const ranked = workoutRecommendationService.recommend(profile, 500);
 
-    return split.map((label, i) => {
+    return DAY_NAMES.map((dayName, i) => {
       const date = new Date(monday);
       date.setDate(monday.getDate() + i);
       const dateISO = localDateISO(date);
       const id = `${scheduleWeekStart}-${i}`;
-      const isToday = dateISO === localDateISO(new Date());
-      const isCompleted =
-        completion.weekStartISO === scheduleWeekStart && !!completion.completed[id];
+      const day: ScheduleDayBase = {
+        id,
+        dayName,
+        dateISO,
+        isToday: dateISO === localDateISO(new Date()),
+        isCompleted: completion.weekStartISO === scheduleWeekStart && !!completion.completed[id],
+      };
+      const daysSinceStart = daysBetween(programStart, date);
 
-      if (label === "Rest") {
-        return {
-          id,
-          dayName: DAY_NAMES[i],
-          dateISO,
-          splitLabel: label,
-          workoutTitle: "Rest & Recovery",
-          focus: "Recovery",
-          duration: 0,
-          difficulty: "Beginner" as Difficulty,
-          equipment: "—",
-          estimatedCalories: 0,
-          exercises: [],
-          isRestDay: true,
-          isToday,
-          isCompleted,
-        };
+      if (programSessions.length) {
+        const session = programSessionFor(daysSinceStart, profile.daysPerWeek, programSessions);
+        return session
+          ? trainingDay(day, profile, splitLabelForWorkout(session), session)
+          : restDay(day);
       }
 
-      const savedPlanWorkout = savedPlanWorkouts.find((workout) =>
+      const label = split
+        ? split[i]
+        : AUTO_SPLITS[profile.daysPerWeek][((daysSinceStart % 7) + 7) % 7];
+      if (label === "Rest") return restDay(day);
+
+      const savedPlanWorkout = planWorkouts.find((workout) =>
         workoutFitsScheduledSplit(label, workout),
       );
       const matchedWorkoutId = matchWorkoutId(label, ranked);
-      const w = savedPlanWorkout ?? ranked.find((workout) => workout.id === matchedWorkoutId);
-      const workoutId = w?.id;
-      const exercises =
-        w?.exercises.map((exercise) => exercise.name) ?? pool[exercisePoolLabel(label)] ?? [];
-      const duration = profile.sessionMinutes;
-      const difficulty = difficultyFor(profile.experience);
-      const caloriesPerMin = w ? w.calories / w.duration : 7;
-      const estimatedCalories = Math.round(caloriesPerMin * duration);
-
-      return {
-        id,
-        dayName: DAY_NAMES[i],
-        dateISO,
-        splitLabel: label,
-        workoutId,
-        workoutTitle: w?.title ?? label,
-        focus: focusFor(label),
-        duration,
-        difficulty,
-        equipment: EQUIPMENT_LABEL[profile.equipment],
-        estimatedCalories,
-        exercises: exercises.slice(0, 5),
-        isRestDay: false,
-        isToday,
-        isCompleted,
-      };
+      return trainingDay(
+        day,
+        profile,
+        label,
+        savedPlanWorkout ?? ranked.find((workout) => workout.id === matchedWorkoutId),
+      );
     });
   },
 
   generateMonthSchedule(
     profile: Profile,
     month: Date,
-    activeWorkoutIds: string[] = [],
+    activePlan: string[] | ScheduledPlan = [],
   ): WeeklyScheduleDay[] {
     const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
     const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
@@ -523,9 +586,7 @@ export const weeklyScheduleService = {
     const schedule: WeeklyScheduleDay[] = [];
 
     for (let weekStart = firstMonday; weekStart <= lastMonday; ) {
-      schedule.push(
-        ...weeklyScheduleService.generateSchedule(profile, activeWorkoutIds, weekStart),
-      );
+      schedule.push(...weeklyScheduleService.generateSchedule(profile, activePlan, weekStart));
       const nextWeek = new Date(weekStart);
       nextWeek.setDate(nextWeek.getDate() + 7);
       weekStart = nextWeek;

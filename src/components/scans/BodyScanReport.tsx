@@ -4,7 +4,6 @@ import {
   Check,
   Clock3,
   Download,
-  GitCompareArrows,
   History,
   Loader2,
   LockKeyhole,
@@ -13,13 +12,23 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  TrendingDown,
   TrendingUp,
   WandSparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
 import { MuscleGroupBreakdown } from "@/components/bodyscan/MuscleGroupBreakdown";
+import { HarmonyButton } from "@/components/harmony/HarmonyButton";
+import { ScanComparisonCard } from "@/components/scans/ScanComparisonCard";
 import type { BodyScanAiResult } from "@/lib/bodyScan.functions";
+
+// Loaded only when opened, so on-device landmark detection stays out of the report bundle.
+const BodyHarmonySheet = lazy(() =>
+  import("@/components/harmony/HarmonySheet").then((module) => ({
+    default: module.BodyHarmonySheet,
+  })),
+);
 
 interface BodyScanReportProps {
   photo: string;
@@ -45,46 +54,6 @@ function confidenceLabel(confidence: number) {
   return "Limited photo confidence";
 }
 
-function comparisonCopy(comparison: BodyScanAiResult["comparison"]) {
-  if (!comparison || comparison.status === "baseline") {
-    return {
-      eyebrow: "Baseline locked",
-      title: "Your starting point is saved.",
-      body: "Future scans will be compared conservatively against this result so ordinary lighting and pose differences do not become fake progress.",
-      badge: "Scan 01",
-      accent: false,
-    };
-  }
-  if (comparison.basis === "exact_match") {
-    return {
-      eyebrow: "Consistency verified",
-      title: "Same photo. Same scores.",
-      body: comparison.summary,
-      badge: "Exact match",
-      accent: true,
-    };
-  }
-  if (comparison.status === "change_detected") {
-    return {
-      eyebrow: "Progress detected",
-      title:
-        comparison.direction === "improved"
-          ? "A visible change cleared our threshold."
-          : "A reliable visual change was found.",
-      body: comparison.summary,
-      badge: "Verified change",
-      accent: true,
-    };
-  }
-  return {
-    eyebrow: "Consistency protected",
-    title: "No reliable change yet.",
-    body: comparison.summary,
-    badge: "Scores held",
-    accent: false,
-  };
-}
-
 export function BodyScanReport({
   photo,
   result,
@@ -95,6 +64,7 @@ export function BodyScanReport({
   onHistory,
 }: BodyScanReportProps) {
   const [shareBusy, setShareBusy] = useState<"share" | "save" | null>(null);
+  const [harmonyOpen, setHarmonyOpen] = useState(false);
   const metrics: ReportMetric[] = [
     {
       label: "Muscle Development",
@@ -136,7 +106,6 @@ export function BodyScanReport({
   ];
   const confidencePercent = Math.round(result.confidence * 100);
   const comparison = result.comparison;
-  const comparisonText = comparisonCopy(comparison);
   const overallDelta = comparison?.scoreDeltas?.overallScore;
   const formattedDate = createdAt
     ? new Date(createdAt).toLocaleDateString(undefined, {
@@ -251,12 +220,25 @@ export function BodyScanReport({
                 </div>
               </div>
               <div className="mb-0.5 flex flex-col items-end gap-2">
-                {typeof overallDelta === "number" && comparison?.status === "change_detected" && (
-                  <span className="flex items-center gap-1 rounded-full bg-neon px-2.5 py-1 text-[10px] font-black text-black">
-                    <TrendingUp className="size-3" /> {overallDelta > 0 ? "+" : ""}
-                    {overallDelta}
-                  </span>
-                )}
+                {typeof overallDelta === "number" &&
+                  overallDelta !== 0 &&
+                  comparison?.status === "change_detected" && (
+                    <span
+                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black ${
+                        overallDelta > 0
+                          ? "bg-neon text-black"
+                          : "bg-destructive text-destructive-foreground"
+                      }`}
+                    >
+                      {overallDelta > 0 ? (
+                        <TrendingUp className="size-3" />
+                      ) : (
+                        <TrendingDown className="size-3" />
+                      )}
+                      {overallDelta > 0 ? "+" : ""}
+                      {overallDelta}
+                    </span>
+                  )}
                 <div className="rounded-2xl border border-neon/25 bg-neon/[0.10] px-3 py-2 text-right">
                   <p className="text-xl font-black leading-none text-neon">
                     {result.bodyFatEstimate.lowPercent}–{result.bodyFatEstimate.highPercent}%
@@ -321,7 +303,18 @@ export function BodyScanReport({
       <div className="mx-auto max-w-md space-y-4 px-4 sm:px-5">
         <MuscleGroupBreakdown muscleGroups={result.muscleGroups} />
 
-        <ComparisonCard result={result} />
+        <ScanComparisonCard
+          scanLabel="Body"
+          comparison={comparison}
+          deltas={[
+            { label: "Overall", value: comparison?.scoreDeltas?.overallScore },
+            { label: "Muscle", value: comparison?.scoreDeltas?.muscleDevelopment },
+            { label: "V-Taper", value: comparison?.scoreDeltas?.vTaper },
+            comparison?.scoreDeltas?.visibleConditioning === undefined
+              ? { label: "Symmetry", value: comparison?.scoreDeltas?.symmetry }
+              : { label: "Conditioning", value: comparison?.scoreDeltas?.visibleConditioning },
+          ]}
+        />
 
         <section className="rounded-[28px] border border-white/[0.08] bg-white/[0.04] p-5">
           <div className="flex items-center justify-between gap-3">
@@ -391,6 +384,8 @@ export function BodyScanReport({
           </div>
         </section>
 
+        <HarmonyButton kind="body" onOpen={() => setHarmonyOpen(true)} />
+
         <div className="flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
           <p className="text-[10px] leading-relaxed text-white/42">
@@ -419,6 +414,12 @@ export function BodyScanReport({
           </button>
         )}
       </div>
+
+      {harmonyOpen && (
+        <Suspense fallback={null}>
+          <BodyHarmonySheet photo={photo} onClose={() => setHarmonyOpen(false)} />
+        </Suspense>
+      )}
     </motion.main>
   );
 }
@@ -443,61 +444,6 @@ function SnapshotMetric({ metric, delay }: { metric: ReportMetric; delay: number
         />
       </div>
     </div>
-  );
-}
-
-function ComparisonCard({ result }: { result: BodyScanAiResult }) {
-  const comparison = result.comparison;
-  const copy = comparisonCopy(comparison);
-  const deltaItems = comparison?.scoreDeltas
-    ? [
-        { label: "Overall", value: comparison.scoreDeltas.overallScore },
-        { label: "Muscle", value: comparison.scoreDeltas.muscleDevelopment },
-        { label: "V-Taper", value: comparison.scoreDeltas.vTaper },
-        { label: "Symmetry", value: comparison.scoreDeltas.symmetry },
-      ]
-    : [];
-
-  return (
-    <section
-      className={`relative overflow-hidden rounded-[28px] border p-5 ${
-        copy.accent ? "border-neon/20 bg-neon/[0.055]" : "border-white/[0.08] bg-white/[0.035]"
-      }`}
-    >
-      {copy.accent && (
-        <div className="pointer-events-none absolute -right-16 -top-16 size-40 rounded-full bg-neon/10 blur-3xl" />
-      )}
-      <div className="relative flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-neon">
-          <GitCompareArrows className="size-4" />
-          <p className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.eyebrow}</p>
-        </div>
-        <span className="rounded-full border border-white/[0.06] bg-black/20 px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-white/45">
-          {copy.badge}
-        </span>
-      </div>
-      <h2 className="relative mt-4 text-xl font-bold tracking-[-0.025em]">{copy.title}</h2>
-      <p className="relative mt-2 text-[11px] leading-relaxed text-white/52">{copy.body}</p>
-
-      {comparison?.status === "change_detected" && deltaItems.length > 0 && (
-        <div className="relative mt-4 grid grid-cols-4 gap-2">
-          {deltaItems.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-white/[0.06] bg-black/20 px-2 py-3 text-center"
-            >
-              <p className="text-base font-black text-neon">
-                {item.value > 0 ? "+" : ""}
-                {item.value}
-              </p>
-              <p className="mt-1 text-[7px] font-bold uppercase tracking-wider text-white/35">
-                {item.label}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 

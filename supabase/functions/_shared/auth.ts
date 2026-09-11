@@ -2,8 +2,15 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { requiredEnv } from "./env.ts";
 
 export class UnauthorizedError extends Error {
+  constructor(message = "Unauthorized") {
+    super(message);
+  }
+}
+
+/** The account signed in on a newer device, so this older session no longer has access. */
+export class SessionReplacedError extends UnauthorizedError {
   constructor() {
-    super("Unauthorized");
+    super("SESSION_REPLACED");
   }
 }
 
@@ -27,6 +34,15 @@ export async function requireUser(request: Request) {
   });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) throw new UnauthorizedError();
+
+  // One active device per account: only the newest sign-in may use the API.
+  const { data: isCurrentSession, error: sessionError } = await supabase.rpc("is_current_session");
+  if (sessionError) {
+    console.error("[auth] session check failed", sessionError.message);
+    throw new UnauthorizedError();
+  }
+  if (isCurrentSession !== true) throw new SessionReplacedError();
+
   return { supabase, token, user: data.user };
 }
 

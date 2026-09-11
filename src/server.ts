@@ -24,12 +24,14 @@ function withSecurityHeaders(response: Response, request: Request): Response {
         "frame-ancestors 'none'",
         "form-action 'self'",
         "object-src 'none'",
-        "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline'",
+        // Harmony runs MediaPipe: its WebAssembly runtime loads from jsDelivr and its
+        // models from Google Cloud Storage. Fonts come from Google Fonts.
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "img-src 'self' data: blob: https:",
         "media-src 'self' blob:",
-        "font-src 'self' data:",
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://storage.googleapis.com",
         "worker-src 'self' blob:",
       ].join("; "),
     );

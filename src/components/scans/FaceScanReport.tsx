@@ -14,9 +14,18 @@ import {
   Target,
   WandSparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
+import { HarmonyButton } from "@/components/harmony/HarmonyButton";
+import { ScanComparisonCard } from "@/components/scans/ScanComparisonCard";
 import type { FaceScanResult } from "@/lib/faceScan.functions";
+
+// Loaded only when opened, so on-device landmark detection stays out of the report bundle.
+const FaceHarmonySheet = lazy(() =>
+  import("@/components/harmony/HarmonySheet").then((module) => ({
+    default: module.FaceHarmonySheet,
+  })),
+);
 
 interface FaceScanReportProps {
   photo: string;
@@ -49,6 +58,7 @@ export function FaceScanReport({
   onHistory,
 }: FaceScanReportProps) {
   const [shareBusy, setShareBusy] = useState<"share" | "save" | null>(null);
+  const [harmonyOpen, setHarmonyOpen] = useState(false);
   const confidencePercent = Math.round(result.confidence * 100);
   const snapshotMetrics: SnapshotMetric[] = [
     { label: "Symmetry", score: result.facialSymmetry.score },
@@ -237,6 +247,17 @@ export function FaceScanReport({
       </section>
 
       <div className="mx-auto max-w-md space-y-4 px-4 sm:px-5">
+        <ScanComparisonCard
+          scanLabel="Face"
+          comparison={result.comparison}
+          deltas={[
+            { label: "Overall", value: result.comparison?.scoreDeltas?.overallScore },
+            { label: "Jawline", value: result.comparison?.scoreDeltas?.jawlineDefinition },
+            { label: "Skin", value: result.comparison?.scoreDeltas?.skinQuality },
+            { label: "Eye Area", value: result.comparison?.scoreDeltas?.eyeArea },
+          ]}
+        />
+
         <section className="rounded-[28px] border border-white/[0.08] bg-white/[0.04] p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-neon">
@@ -324,6 +345,8 @@ export function FaceScanReport({
           </div>
         </section>
 
+        <HarmonyButton kind="face" onOpen={() => setHarmonyOpen(true)} />
+
         <div className="flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
           <p className="text-[10px] leading-relaxed text-white/42">
@@ -352,6 +375,12 @@ export function FaceScanReport({
           </button>
         )}
       </div>
+
+      {harmonyOpen && (
+        <Suspense fallback={null}>
+          <FaceHarmonySheet photo={photo} onClose={() => setHarmonyOpen(false)} />
+        </Suspense>
+      )}
     </motion.main>
   );
 }

@@ -9,6 +9,7 @@ import {
   getSubscriptionAccess,
   SubscriptionVerificationError,
 } from "@/lib/subscription-access.server";
+import { SESSION_REPLACED_MESSAGE } from "@/lib/sessionReplaced";
 
 type Body = {
   messages: UIMessage[];
@@ -16,8 +17,7 @@ type Body = {
   userContext?: unknown;
 };
 
-const BROWSER_PREVIEW_ACCESS_USER_ID =
-  import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_USER_ID?.trim();
+const BROWSER_PREVIEW_ACCESS_USER_ID = import.meta.env.VITE_BROWSER_PREVIEW_ACCESS_USER_ID?.trim();
 
 const SYSTEM_PROMPT = `You are "Coach", the in-app AI fitness coach for the Ascendr fitness app.
 
@@ -110,6 +110,14 @@ export const Route = createFileRoute("/api/coach")({
           return new Response("Unauthorized", { status: 401 });
         }
         const userId = claims.claims.sub as string;
+
+        const { data: isCurrentSession, error: sessionError } =
+          await supabase.rpc("is_current_session");
+        if (sessionError || isCurrentSession !== true) {
+          return new Response(sessionError ? "Unauthorized" : SESSION_REPLACED_MESSAGE, {
+            status: 401,
+          });
+        }
 
         const hasBrowserPreviewAccess =
           import.meta.env.DEV && userId === BROWSER_PREVIEW_ACCESS_USER_ID;
@@ -256,7 +264,14 @@ export const Route = createFileRoute("/api/coach")({
             : "";
 
         const system = `${SYSTEM_PROMPT}${memoryBlock}\n\nUSER_CONTEXT:${JSON.stringify(userContext ?? {})}`;
-        const recentMessages = messages.slice(-12);
+        // Only the member's and Coach's own turns are forwarded, so a client can't inject
+        // system instructions.
+        const recentMessages = messages
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .slice(-12);
+        if (!recentMessages.some((message) => message.role === "user")) {
+          return new Response("Missing messages/threadId", { status: 400 });
+        }
 
         const result = streamText({
           model,

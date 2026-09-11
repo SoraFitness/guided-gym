@@ -1,7 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Loader2, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Loader2,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AscendrLogo } from "@/components/AscendrLogo";
 import { Button } from "@/components/ui/button";
@@ -17,8 +26,10 @@ import {
 import { useProfile } from "@/lib/profile";
 import { isNativeAppleSignInAvailable, signInWithNativeApple } from "@/lib/nativeAppleSignIn";
 import { identifyRevenueCatUser, useSubscription } from "@/lib/subscription";
+import { clearSessionReplacedNotice, hasSessionReplacedNotice } from "@/lib/sessionReplaced";
 
 const DEFAULT_DESTINATION = "/home";
+const MIN_PASSWORD_LENGTH = 8;
 
 type AuthMode = "signup" | "signin";
 type ConfirmationType = "signup" | "email_change";
@@ -97,12 +108,23 @@ function AccountScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [signedOutElsewhere, setSignedOutElsewhere] = useState(false);
   const isLegacyAnonymousSession = session !== "loading" && session?.isAnonymous === true;
   const destination = useMemo(() => safeDestination(next), [next]);
 
   useEffect(() => {
     setMode(requestedMode ?? "signup");
   }, [requestedMode]);
+
+  useEffect(() => {
+    if (isAccountSession(session)) {
+      clearSessionReplacedNotice();
+      setSignedOutElsewhere(false);
+    } else if (session !== "loading" && hasSessionReplacedNotice()) {
+      setSignedOutElsewhere(true);
+      setMode("signin");
+    }
+  }, [session]);
 
   useEffect(() => {
     if (
@@ -139,6 +161,13 @@ function AccountScreen() {
 
   async function continueWithEmail() {
     if (!email.trim() || !password) return;
+    if (mode === "signup" && password.length < MIN_PASSWORD_LENGTH) {
+      showError(
+        new Error(`Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`),
+        "Choose a longer password.",
+      );
+      return;
+    }
     const normalizedEmail = email.trim().toLowerCase();
     const emailRedirectTo = getAuthRedirectUrl(destination);
     setBusy(true);
@@ -320,6 +349,25 @@ function AccountScreen() {
             on every device.
           </p>
 
+          {signedOutElsewhere && (
+            <div
+              className="mt-5 flex gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] p-4"
+              role="alert"
+            >
+              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-300" />
+              <div>
+                <p className="text-sm font-bold text-amber-100">
+                  You were signed out on this device
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
+                  Your Ascendr account was signed in on another device. To keep every account
+                  private, an account can only be active on one device at a time. Signing in here
+                  signs the other device out.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 grid grid-cols-2 rounded-2xl border border-white/[0.07] bg-black/20 p-1">
             {(["signup", "signin"] as const).map((option) => (
               <button
@@ -441,7 +489,11 @@ function AccountScreen() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder={
+                      mode === "signup"
+                        ? `At least ${MIN_PASSWORD_LENGTH} characters`
+                        : "Your password"
+                    }
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
                     className="h-12 rounded-2xl border-white/10 bg-black/20 pr-12"
                   />

@@ -3,9 +3,9 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "./openrouter.server";
 import { claimRateLimit } from "./rateLimit.server";
-import { workouts } from "./workouts";
+import { splitLabelForWorkout } from "./weeklySchedule";
 import type { SavedWorkoutPlan, WorkoutPlanInput } from "./workoutPlanStore";
-import { getWorkoutSplitOption } from "./workoutSplits";
+import { buildProgramCandidates, fallbackProgram, orderProgramSessions } from "./workoutProgram";
 
 const FocusSchema = z.enum([
   "chest",
@@ -60,85 +60,29 @@ export interface WorkoutPlanGenerationResult {
   plan: SavedWorkoutPlan;
 }
 
-function requestedGoals(input: WorkoutPlanInput) {
-  return input.goals?.length ? [...new Set(input.goals)] : [input.goal];
-}
-
-function scoreCandidate(workout: (typeof workouts)[number], input: WorkoutPlanInput) {
-  let score = 0;
-  const matchedGoals = requestedGoals(input).filter((goal) =>
-    workout.recommendedForGoals.includes(goal),
-  );
-  score += matchedGoals.length * 18;
-  if (workout.recommendedForGoals.includes(input.goal)) score += 4;
-  if (workout.recommendedForLevels.includes(input.experience)) score += 16;
-  score += workout.targetMuscles.filter((muscle) => input.focusAreas.includes(muscle)).length * 14;
-  score += Math.max(0, 10 - Math.abs(workout.duration - input.sessionMinutes) / 2);
-  return score;
-}
-
-function buildCandidates(input: WorkoutPlanInput) {
-  const exactEquipment = workouts.filter(
-    (workout) => input.equipment === "mixed" || workout.equipment.includes(input.equipment),
-  );
-  const ranked = exactEquipment
-    .map((workout) => ({ workout, score: scoreCandidate(workout, input) }))
-    .sort((a, b) => b.score - a.score);
-  const selected: typeof ranked = [];
-  const recentFamilies: string[] = [];
-  for (const item of ranked) {
-    const family = item.workout.targetMuscles.slice().sort().join("-") || item.workout.category;
-    if (recentFamilies.slice(-2).includes(family) && selected.length < input.daysPerWeek * 3)
-      continue;
-    selected.push(item);
-    recentFamilies.push(family);
-    if (selected.length >= 24) break;
-  }
-  return selected.length >= input.daysPerWeek ? selected : ranked.slice(0, 24);
-}
-
-function fallbackPlan(input: WorkoutPlanInput, candidates: ReturnType<typeof buildCandidates>) {
-  const picked: string[] = [];
-  for (const goal of requestedGoals(input)) {
-    const match = candidates.find(
-      ({ workout }) => !picked.includes(workout.id) && workout.recommendedForGoals.includes(goal),
-    );
-    if (match) picked.push(match.workout.id);
-    if (picked.length >= input.daysPerWeek) break;
-  }
-  for (const { workout } of candidates) {
-    if (!picked.includes(workout.id)) picked.push(workout.id);
-    if (picked.length >= input.daysPerWeek) break;
-  }
-  const focus = input.focusAreas
-    .map((area) => area.charAt(0).toUpperCase() + area.slice(1))
-    .join(" + ");
-  const split = getWorkoutSplitOption(input.workoutSplit);
-  const goalSummary = requestedGoals(input)
-    .map((goal) => goal.replaceAll("_", " "))
-    .join(" + ");
-  return {
-    name: `${split.shortName} · ${focus}`.slice(0, 50),
-    summary: `A balanced ${input.daysPerWeek}-day ${split.shortName.toLowerCase()} plan combining ${goalSummary}, centered on ${focus.toLowerCase()}, and matched to your ${input.sessionMinutes}-minute sessions and available equipment.`,
-    workoutIds: picked,
-  };
-}
+const SYSTEM_PROMPT = [
+  "You are Ascendr's fitness programming engine. Build the member's weekly training program using only the provided candidate workout IDs.",
+  "Return workoutIds as the ordered training sessions for one week: exactly request.daysPerWeek entries, session one first. Rest days are added automatically, so never include recovery or mobility sessions.",
+  "A workout may repeat on non-consecutive sessions. Never schedule sessions that train the same primary muscles back to back.",
+  "When workoutSplit is 'auto' or omitted, choose the structure (for example full body, upper/lower, or push/pull/legs) that best fits the member's days per week, goals, experience, current training frequency, equipment, session length, limitations, and focus areas. Follow an explicit workoutSplit when one is provided.",
+  "Do not make medical claims.",
+].join(" ");
 
 export const generateWorkoutPlan = createServerFn({ method: "POST" })
   .validator(InputSchema)
   .handler(async ({ data }): Promise<WorkoutPlanGenerationResult> => {
     claimRateLimit("workout-plan", { limit: 12, windowMs: 15 * 60 * 1_000 });
     const input = data as WorkoutPlanInput;
-    const candidates = buildCandidates(input);
-    const fallback = fallbackPlan(input, candidates);
-    let generated = fallback;
+    const candidates = buildProgramCandidates(input);
+    let generated = fallbackProgram(input, candidates);
     let source: SavedWorkoutPlan["source"] = "smart";
-    if (candidates.length >= input.daysPerWeek) {
+    if (candidates.length >= 2) {
       try {
         const provider = createOpenRouterProvider(undefined, "workout-plan");
         const candidateData = candidates.map(({ workout }) => ({
           id: workout.id,
           title: workout.title,
+          sessionType: splitLabelForWorkout(workout),
           category: workout.category,
           duration: workout.duration,
           difficulty: workout.difficulty,
@@ -148,14 +92,15 @@ export const generateWorkoutPlan = createServerFn({ method: "POST" })
         const { output } = await generateText({
           model: provider(OPENROUTER_COACH_MODEL),
           output: Output.object({ schema: ModelPlanSchema }),
-          system:
-            "You are Ascendr's fitness programming engine. Select only provided workout IDs. Build a balanced, realistic weekly plan. When workoutSplit is 'auto' or omitted, choose the most appropriate training structure from the user's days per week, goals, experience, current training frequency, equipment, time, limitations, focus areas, and recovery needs. Follow an explicit workout split when one is provided. Avoid training the same primary muscles hard on consecutive days. Do not make medical claims.",
+          system: SYSTEM_PROMPT,
           prompt: JSON.stringify({ request: input, candidates: candidateData }),
         });
         const allowed = new Set(candidateData.map((candidate) => candidate.id));
-        const validIds = [...new Set(output.workoutIds)].filter((id) => allowed.has(id));
-        if (validIds.length >= input.daysPerWeek) {
-          generated = { ...output, workoutIds: validIds.slice(0, input.daysPerWeek) };
+        const sessions = output.workoutIds
+          .filter((id) => allowed.has(id))
+          .slice(0, input.daysPerWeek);
+        if (sessions.length === input.daysPerWeek) {
+          generated = { ...output, workoutIds: orderProgramSessions(sessions) };
           source = "ai";
         }
       } catch (error) {

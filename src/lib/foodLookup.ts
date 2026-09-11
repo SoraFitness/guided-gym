@@ -13,6 +13,7 @@ export interface LookupResult {
   fat: number;
   confidence?: number; // 0-1 for image
   nutrients?: NutrientDetails;
+  needsLabelCheck?: boolean; // database entry looks unreliable
 }
 
 // A small mock barcode database — in production this would call OpenFoodFacts etc.

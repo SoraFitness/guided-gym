@@ -2,6 +2,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import { SESSION_REPLACED_MESSAGE } from "@/lib/sessionReplaced";
 
 export const requireSupabaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
@@ -60,6 +61,17 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
 
     if (!data.claims.sub) {
       throw new Error("Unauthorized: No user ID found in token");
+    }
+
+    // One active device per account: a session replaced by a newer sign-in is rejected.
+    const { data: isCurrentSession, error: sessionError } =
+      await supabase.rpc("is_current_session");
+    if (sessionError) {
+      console.error("[Supabase] Session check failed", sessionError.message);
+      throw new Error("Unauthorized: Session could not be verified");
+    }
+    if (isCurrentSession !== true) {
+      throw new Error(SESSION_REPLACED_MESSAGE);
     }
 
     return next({

@@ -84,6 +84,7 @@ export const BODY_SCAN_DEMO_RESULT: BodyScanAiResult = {
     insight:
       "Left-to-right balance appears strong in the shoulders, arms, waist, and visible leg position.",
   },
+  visibleConditioning: 70,
   potential: {
     score: 92,
     insight:

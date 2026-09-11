@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getWorkout, workouts } from "./workouts";
-import { weeklyScheduleService } from "./weeklySchedule";
+import { splitLabelForWorkout, weeklyScheduleService } from "./weeklySchedule";
 import type { Profile } from "./profile";
 
 const profile: Profile = {
@@ -89,5 +89,102 @@ describe("weekly schedule workout matching", () => {
     expect(augustDays.at(-1)?.dateISO).toBe("2026-08-31");
     expect(legDays.length).toBeGreaterThan(0);
     expect(legDays.every((day) => day.workoutId === "lower-body-burn")).toBe(true);
+  });
+});
+
+const localNoon = (year: number, monthIndex: number, day: number) =>
+  new Date(year, monthIndex, day, 12);
+
+describe("smart split program schedule", () => {
+  // Created on Thursday, September 10, 2026.
+  const createdAt = localNoon(2026, 8, 10).toISOString();
+  const smartProfile: Profile = {
+    ...profile,
+    workoutSplit: "auto",
+    daysPerWeek: 4,
+    completedAt: createdAt,
+  };
+  const plan = {
+    workoutIds: ["push-strength", "pull-strength", "lower-body-burn", "upper-body-strength"],
+    createdAt,
+  };
+
+  it("starts the plan with a training day on the day it was created", () => {
+    const week = weeklyScheduleService.generateSchedule(smartProfile, plan, localNoon(2026, 8, 10));
+    const byDate = new Map(week.map((day) => [day.dateISO, day]));
+
+    expect(byDate.get("2026-09-07")?.isRestDay).toBe(true);
+    expect(byDate.get("2026-09-10")).toMatchObject({
+      workoutId: "push-strength",
+      splitLabel: "Push Day",
+      isRestDay: false,
+    });
+    expect(byDate.get("2026-09-11")).toMatchObject({
+      workoutId: "pull-strength",
+      splitLabel: "Pull Day",
+    });
+    expect(byDate.get("2026-09-12")?.isRestDay).toBe(true);
+    expect(byDate.get("2026-09-13")).toMatchObject({
+      workoutId: "lower-body-burn",
+      splitLabel: "Leg Day",
+    });
+  });
+
+  it("keeps rotating through the plan's sessions in order", () => {
+    const nextWeek = weeklyScheduleService.generateSchedule(
+      smartProfile,
+      plan,
+      localNoon(2026, 8, 17),
+    );
+
+    expect(
+      nextWeek.filter((day) => !day.isRestDay).map((day) => [day.dateISO, day.workoutId]),
+    ).toEqual([
+      ["2026-09-14", "upper-body-strength"],
+      ["2026-09-17", "push-strength"],
+      ["2026-09-18", "pull-strength"],
+      ["2026-09-20", "lower-body-burn"],
+    ]);
+  });
+
+  it("does not rest every Smart Split member on the same weekday", () => {
+    // Thursday used to be a rest day in every Smart Split template.
+    const thursday = localNoon(2026, 8, 10);
+    for (const daysPerWeek of [2, 3, 4, 5, 6] as const) {
+      const week = weeklyScheduleService.generateSchedule(
+        { ...smartProfile, daysPerWeek, completedAt: thursday.toISOString() },
+        [],
+        thursday,
+      );
+      expect(week.find((day) => day.dateISO === "2026-09-10")?.isRestDay).toBe(false);
+    }
+  });
+
+  it("never fills a training day with a recovery session", () => {
+    const week = weeklyScheduleService.generateSchedule(
+      smartProfile,
+      { ...plan, workoutIds: ["mobility-recovery", "push-strength"] },
+      localNoon(2026, 8, 10),
+    );
+
+    expect(
+      week.filter((day) => !day.isRestDay).every((day) => day.workoutId === "push-strength"),
+    ).toBe(true);
+  });
+
+  it("labels catalog workouts by the kind of session they train", () => {
+    const labelFor = (prefix: string) => {
+      const workout = workouts.find((item) => item.id.startsWith(prefix));
+      if (!workout) throw new Error(`No workout starts with ${prefix}`);
+      return splitLabelForWorkout(workout);
+    };
+
+    expect(labelFor("sora-push-")).toBe("Push Day");
+    expect(labelFor("sora-pull-")).toBe("Pull Day");
+    expect(labelFor("sora-legs-")).toBe("Leg Day");
+    expect(labelFor("sora-lower-")).toBe("Lower Body");
+    expect(labelFor("sora-full-")).toBe("Full Body Strength");
+    expect(labelFor("sora-core-")).toBe("Conditioning / Core");
+    expect(labelFor("sora-hiit-")).toBe("Full Body Conditioning");
   });
 });

@@ -65,7 +65,7 @@ import {
 } from "@/lib/calorieEngine";
 import { suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
-import { workoutRecommendationService } from "@/lib/workouts";
+import { fallbackProgram } from "@/lib/workoutProgram";
 import { weeklyScheduleService } from "@/lib/weeklySchedule";
 import { getWorkoutSplitOption, type WorkoutSplitId } from "@/lib/workoutSplits";
 import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
@@ -84,6 +84,9 @@ import {
   saveOnboardingPaywallCheckpoint,
 } from "@/lib/onboardingResume";
 import { useSubscription } from "@/lib/subscription";
+import { isAccountSession, useAuthSession } from "@/lib/authSession";
+import { markGuestOnboardingCompleted, markGuestOnboardingPlan } from "@/lib/accountOwnership";
+import { useCloudProfileRestore } from "@/lib/cloudProfileRestore";
 import { createClientId } from "@/lib/clientId";
 import {
   buildOnboardingResponseSnapshot,
@@ -381,7 +384,8 @@ function equipmentItemsForSetup(setup: EquipmentSetup): string[] {
 
 function buildSmartOnboardingPlan(profile: Profile, input: WorkoutPlanInput): SavedWorkoutPlan {
   const split = getWorkoutSplitOption(profile.workoutSplit);
-  const workouts = workoutRecommendationService.recommend(profile, profile.daysPerWeek);
+  // The same ordered weekly program the AI planner falls back to.
+  const program = fallbackProgram(input);
   const focus = profile.focusAreas.map((area) => FOCUS_LABELS[area]).join(" + ");
   const goals = getProfileGoals(profile);
   const goalLabels = goals.map((goal) => GOAL_LABELS[goal]);
@@ -395,7 +399,7 @@ function buildSmartOnboardingPlan(profile: Profile, input: WorkoutPlanInput): Sa
     createdAt: new Date().toISOString(),
     source: "smart",
     input,
-    workoutIds: workouts.map((workout) => workout.id),
+    workoutIds: program.workoutIds,
   };
 }
 
@@ -500,7 +504,9 @@ function focusAreasForGoals(goals: Goal[]): FocusArea[] {
 
 function Onboarding() {
   const navigate = useNavigate();
-  const { setProfile } = useProfile();
+  const { profile: storedProfile, ready: profileReady, setProfile } = useProfile();
+  const session = useAuthSession();
+  const profileRestore = useCloudProfileRestore(session, storedProfile, profileReady);
   const subscription = useSubscription();
   const generatePlan = useServerFn(generateWorkoutPlan);
   const recordOnboardingStart = captureOnboardingStarted;
@@ -619,6 +625,11 @@ function Onboarding() {
     });
   }, [navigate, subscription.active, subscription.ready]);
 
+  useEffect(() => {
+    // A signed-in member whose saved profile was restored skips onboarding.
+    if (profileRestore.restored) navigate({ to: "/", replace: true });
+  }, [navigate, profileRestore.restored]);
+
   const canNext = useMemo(() => {
     switch (step) {
       case 0:
@@ -657,6 +668,9 @@ function Onboarding() {
     const nutritionGoals = suggestNutrition(profile);
     saveGoals(nutritionGoals);
     setProfile(profile);
+    // Lets the account created after the paywall keep this onboarding, even when
+    // a different account used this device before.
+    if (!isAccountSession(session)) markGuestOnboardingCompleted(profile.completedAt);
 
     if (analyticsSession) {
       void recordOnboardingCompletion({
@@ -703,9 +717,18 @@ function Onboarding() {
       plan = buildSmartOnboardingPlan(profile, input);
     }
     saveWorkoutPlan(plan);
+    if (!isAccountSession(session)) markGuestOnboardingPlan(plan.id);
     setGeneratedPlan(plan);
     setPlanReady(true);
   };
+
+  if (profileRestore.restored || (profileRestore.pending && isAccountSession(session))) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-neon" />
+      </div>
+    );
+  }
 
   if (generating) {
     return (
@@ -2852,7 +2875,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
             setPreviewResult(null);
             setError("");
           }}
-          hint="Take one still photo with your full body visible from head to toe and the camera level."
+          hint="Take one still photo with your full body visible from head to toe, arms slightly away from your sides, and the camera level."
         />
       </div>
 

@@ -92,9 +92,8 @@ function WorkoutsPage() {
     [savedPlans, profile],
   );
   const schedule = useMemo(
-    () =>
-      profile ? weeklyScheduleService.generateSchedule(profile, activePlan?.workoutIds ?? []) : [],
-    [profile, activePlan?.workoutIds],
+    () => (profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : []),
+    [profile, activePlan],
   );
   const trainingDays = schedule.filter((day) => !day.isRestDay).length;
   const completedDays = schedule.filter((day) => day.isCompleted && !day.isRestDay).length;
@@ -831,7 +830,7 @@ function WeeklyScheduleView() {
     [savedPlans, profile],
   );
   const [schedule, setSchedule] = useState<WeeklyScheduleDay[]>(() =>
-    profile ? weeklyScheduleService.generateSchedule(profile, activePlan?.workoutIds ?? []) : [],
+    profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : [],
   );
   const [toast, setToast] = useState<string | null>(null);
   const [showSplits, setShowSplits] = useState(false);
@@ -843,15 +842,12 @@ function WeeklyScheduleView() {
 
   useEffect(() => {
     if (profile) {
-      const nextSchedule = weeklyScheduleService.generateSchedule(
-        profile,
-        activePlan?.workoutIds ?? [],
-      );
+      const nextSchedule = weeklyScheduleService.generateSchedule(profile, activePlan ?? []);
       setSchedule(nextSchedule);
       const todayIndex = nextSchedule.findIndex((day) => day.isToday);
       setActiveDayIndex(todayIndex >= 0 ? todayIndex : 0);
     }
-  }, [profile, activePlan?.workoutIds]);
+  }, [profile, activePlan]);
 
   if (!profile) return null;
 
@@ -867,7 +863,7 @@ function WeeklyScheduleView() {
   };
 
   const rebuild = () => {
-    setSchedule(weeklyScheduleService.generateSchedule(profile, activePlan?.workoutIds ?? []));
+    setSchedule(weeklyScheduleService.generateSchedule(profile, activePlan ?? []));
     setToast("Weekly plan rebuilt");
     setTimeout(() => setToast(null), 1800);
   };
@@ -1022,7 +1018,7 @@ function WeeklyScheduleView() {
       ) : (
         <MonthlyTrainingCalendar
           profile={profile}
-          activeWorkoutIds={activePlan?.workoutIds ?? []}
+          activePlan={activePlan ?? []}
           completedWorkouts={completedWorkouts}
         />
       )}
@@ -1039,11 +1035,11 @@ function localDateISO(date: Date) {
 
 function MonthlyTrainingCalendar({
   profile,
-  activeWorkoutIds,
+  activePlan,
   completedWorkouts,
 }: {
   profile: Profile;
-  activeWorkoutIds: string[];
+  activePlan: Parameters<typeof weeklyScheduleService.generateMonthSchedule>[2];
   completedWorkouts: ReturnType<typeof useCompletedWorkouts>;
 }) {
   const [visibleMonth, setVisibleMonth] = useState(() => {
@@ -1051,8 +1047,8 @@ function MonthlyTrainingCalendar({
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const monthSchedule = useMemo(
-    () => weeklyScheduleService.generateMonthSchedule(profile, visibleMonth, activeWorkoutIds),
-    [profile, visibleMonth, activeWorkoutIds],
+    () => weeklyScheduleService.generateMonthSchedule(profile, visibleMonth, activePlan),
+    [profile, visibleMonth, activePlan],
   );
   const plannedByDate = useMemo(
     () => new Map(monthSchedule.map((day) => [day.dateISO, day])),

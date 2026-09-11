@@ -632,6 +632,10 @@ export type Database = {
           used: number;
         }[];
       };
+      is_current_session: {
+        Args: never;
+        Returns: boolean;
+      };
     };
     Enums: {
       [_ in never]: never;

@@ -71,12 +71,24 @@ function HomePage() {
   );
 
   const schedule = useMemo(
-    () =>
-      profile ? weeklyScheduleService.generateSchedule(profile, activePlan?.workoutIds ?? []) : [],
-    [profile, activePlan?.workoutIds],
+    () => (profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : []),
+    [profile, activePlan],
   );
   const todayPlan = schedule.find((day) => day.isToday);
   const scheduledWorkout = todayPlan?.workoutId ? getWorkout(todayPlan.workoutId) : null;
+  // On rest days the hero previews the member's next scheduled session.
+  const nextPlan = useMemo(() => {
+    if (!profile || !todayPlan) return undefined;
+    const upcoming = (days: WeeklyScheduleDay[]) =>
+      days.find((day) => day.dateISO > todayPlan.dateISO && !day.isRestDay && day.workoutId);
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    return (
+      upcoming(schedule) ??
+      upcoming(weeklyScheduleService.generateSchedule(profile, activePlan ?? [], nextWeek))
+    );
+  }, [activePlan, profile, schedule, todayPlan]);
+  const nextWorkout = nextPlan?.workoutId ? (getWorkout(nextPlan.workoutId) ?? null) : null;
   const recoveryWorkout = getWorkout("mobility-recovery");
   const heroWorkout = scheduledWorkout ?? recoveryWorkout ?? null;
 
@@ -175,6 +187,8 @@ function HomePage() {
         <TodayHero
           plan={todayPlan}
           workout={heroWorkout}
+          nextPlan={nextPlan}
+          nextWorkout={nextWorkout}
           completed={Boolean(todayPlan?.isCompleted || progress.workoutMinutesToday > 0)}
           muscleInsights={muscleInsights}
           fuelQuality={fuelQuality}
@@ -315,41 +329,89 @@ function AdaptivePlanCard({
   );
 }
 
+function upcomingDayLabel(dateISO: string) {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  const tomorrow = new Date();
+  tomorrow.setHours(0, 0, 0, 0);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return date.getTime() === tomorrow.getTime()
+    ? "tomorrow"
+    : date.toLocaleDateString(undefined, { weekday: "long" });
+}
+
 function TodayHero({
   plan,
   workout,
+  nextPlan,
+  nextWorkout,
   completed,
   muscleInsights,
   fuelQuality,
 }: {
   plan?: WeeklyScheduleDay;
   workout: Workout | null;
+  nextPlan?: WeeklyScheduleDay;
+  nextWorkout: Workout | null;
   completed: boolean;
   muscleInsights: MuscleInsight[];
   fuelQuality: NutritionQuality;
 }) {
   const isRecovery = !plan || plan.isRestDay || !plan.workoutId;
+  // Rest days point at the member's next session instead of a generic recovery card.
+  const upNext =
+    isRecovery && nextPlan && nextWorkout ? { plan: nextPlan, workout: nextWorkout } : null;
+  const upNextDay = upNext ? upcomingDayLabel(upNext.plan.dateISO) : "";
+  const featuredWorkout = upNext?.workout ?? workout;
   const primaryPath = isRecovery ? "/workout/$id" : "/workout/$id/session";
-  const workoutId = workout?.id ?? "mobility-recovery";
-  const duration = isRecovery
-    ? (workout?.duration ?? 15)
-    : (plan?.duration ?? workout?.duration ?? 30);
-  const exerciseCount = isRecovery
-    ? (workout?.exercises.length ?? 0)
-    : (plan?.exercises.length ?? 0);
-  const calories = isRecovery
-    ? (workout?.calories ?? 0)
-    : (plan?.estimatedCalories ?? workout?.calories ?? 0);
+  const workoutId = featuredWorkout?.id ?? "mobility-recovery";
+  const duration = upNext
+    ? upNext.plan.duration
+    : isRecovery
+      ? (workout?.duration ?? 15)
+      : (plan?.duration ?? workout?.duration ?? 30);
+  const exerciseCount = upNext
+    ? upNext.workout.exercises.length
+    : isRecovery
+      ? (workout?.exercises.length ?? 0)
+      : (plan?.exercises.length ?? 0);
+  const calories = upNext
+    ? upNext.plan.estimatedCalories
+    : isRecovery
+      ? (workout?.calories ?? 0)
+      : (plan?.estimatedCalories ?? workout?.calories ?? 0);
+  const eyebrow = upNext
+    ? `Rest day · Next up ${upNextDay}`
+    : isRecovery
+      ? "Reset · Restore · Recover"
+      : plan?.splitLabel;
+  const title = upNext
+    ? upNext.workout.title
+    : isRecovery
+      ? "Recovery is part of the plan."
+      : (workout?.title ?? plan?.workoutTitle);
+  const description = upNext
+    ? `${upNext.plan.splitLabel} · ${upNext.plan.focus}. Recover today so you start it fresh.`
+    : isRecovery
+      ? "Loosen up, restore range of motion, and come back ready for your next session."
+      : plan?.focus || workout?.description;
+  const primaryLabel = upNext
+    ? `View ${upNextDay === "tomorrow" ? "tomorrow's" : `${upNextDay}'s`} workout`
+    : isRecovery
+      ? "Start recovery"
+      : completed
+        ? "Train again"
+        : "Start workout";
 
   return (
     <div className="relative min-h-[385px] overflow-hidden rounded-[28px] border border-white/[0.09] bg-surface-2 shadow-[0_32px_75px_-32px_oklch(0_0_0/0.95)] sm:min-h-[410px] sm:rounded-[32px]">
-      {workout?.image && (
+      {featuredWorkout?.image && (
         <img
-          src={workout.image}
+          src={featuredWorkout.image}
           alt=""
           fetchPriority="high"
           className="absolute inset-0 size-full object-cover"
-          style={{ objectPosition: workout.imagePosition }}
+          style={{ objectPosition: featuredWorkout.imagePosition }}
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/25 to-black" />
@@ -373,21 +435,23 @@ function TodayHero({
                 : "border-white/10 bg-black/45 text-white/75",
             )}
           >
-            {completed ? "Completed" : isRecovery ? "Recharge" : plan?.difficulty}
+            {completed
+              ? "Completed"
+              : upNext
+                ? "Rest day"
+                : isRecovery
+                  ? "Recharge"
+                  : plan?.difficulty}
           </span>
         </div>
 
         <div className="mt-auto max-w-[92%]">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
-            {isRecovery ? "Reset · Restore · Recover" : plan?.splitLabel}
-          </p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">{eyebrow}</p>
           <h2 className="mt-2 text-[26px] font-extrabold leading-[1.02] tracking-[-0.04em] sm:text-[30px]">
-            {isRecovery ? "Recovery is part of the plan." : (workout?.title ?? plan?.workoutTitle)}
+            {title}
           </h2>
           <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-white/65">
-            {isRecovery
-              ? "Loosen up, restore range of motion, and come back ready for your next session."
-              : plan?.focus || workout?.description}
+            {description}
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -440,20 +504,33 @@ function TodayHero({
               params={{ id: workoutId }}
               className="flex h-12 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-full bg-neon px-5 text-[13px] font-extrabold text-neon-foreground shadow-[0_14px_30px_-15px_var(--color-neon)] transition active:scale-[0.98]"
             >
-              {isRecovery ? (
+              {upNext ? (
+                <Dumbbell className="size-4" />
+              ) : isRecovery ? (
                 <HeartPulse className="size-4" />
               ) : (
                 <Play className="size-4 fill-current" />
               )}
-              {isRecovery ? "Start recovery" : completed ? "Train again" : "Start workout"}
+              {primaryLabel}
             </Link>
-            <Link
-              to="/workouts"
-              aria-label="Choose another workout"
-              className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
-            >
-              <ChevronRight className="size-5" />
-            </Link>
+            {upNext ? (
+              <Link
+                to="/workout/$id"
+                params={{ id: "mobility-recovery" }}
+                aria-label="Start a recovery session"
+                className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-neon backdrop-blur-md transition active:scale-95"
+              >
+                <HeartPulse className="size-5" />
+              </Link>
+            ) : (
+              <Link
+                to="/workouts"
+                aria-label="Choose another workout"
+                className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
+              >
+                <ChevronRight className="size-5" />
+              </Link>
+            )}
           </div>
         </div>
       </div>

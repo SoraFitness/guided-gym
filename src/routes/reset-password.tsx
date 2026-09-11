@@ -24,8 +24,8 @@ function ResetPasswordScreen() {
   const [error, setError] = useState<string | null>(null);
 
   async function savePassword() {
-    if (password.length < 6) {
-      setError("Use at least 6 characters for your new password.");
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your new password.");
       return;
     }
     if (password !== confirmation) {
@@ -189,7 +189,7 @@ function ResetPasswordScreen() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     autoComplete="new-password"
                     className="h-12 rounded-2xl border-white/10 bg-black/20 pr-12"
                   />

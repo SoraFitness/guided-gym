@@ -4,6 +4,7 @@ import { useProfile } from "@/lib/profile";
 import { getOnboardingPaywallCheckpoint } from "@/lib/onboardingResume";
 import { useSubscription } from "@/lib/subscription";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
+import { useCloudProfileRestore } from "@/lib/cloudProfileRestore";
 
 export const Route = createFileRoute("/")({
   component: IndexRedirect,
@@ -16,6 +17,7 @@ function IndexRedirect() {
   const { profile, ready } = useProfile();
   const subscription = useSubscription();
   const session = useAuthSession();
+  const profileRestore = useCloudProfileRestore(session, profile, ready);
   const [startupTimedOut, setStartupTimedOut] = useState(false);
 
   useEffect(() => {
@@ -32,7 +34,8 @@ function IndexRedirect() {
     if (!ready) return;
 
     if (!profile) {
-      navigate({ to: "/onboarding", replace: true });
+      // Signed-in members get their saved profile back before onboarding is considered.
+      if (!profileRestore.pending) navigate({ to: "/onboarding", replace: true });
       return;
     }
 
@@ -61,7 +64,16 @@ function IndexRedirect() {
       return;
     }
     navigate({ to: "/home", replace: true });
-  }, [ready, profile, navigate, session, startupTimedOut, subscription.active, subscription.ready]);
+  }, [
+    ready,
+    profile,
+    profileRestore.pending,
+    navigate,
+    session,
+    startupTimedOut,
+    subscription.active,
+    subscription.ready,
+  ]);
 
   return (
     <div className="min-h-dvh bg-background flex items-center justify-center">

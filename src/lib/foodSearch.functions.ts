@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
 import { invokeEdgeFunction } from "@/lib/edge-functions.server";
 import type { NutrientDetails } from "./nutritionQuality";
+import { openFoodFactsToFood, type OpenFoodFactsProduct } from "./openFoodFacts";
 
 export type FoodSearchSource = "preset" | "nutritionix" | "usda" | "openfoodfacts";
 
@@ -22,6 +23,7 @@ export interface FoodSearchResult {
   category?: "restaurant" | "protein" | "grocery" | "generic";
   imageUrl?: string;
   nutrients?: NutrientDetails;
+  needsLabelCheck?: boolean; // crowd-sourced entry looks incomplete or contradictory
 }
 
 export type FoodSearchResponse =
@@ -293,9 +295,10 @@ export const lookupFoodByBarcode = createServerFn({ method: "POST" })
       const fields = [
         "code",
         "product_name",
+        "product_name_en",
         "brands",
         "serving_size",
-        "quantity",
+        "serving_quantity",
         "nutriments",
         "image_front_small_url",
         "image_thumb_url",
@@ -307,18 +310,7 @@ export const lookupFoodByBarcode = createServerFn({ method: "POST" })
         ...(barcode.length === 12 ? [`0${barcode}`] : []),
         ...(barcode.length === 13 && barcode.startsWith("0") ? [barcode.slice(1)] : []),
       ];
-      let product:
-        | {
-            code?: string;
-            product_name?: string;
-            brands?: string;
-            serving_size?: string;
-            quantity?: string;
-            image_front_small_url?: string;
-            image_thumb_url?: string;
-            nutriments?: Record<string, number | string>;
-          }
-        | undefined;
+      let product: OpenFoodFactsProduct | undefined;
       let serviceUnavailable = false;
 
       for (const candidate of [...new Set(candidates)]) {
@@ -341,47 +333,19 @@ export const lookupFoodByBarcode = createServerFn({ method: "POST" })
         }
       }
 
-      if (!product?.product_name) {
+      const food = product ? openFoodFactsToFood(product) : null;
+      if (!food) {
         return { ok: false, reason: serviceUnavailable ? "service_unavailable" : "not_found" };
       }
-
-      const nutrients = product.nutriments ?? {};
-      const hasServingNutrition = Object.prototype.hasOwnProperty.call(
-        nutrients,
-        "energy-kcal_serving",
-      );
-      const suffix = hasServingNutrition ? "serving" : "100g";
-      const value = (key: string) => round(nutrients[`${key}_${suffix}`] ?? 0);
-      const optionalValue = (key: string) => optionalRound(nutrients[`${key}_${suffix}`]);
 
       return {
         ok: true,
         result: {
-          id: `off:${product.code ?? barcode}`,
+          id: `off:${product?.code ?? barcode}`,
           source: "openfoodfacts",
-          brand: product.brands?.split(",")[0]?.trim(),
-          name: product.product_name,
-          serving:
-            hasServingNutrition && product.serving_size
-              ? product.serving_size
-              : product.quantity || "100 g",
-          kcal: Math.round(value("energy-kcal")),
-          protein: value("proteins"),
-          carbs: value("carbohydrates"),
-          fat: value("fat"),
+          ...food,
           verified: true,
           category: "grocery",
-          imageUrl: product.image_front_small_url || product.image_thumb_url,
-          nutrients: {
-            fiberG: optionalValue("fiber"),
-            sugarsG: optionalValue("sugars"),
-            saturatedFatG: optionalValue("saturated-fat"),
-            sodiumMg:
-              optionalValue("sodium") === undefined
-                ? undefined
-                : round((optionalValue("sodium") as number) * 1000),
-            provenance: "verified",
-          },
         },
       };
     } catch (error) {

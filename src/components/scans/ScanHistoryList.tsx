@@ -84,6 +84,9 @@ export function ScanHistoryList({
                 <p className="mt-1 line-clamp-1 text-sm font-semibold">{item.overallSummary}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                   <Clock3 className="size-3" /> {formatDate(item.analyzedAt ?? item.createdAt)}
+                  {index < items.length - 1 && (
+                    <ScoreChange delta={item.overallScore - items[index + 1].overallScore} />
+                  )}
                 </p>
               </div>
               <ChevronRight className="size-4 shrink-0 text-white/30 transition group-hover:text-neon" />
@@ -122,5 +125,19 @@ export function ScanHistoryList({
         ))}
       </div>
     </section>
+  );
+}
+
+function ScoreChange({ delta }: { delta: number }) {
+  const tone =
+    delta > 0
+      ? "bg-neon/10 text-neon"
+      : delta < 0
+        ? "bg-destructive/10 text-destructive"
+        : "bg-white/[0.06] text-white/45";
+  return (
+    <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${tone}`}>
+      {delta > 0 ? `+${delta}` : delta < 0 ? delta : "No change"}
+    </span>
   );
 }

@@ -49,6 +49,8 @@ function toLookupResult(result: FoodSearchResult): LookupResult {
     protein: result.protein,
     carbs: result.carbs,
     fat: result.fat,
+    nutrients: result.nutrients,
+    needsLabelCheck: result.needsLabelCheck,
   };
 }
 

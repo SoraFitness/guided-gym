@@ -16,8 +16,12 @@ import {
   ArrowRight,
   X,
   Tag,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { APPLE_SUBSCRIPTIONS_URL } from "@/lib/subscriptionState";
 import { AscendrLogo } from "@/components/AscendrLogo";
 import {
   isPurchaseCancelled,
@@ -204,9 +208,22 @@ function PaywallScreen() {
       : !subscription.availablePlans[selected]
         ? "This subscription option is not available."
         : null);
-  const purchaseStatus = subscription.renewalRequired
-    ? "Your subscription has ended. Renew to restore access to your saved data."
-    : revenueCatPurchaseStatus;
+  const purchaseStatus = revenueCatPurchaseStatus;
+  // A returning member whose membership lapsed gets a renewal screen, not the sales pitch.
+  const renewing = subscription.renewalRequired && !scanOffer;
+  const expiredOn =
+    subscription.expiresAt && !Number.isNaN(Date.parse(subscription.expiresAt))
+      ? new Intl.DateTimeFormat(undefined, {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }).format(new Date(subscription.expiresAt))
+      : null;
+
+  const signOut = async () => {
+    await supabase.auth.signOut().catch(() => undefined);
+    window.location.replace("/account?mode=signin");
+  };
 
   if (source === "body-scan") {
     return (
@@ -258,13 +275,15 @@ function PaywallScreen() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => navigate({ to: "/home" })}
-            className="grid size-9 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:border-white/20 hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {!renewing && (
+            <button
+              onClick={() => navigate({ to: "/home" })}
+              className="grid size-9 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-muted-foreground transition hover:border-white/20 hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Hero */}
@@ -278,12 +297,20 @@ function PaywallScreen() {
             <div className="flex items-center gap-2 text-neon">
               <Sparkles className="size-3.5" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em]">
-                {scanOffer ? `Ascendr ${faceScanOffer ? "Face" : "Body"} Scan` : APP_NAME}
+                {renewing
+                  ? "Membership expired"
+                  : scanOffer
+                    ? `Ascendr ${faceScanOffer ? "Face" : "Body"} Scan`
+                    : APP_NAME}
               </span>
             </div>
 
             <h1 className="mt-4 text-[clamp(2rem,9vw,2.65rem)] font-black leading-[0.98] tracking-[-0.055em]">
-              {scanOffer ? (
+              {renewing ? (
+                <>
+                  Welcome back. <span className="text-neon">Pick up where you left off.</span>
+                </>
+              ) : scanOffer ? (
                 <>
                   Your Analysis Is <span className="text-neon">Ready.</span>
                 </>
@@ -294,11 +321,13 @@ function PaywallScreen() {
               )}
             </h1>
             <p className="mt-3 max-w-[35ch] text-[13px] leading-relaxed text-muted-foreground">
-              {scanOffer
-                ? faceScanOffer
-                  ? "Reveal your appearance score, symmetry, skin, eye-area, looksmax potential, and personal action plan."
-                  : "Reveal your physique score, muscle development, symmetry, body-fat range, potential, and personal action plan."
-                : "Your adaptive workouts, nutrition, and progress intelligence—one system built to keep you moving forward."}
+              {renewing
+                ? `Your Ascendr Pro membership ended${expiredOn ? ` on ${expiredOn}` : ""}. Renew to unlock your workouts, nutrition, scans, and Coach again.`
+                : scanOffer
+                  ? faceScanOffer
+                    ? "Reveal your appearance score, symmetry, skin, eye-area, looksmax potential, and personal action plan."
+                    : "Reveal your physique score, muscle development, symmetry, body-fat range, potential, and personal action plan."
+                  : "Your adaptive workouts, nutrition, and progress intelligence—one system built to keep you moving forward."}
             </p>
 
             {scanOffer && (
@@ -315,7 +344,30 @@ function PaywallScreen() {
               </div>
             )}
 
-            {!scanOffer && (
+            {renewing && (
+              <div className="mt-5 rounded-2xl border border-neon/20 bg-black/20 p-3.5">
+                <p className="flex items-center gap-2 text-xs font-bold">
+                  <ShieldCheck className="size-4 shrink-0 text-neon" /> All your progress is saved
+                </p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Your workouts, meals, weight, scans, progress photos, and Coach history stay in
+                  your account. Nothing is deleted when a membership ends.
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Memberships end when auto-renew is turned off or Apple can&apos;t take payment.{" "}
+                  <a
+                    href={APPLE_SUBSCRIPTIONS_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-neon"
+                  >
+                    Check App Store subscriptions <ExternalLink className="size-3" />
+                  </a>
+                </p>
+              </div>
+            )}
+
+            {!scanOffer && !renewing && (
               <div className="mt-5 grid grid-cols-3 divide-x divide-white/[0.09] rounded-2xl border border-white/[0.09] bg-black/20 py-3">
                 <div className="px-2 text-center">
                   <Dumbbell className="mx-auto size-3.5 text-neon" />
@@ -334,7 +386,7 @@ function PaywallScreen() {
           </div>
         </motion.section>
 
-        {returningUser && checkpoint && (
+        {returningUser && checkpoint && !renewing && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -377,7 +429,7 @@ function PaywallScreen() {
           <div>
             <p className="text-sm font-black">Choose your membership</p>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              Prices shown in USD. Cancel whenever you need.
+              Full access on every plan. Cancel anytime.
             </p>
           </div>
           <span className="rounded-full border border-neon/20 bg-neon/[0.06] px-2.5 py-1 text-[9px] font-bold text-neon">
@@ -503,7 +555,11 @@ function PaywallScreen() {
               "Processing…"
             ) : (
               <>
-                {scanOffer ? "Unlock My Results" : "Unlock Premium"}
+                {renewing
+                  ? "Renew Ascendr Pro"
+                  : scanOffer
+                    ? "Unlock My Results"
+                    : "Unlock Premium"}
                 <ArrowRight className="h-5 w-5" />
               </>
             )}
@@ -531,6 +587,18 @@ function PaywallScreen() {
             <a href="/privacy" className="hover:text-foreground">
               Privacy
             </a>
+            {renewing && accountSession && (
+              <>
+                <span className="opacity-40">·</span>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="hover:text-foreground"
+                >
+                  Sign out
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -632,7 +700,8 @@ function BodyScanPaywall({
 
         {renewalRequired && (
           <p className="mt-3 rounded-2xl border border-neon/25 bg-neon/[0.08] px-3 py-2 text-center text-[10px] font-semibold text-neon">
-            Your subscription has ended. Renew to restore your saved scan and progress.
+            Your membership has ended. Your scans and progress are still saved in your account —
+            renew to unlock them.
           </p>
         )}
 

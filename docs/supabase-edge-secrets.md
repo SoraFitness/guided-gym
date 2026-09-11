@@ -18,6 +18,8 @@ variables.
 | `USDA_API_KEY` | Secret | USDA food search | `food-provider` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Secret | Account deletion, onboarding insights, weekly cron | Platform-injected only: `account-delete`, `onboarding`, `finalize-weekly-reports` |
 | `CRON_SECRET` | Secret | App-hosted weekly report cron | `finalize-weekly-reports` |
+| `AI_GATEWAY_INTERNAL_SECRET` | Secret | Onboarding body scan preview and workout plans | `ai-gateway` **and** the Vercel server environment. The gateway serves its free operations only to requests carrying this key. |
+| `ALLOWED_ORIGINS` | Optional configuration | Browser calls to Edge Functions | All browser-facing Edge Functions. Comma-separated extra origins; `ascendr.org`, `www.ascendr.org`, `guided-gym*.vercel.app`, and localhost are allowed by default. |
 | `ONBOARDING_INSIGHTS_ADMIN_EMAILS` | Server policy configuration | Onboarding admin screen | `onboarding` |
 
 | Client configuration | Classification | Reason |
@@ -51,12 +53,25 @@ npx supabase secrets set --project-ref adzfzimuranhrllbxfyf NUTRITIONIX_API_KEY=
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf USDA_API_KEY=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf CRON_SECRET=<your-value>
 npx supabase secrets set --project-ref adzfzimuranhrllbxfyf ONBOARDING_INSIGHTS_ADMIN_EMAILS=<comma-separated-admin-emails>
+# Generate a long random value, then set the SAME value in Vercel (Project > Settings >
+# Environment Variables > AI_GATEWAY_INTERNAL_SECRET) and redeploy the web app.
+npx supabase secrets set --project-ref adzfzimuranhrllbxfyf AI_GATEWAY_INTERNAL_SECRET=<your-value>
+# Optional, only if the app is served from an origin not allowed by default:
+npx supabase secrets set --project-ref adzfzimuranhrllbxfyf ALLOWED_ORIGINS=<https://your-domain>
 ```
 
 Only set the optional provider-specific OpenRouter secrets when you use distinct keys for those
 features. Otherwise omit them and `OPENROUTER_API_KEY` is used.
 
 ## Deploy
+
+Deploy in this order. The database migration adds the one-device session check that the Edge
+Functions and web server call, so it must exist before they are deployed.
+
+1. `npx supabase db push` (applies `20260911000000_security_hardening.sql`).
+2. Set `AI_GATEWAY_INTERNAL_SECRET` in Supabase and Vercel (above).
+3. Deploy the Edge Functions below.
+4. Redeploy the web app on Vercel.
 
 ```powershell
 npx supabase functions deploy subscription-access --project-ref adzfzimuranhrllbxfyf

@@ -5,6 +5,9 @@ import { createOpenRouterProvider } from "@/lib/openrouter.server";
 import { claimRateLimit } from "@/lib/rateLimit.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middleware";
+import { normalizeFoodScan, type FoodScanResult } from "@/lib/foodScanResult";
+
+export type { FoodScanItem, FoodScanResult } from "@/lib/foodScanResult";
 
 const Input = z.object({
   image: z
@@ -16,76 +19,71 @@ const Input = z.object({
     }),
 });
 
+// Numbers are cleaned up in normalizeFoodScan so one odd value (for example
+// confidence written as 90 instead of 0.9) does not throw away a good scan.
 const Item = z.object({
   name: z.string(),
   estimated_amount: z.string(),
-  confidence: z.number().min(0).max(1),
-  calories: z.number().min(0),
-  protein: z.number().min(0),
-  carbs: z.number().min(0),
-  fat: z.number().min(0),
-  fiber: z.number().min(0),
-  sugars: z.number().min(0),
-  saturated_fat: z.number().min(0),
-  sodium: z.number().min(0),
+  packaged: z.boolean(),
+  confidence: z.number(),
+  calories: z.number(),
+  protein: z.number(),
+  carbs: z.number(),
+  fat: z.number(),
+  fiber: z.number(),
+  sugars: z.number(),
+  saturated_fat: z.number(),
+  sodium: z.number(),
 });
 
 const ResultSchema = z.object({
   meal_name: z.string(),
-  confidence: z.number().min(0).max(1),
-  items: z.array(Item).min(1).max(12),
+  confidence: z.number(),
+  items: z.array(Item).max(12),
   notes: z.string().optional(),
 });
 
-export interface FoodScanItem {
-  name: string;
-  estimated_amount: string;
-  confidence: number;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber: number;
-  sugars: number;
-  saturated_fat: number;
-  sodium: number;
-}
-export interface FoodScanResult {
-  meal_name: string;
-  confidence: number;
-  items: FoodScanItem[];
-  total: { calories: number; protein: number; carbs: number; fat: number };
-  needs_user_confirmation: boolean;
-  notes?: string;
-}
 export type FoodScanResponse =
   | { ok: true; result: FoodScanResult }
-  | { ok: false; reason: "no_key" | "unrecognized" | "error"; message?: string };
+  | {
+      ok: false;
+      reason: "no_key" | "unrecognized" | "no_food" | "rate_limited" | "error";
+      message?: string;
+    };
 
 const PROMPT = [
-  "You are a nutrition assistant analyzing a single photo of a meal.",
-  "Identify each distinct food item visible on the plate / in the image.",
-  "For each item: give a concise common name, a realistic estimated portion",
-  "(grams, cups, pieces, slices, oz — whatever is most natural), and",
-  "nutrition values that match standard USDA / common nutrition database",
-  "entries for that portion. Include calories, protein, carbs, fat, fibre, total sugars,",
-  "saturated fat, and sodium in milligrams. Round estimates to practical label-style values.",
+  "You are a nutrition assistant analyzing one food photo.",
+  "Identify each distinct food or drink that is visible, whether it is a plated meal or a packaged product.",
   "",
-  "Confidence rules:",
-  "- Per-item confidence reflects how certain you are about identity AND portion.",
-  "- Overall meal confidence is the average, weighted toward the largest items.",
-  "- If any item is below 0.7 confidence, flag the meal as needing confirmation.",
-  "- Never fabricate exact numbers you can't justify — if unsure, lower confidence.",
+  "Packaged products:",
+  "- Set packaged to true.",
+  '- Read the brand, product, and flavour printed on the package and use them as the name (for example "Kellogg\'s Nutri-Grain Strawberry bar").',
+  '- Use the product\'s published nutrition facts for the visible unit (one bar, one can, one bag), and put the unit and its weight in estimated_amount (for example "1 bar (37 g)").',
+  "- If a Nutrition Facts table is visible and legible, copy its values exactly. When the visible side only shows some values, fill in the rest from the product's published nutrition facts.",
   "",
-  "Output a short descriptive meal_name (e.g. 'Chicken rice bowl').",
-  "Cap items at 12. No commentary, only the structured fields.",
+  "Unpackaged food:",
+  "- Set packaged to false.",
+  "- Give a concise common name and a realistic portion (grams, cups, pieces, slices, or oz).",
+  "- Use standard USDA or common nutrition database values for that portion.",
+  "",
+  "For every item give calories in kcal; protein, carbs, fat, fiber, total sugars, and saturated fat in grams; and sodium in milligrams.",
+  "Only use 0 for a nutrient the food genuinely lacks (for example protein in cola). Calories should roughly equal 4 × protein + 4 × carbs + 9 × fat.",
+  "confidence is a number from 0 to 1 covering both identity and portion. The overall confidence is the average, weighted toward the largest items.",
+  "Never invent food that is not visible. If the photo shows no food or drink, return an empty items array.",
+  "",
+  "Return JSON with meal_name, confidence, optional notes, and items. Each item has name, estimated_amount, packaged, confidence, calories, protein, carbs, fat, fiber, sugars, saturated_fat, and sodium.",
+  "meal_name is short and descriptive (for example 'Chicken rice bowl', or the product name). Cap items at 12.",
 ].join("\n");
 
 export const analyzeFoodImage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth, requireActiveSubscriptionMiddleware])
   .validator((d: unknown) => Input.parse(d))
   .handler(async ({ data, context }): Promise<FoodScanResponse> => {
-    claimRateLimit("food-photo", { limit: 10, windowMs: 60 * 60 * 1_000 });
+    try {
+      claimRateLimit("food-photo", { limit: 20, windowMs: 60 * 60 * 1_000 });
+    } catch {
+      return { ok: false, reason: "rate_limited" };
+    }
 
     try {
       const gateway = createOpenRouterProvider(context.accessToken, "food-scan");
@@ -98,54 +96,16 @@ export const analyzeFoodImage = createServerFn({ method: "POST" })
             role: "user",
             content: [
               { type: "text", text: PROMPT },
-              { type: "image_url", image_url: { url: data.image } },
-            ] as never,
+              { type: "image", image: data.image },
+            ],
           },
         ],
       });
 
-      const items: FoodScanItem[] = output.items.slice(0, 12).map((i) => ({
-        name: i.name.trim(),
-        estimated_amount: i.estimated_amount.trim(),
-        confidence: Math.max(0, Math.min(1, i.confidence)),
-        calories: Math.max(0, Math.round(i.calories)),
-        protein: Math.max(0, Math.round(i.protein)),
-        carbs: Math.max(0, Math.round(i.carbs)),
-        fat: Math.max(0, Math.round(i.fat)),
-        fiber: Math.max(0, Math.round(i.fiber * 10) / 10),
-        sugars: Math.max(0, Math.round(i.sugars * 10) / 10),
-        saturated_fat: Math.max(0, Math.round(i.saturated_fat * 10) / 10),
-        sodium: Math.max(0, Math.round(i.sodium)),
-      }));
-
-      if (items.length === 0) return { ok: false, reason: "unrecognized" };
-
-      const total = items.reduce(
-        (a, i) => ({
-          calories: a.calories + i.calories,
-          protein: a.protein + i.protein,
-          carbs: a.carbs + i.carbs,
-          fat: a.fat + i.fat,
-        }),
-        { calories: 0, protein: 0, carbs: 0, fat: 0 },
-      );
-
-      const minConf = Math.min(...items.map((i) => i.confidence));
-      const needs_user_confirmation = output.confidence < 0.7 || minConf < 0.7;
-
-      return {
-        ok: true,
-        result: {
-          meal_name: output.meal_name.trim() || "Detected meal",
-          confidence: Math.max(0, Math.min(1, output.confidence)),
-          items,
-          total,
-          needs_user_confirmation,
-          notes: output.notes?.trim() || undefined,
-        },
-      };
+      const result = normalizeFoodScan(output);
+      return result ? { ok: true, result } : { ok: false, reason: "no_food" };
     } catch (err) {
       console.error("analyzeFoodImage failed:", err);
-      return { ok: false, reason: "unrecognized", message: (err as Error).message };
+      return { ok: false, reason: "error", message: (err as Error).message };
     }
   });

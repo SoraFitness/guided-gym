@@ -1,4 +1,4 @@
-import { corsPreflightResponse, jsonResponse } from "../_shared/cors.ts";
+import { corsPreflightResponse, jsonResponse, withCors } from "../_shared/cors.ts";
 import { UnauthorizedError, createAdminClient, requireUser } from "../_shared/auth.ts";
 
 const PHOTO_BUCKET = "progress-photos";
@@ -24,7 +24,7 @@ async function collectStoredFiles(
   return files;
 }
 
-Deno.serve(async (request) => {
+Deno.serve(withCors(async (request) => {
   if (request.method === "OPTIONS") return corsPreflightResponse();
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
   try {
@@ -44,4 +44,4 @@ Deno.serve(async (request) => {
     console.error("[account-delete] failed", error);
     return jsonResponse({ error: "Could not delete account" }, 500);
   }
-});
+}));

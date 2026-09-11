@@ -70,8 +70,11 @@ import { cn } from "@/lib/utils";
 import {
   scoreLogEntries,
   scoreNutritionQuality,
+  type NutrientDetails,
   type NutritionQuality,
 } from "@/lib/nutritionQuality";
+import { compressImage } from "@/lib/imageCompress";
+import { readNutritionLabel } from "@/lib/nutritionLabel.functions";
 
 const BarcodeScannerPanel = lazy(() =>
   import("@/components/BarcodeScannerPanel").then((module) => ({
@@ -95,7 +98,13 @@ function NutritionPage() {
   const quality = useMemo(() => scoreLogEntries(today, goals.protein), [today, goals.protein]);
 
   const add = (entry: Omit<LogEntry, "id" | "loggedAt"> & { loggedAt?: string }) => {
-    storeAdd({ ...entry, loggedAt: entry.loggedAt ?? day.toISOString() });
+    // Today's food is logged at the current time, not when this page was opened,
+    // so it lands on the same day Home and the daily totals are showing.
+    const isViewingToday = day.toDateString() === new Date().toDateString();
+    storeAdd({
+      ...entry,
+      loggedAt: entry.loggedAt ?? (isViewingToday ? new Date() : day).toISOString(),
+    });
   };
   const update = (id: string, patch: Partial<LogEntry>) => storeUpdate(id, patch);
   const remove = (id: string) => storeRemove(id);
@@ -1097,6 +1106,14 @@ function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void 
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+const PHOTO_SCAN_ERRORS: Record<string, string> = {
+  no_key: "AI is not configured yet. Please add foods manually.",
+  no_food: "We couldn't find food or a drink in that photo. Try a closer, well-lit shot.",
+  rate_limited: "You've scanned a lot of photos this hour. Try again later or add food manually.",
+  unrecognized: "Couldn't detect this meal clearly. Try another photo or add food manually.",
+  error: "The photo scan couldn't be completed. Check your connection and try again.",
+};
+
 function fileToDataUrl(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -1150,20 +1167,21 @@ function PhotoPanel({
     setLoading(true);
     setError("");
     try {
-      const dataUrl = await fileToDataUrl(file);
+      // Phone photos are several megabytes; a resized JPEG uploads quickly and
+      // stays inside request limits while keeping package text legible.
+      const compressed = await compressImage(file, 1600, 0.85).catch(() => file);
+      const dataUrl = await fileToDataUrl(
+        new File([compressed], "meal.jpg", { type: compressed.type || file.type }),
+      );
       const resp = await analyzeFn({ data: { image: dataUrl } });
       if (resp.ok) {
         setResult(resp.result);
       } else {
-        setError(
-          resp.reason === "no_key"
-            ? "AI is not configured yet. Please add foods manually."
-            : "Couldn't detect this meal clearly. Try another photo or add food manually.",
-        );
+        setError(PHOTO_SCAN_ERRORS[resp.reason] ?? PHOTO_SCAN_ERRORS.error);
       }
     } catch (e) {
       console.error(e);
-      setError("Couldn't detect this meal clearly. Try another photo or add food manually.");
+      setError(PHOTO_SCAN_ERRORS.error);
     } finally {
       setLoading(false);
     }
@@ -1361,6 +1379,7 @@ function PhotoConfirm({
       {
         name: "",
         estimated_amount: "1 serving",
+        packaged: false,
         confidence: 1,
         calories: 0,
         protein: 0,
@@ -1443,6 +1462,16 @@ function PhotoConfirm({
         </div>
       )}
 
+      {items.some((item) => item.packaged) && (
+        <div className="flex items-start gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-[11px] text-muted-foreground">
+          <ScanLine className="size-3.5 shrink-0 mt-0.5 text-neon" />
+          <span>
+            Packaged product detected. For the exact values on your package, use Barcode or scan the
+            Nutrition Facts label from Manual.
+          </span>
+        </div>
+      )}
+
       <div className="space-y-3">
         {items.map((it, idx) => (
           <div
@@ -1481,21 +1510,14 @@ function PhotoConfirm({
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {(["calories", "protein", "carbs", "fat"] as const).map((k) => (
-                <label key={k} className="block">
-                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
-                    {k === "calories" ? "kcal" : k.slice(0, 1).toUpperCase() + "(g)"}
-                  </span>
-                  <input
-                    inputMode="numeric"
-                    value={String(it[k] ?? 0)}
-                    onChange={(e) =>
-                      updateItem(idx, {
-                        [k]: Math.max(0, Number(e.target.value.replace(/[^0-9]/g, "")) || 0),
-                      } as Partial<FoodScanItem>)
-                    }
-                    className="mt-0.5 h-9 w-full rounded-lg bg-white/[0.04] border border-white/[0.06] px-2 text-xs outline-none focus:border-neon/40 tabular-nums"
-                  />
-                </label>
+                <MacroInput
+                  // Remount when rows are added or removed so each field shows its own item.
+                  key={`${items.length}-${idx}-${k}`}
+                  label={k === "calories" ? "kcal" : `${k.slice(0, 1).toUpperCase()}(g)`}
+                  value={it[k] ?? 0}
+                  decimals={k !== "calories"}
+                  onChange={(value) => updateItem(idx, { [k]: value } as Partial<FoodScanItem>)}
+                />
               ))}
             </div>
             <p className="text-[9px] leading-relaxed text-muted-foreground">
@@ -1583,6 +1605,51 @@ function PhotoConfirm({
   );
 }
 
+function MacroInput({
+  label,
+  value,
+  decimals,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  decimals: boolean;
+  onChange: (value: number) => void;
+}) {
+  // Keeps the typed text (e.g. "3.") while the parent stores the number.
+  const [text, setText] = useState(String(value));
+  return (
+    <label className="block">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <input
+        inputMode={decimals ? "decimal" : "numeric"}
+        value={text}
+        onChange={(e) => {
+          const next = decimals
+            ? decimalInput(e.target.value)
+            : e.target.value.replace(/[^0-9]/g, "");
+          setText(next);
+          onChange(Number(next) || 0);
+        }}
+        className="mt-0.5 h-9 w-full rounded-lg bg-white/[0.04] border border-white/[0.06] px-2 text-xs outline-none focus:border-neon/40 tabular-nums"
+      />
+    </label>
+  );
+}
+
+function formatGrams(value: number) {
+  return String(Math.round(value * 10) / 10);
+}
+
+// Keeps digits and one decimal point so label values like 3.5 g can be entered.
+function decimalInput(value: string) {
+  const [whole, ...decimals] = value.replace(/[^0-9.]/g, "").split(".");
+  return decimals.length ? `${whole}.${decimals.join("")}` : whole;
+}
+
+const LABEL_UNREADABLE_MESSAGE =
+  "We couldn't read that label. Take a close, well-lit photo of the Nutrition Facts table.";
+
 function ManualPanel({
   meal,
   prefill,
@@ -1605,16 +1672,21 @@ function ManualPanel({
     prefill?.kcal != null ? String(Math.round(prefill.kcal)) : "",
   );
   const [protein, setProtein] = useState<string>(
-    prefill?.protein != null ? String(Math.round(prefill.protein)) : "",
+    prefill?.protein != null ? formatGrams(prefill.protein) : "",
   );
   const [carbs, setCarbs] = useState<string>(
-    prefill?.carbs != null ? String(Math.round(prefill.carbs)) : "",
+    prefill?.carbs != null ? formatGrams(prefill.carbs) : "",
   );
-  const [fat, setFat] = useState<string>(
-    prefill?.fat != null ? String(Math.round(prefill.fat)) : "",
-  );
+  const [fat, setFat] = useState<string>(prefill?.fat != null ? formatGrams(prefill.fat) : "");
+  const [labelNutrients, setLabelNutrients] = useState<NutrientDetails | undefined>();
+  const [labelStatus, setLabelStatus] = useState<"idle" | "reading" | "read" | "error">("idle");
+  const [labelMessage, setLabelMessage] = useState("");
+  const labelInputRef = useRef<HTMLInputElement | null>(null);
+  const readLabel = useServerFn(readNutritionLabel);
 
   const canSave = name.trim().length > 0 && Number(kcal) >= 0;
+  const labelCheckSuggested =
+    source === "barcode" && Boolean(prefill?.needsLabelCheck) && labelStatus !== "read";
 
   const submit = () => {
     if (!canSave) return;
@@ -1631,9 +1703,57 @@ function ManualPanel({
         carbs: Number(carbs) || 0,
         fat: Number(fat) || 0,
         source,
-        nutrients: prefill?.nutrients,
+        nutrients: labelNutrients ?? prefill?.nutrients,
       },
     });
+  };
+
+  const scanLabel = async (file?: File) => {
+    if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      setLabelStatus("error");
+      setLabelMessage("That photo is too large (max 8 MB). Try a smaller one.");
+      return;
+    }
+    setLabelStatus("reading");
+    setLabelMessage("");
+    try {
+      const compressed = await compressImage(file, 1600, 0.85).catch(() => file);
+      const image = await fileToDataUrl(
+        new File([compressed], "nutrition-label.jpg", { type: compressed.type || file.type }),
+      );
+      const response = await readLabel({ data: { image } });
+      if (!response.ok) {
+        setLabelStatus("error");
+        setLabelMessage(
+          response.reason === "rate_limited"
+            ? "You've scanned a lot of labels this hour. Try again later or enter the values."
+            : LABEL_UNREADABLE_MESSAGE,
+        );
+        return;
+      }
+
+      const label = response.result;
+      if (label.productName && !name.trim()) setName(label.productName.slice(0, 60));
+      setServing(label.serving.slice(0, 30));
+      setKcal(String(label.kcal));
+      if (label.protein !== undefined) setProtein(formatGrams(label.protein));
+      if (label.carbs !== undefined) setCarbs(formatGrams(label.carbs));
+      if (label.fat !== undefined) setFat(formatGrams(label.fat));
+      setLabelNutrients(label.nutrients);
+      setLabelStatus("read");
+      setLabelMessage(
+        label.consistent
+          ? "Filled in from your nutrition label. Check the food name, then save."
+          : "Filled in from your label, but the calories don't add up with the macros. Double-check them before saving.",
+      );
+    } catch (error) {
+      console.error("[nutrition label]", error);
+      setLabelStatus("error");
+      setLabelMessage(LABEL_UNREADABLE_MESSAGE);
+    } finally {
+      if (labelInputRef.current) labelInputRef.current.value = "";
+    }
   };
 
   return (
@@ -1653,9 +1773,74 @@ function ManualPanel({
             <Sparkles className="size-3.5" />
           )}
           <span>
-            {source === "barcode" ? "Detected from barcode" : "AI-estimated from photo"}
-            {prefill.confidence ? ` · ${Math.round(prefill.confidence * 100)}% confidence` : ""}
+            {labelStatus === "read"
+              ? "Checked against your nutrition label"
+              : source === "barcode"
+                ? "Detected from barcode"
+                : "AI-estimated from photo"}
+            {prefill.confidence && labelStatus !== "read"
+              ? ` · ${Math.round(prefill.confidence * 100)}% confidence`
+              : ""}
           </span>
+        </div>
+      )}
+
+      {source !== "image" && (
+        <div
+          className={cn(
+            "rounded-2xl border px-3 py-3",
+            labelCheckSuggested
+              ? "border-amber-400/25 bg-amber-400/[0.06]"
+              : "border-white/[0.06] bg-white/[0.03]",
+          )}
+        >
+          <input
+            ref={labelInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => void scanLabel(e.target.files?.[0])}
+          />
+          <p
+            className={cn(
+              "flex items-start gap-2 text-[11px] leading-relaxed",
+              labelStatus === "error"
+                ? "text-destructive"
+                : labelCheckSuggested
+                  ? "text-amber-100/90"
+                  : "text-muted-foreground",
+            )}
+          >
+            {labelCheckSuggested && (
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+            )}
+            <span>
+              {labelMessage ||
+                (labelCheckSuggested
+                  ? "This product's database entry looks inconsistent. Scan the Nutrition Facts label to use the exact values."
+                  : source === "barcode"
+                    ? "Barcode data comes from a community database. Scan the Nutrition Facts label to match your package exactly."
+                    : "Have the package? Scan its Nutrition Facts label to fill this in.")}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => labelInputRef.current?.click()}
+            disabled={labelStatus === "reading"}
+            className="mt-2.5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-neon/30 bg-neon/10 text-xs font-semibold text-neon disabled:opacity-50 active:scale-[0.98]"
+          >
+            {labelStatus === "reading" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <ScanLine className="size-3.5" />
+            )}
+            {labelStatus === "reading"
+              ? "Reading label…"
+              : labelStatus === "read"
+                ? "Scan label again"
+                : "Scan nutrition label"}
+          </button>
         </div>
       )}
 
@@ -1698,25 +1883,25 @@ function ManualPanel({
       <div className="grid grid-cols-3 gap-3">
         <Field label="Protein (g)">
           <input
-            inputMode="numeric"
+            inputMode="decimal"
             value={protein}
-            onChange={(e) => setProtein(e.target.value.replace(/[^0-9]/g, ""))}
+            onChange={(e) => setProtein(decimalInput(e.target.value))}
             className={inp}
           />
         </Field>
         <Field label="Carbs (g)">
           <input
-            inputMode="numeric"
+            inputMode="decimal"
             value={carbs}
-            onChange={(e) => setCarbs(e.target.value.replace(/[^0-9]/g, ""))}
+            onChange={(e) => setCarbs(decimalInput(e.target.value))}
             className={inp}
           />
         </Field>
         <Field label="Fat (g)">
           <input
-            inputMode="numeric"
+            inputMode="decimal"
             value={fat}
-            onChange={(e) => setFat(e.target.value.replace(/[^0-9]/g, ""))}
+            onChange={(e) => setFat(decimalInput(e.target.value))}
             className={inp}
           />
         </Field>

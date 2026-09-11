@@ -23,7 +23,7 @@ const LOCAL_PREVIEW_AI_OPERATIONS = {
   },
   "face-scan": {
     model: "qwen/qwen3-vl-32b-instruct",
-    maxTokens: 1200,
+    maxTokens: 1800,
     title: "Ascendr Face Scan",
   },
   coach: {
@@ -47,10 +47,14 @@ export function edgeFunctionUrl(name: string) {
 
 function edgeHeaders(accessToken?: string, operation?: AiGatewayOperation) {
   const { key } = edgeConfig();
+  // Proves the request comes from Ascendr's server; the AI gateway only serves its free
+  // operations (onboarding preview, workout plan) to requests carrying this key.
+  const internalKey = process.env.AI_GATEWAY_INTERNAL_SECRET?.trim();
   return {
     apikey: key,
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...(operation ? { "X-Ascendr-Operation": operation } : {}),
+    ...(operation && internalKey ? { "X-Ascendr-Internal-Key": internalKey } : {}),
   };
 }
 
@@ -62,11 +66,13 @@ function localPreviewAiConfig(operation: AiGatewayOperation) {
       ? process.env.OPENROUTER_FACE_SCAN_API_KEY || process.env.OPENROUTER_API_KEY
       : operation === "coach"
         ? process.env.OPENROUTER_API_KEY
-      : process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
+        : process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
   return apiKey ? { apiKey, ...LOCAL_PREVIEW_AI_OPERATIONS[operation] } : null;
 }
 
-function isLocalPreviewAiOperation(operation: AiGatewayOperation): operation is LocalPreviewAiOperation {
+function isLocalPreviewAiOperation(
+  operation: AiGatewayOperation,
+): operation is LocalPreviewAiOperation {
   return operation in LOCAL_PREVIEW_AI_OPERATIONS;
 }
 
@@ -83,13 +89,17 @@ export function createAscendrAiProvider(
         Authorization: `Bearer ${previewConfig.apiKey}`,
         "X-Title": previewConfig.title,
       },
+      supportsStructuredOutputs: true,
     });
   }
 
+  // Structured outputs send the JSON schema to the model. Without it the model
+  // guesses field names (e.g. "total_fat") and Output.object results fail to parse.
   return createOpenAICompatible({
     name: "ascendr-ai-gateway",
     baseURL: edgeFunctionUrl("ai-gateway"),
     headers: edgeHeaders(accessToken, operation),
+    supportsStructuredOutputs: true,
   });
 }
 

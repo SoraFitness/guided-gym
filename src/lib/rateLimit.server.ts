@@ -23,8 +23,10 @@ function requestIp(): string {
   }
 
   const headers = request?.headers;
+  // Vercel sets these from the real connection. Headers such as cf-connecting-ip pass
+  // through untouched from the client there, so trusting them would let anyone reset limits.
   return (
-    headers?.get("cf-connecting-ip")?.trim() ||
+    headers?.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
     headers?.get("x-real-ip")?.trim() ||
     headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     "local"

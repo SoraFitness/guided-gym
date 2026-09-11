@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import type { CustomerInfo, PurchasesPackage } from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
+import { subscriptionStatusFromEntitlement } from "@/lib/subscriptionState";
 
 export type Plan = "weekly" | "monthly" | "yearly";
 
@@ -23,6 +24,7 @@ export interface Subscription {
   expiresAt: string | null;
   willRenew: boolean | null;
   renewalRequired: boolean;
+  billingIssue: boolean;
   ready: boolean;
   availablePlans: Record<Plan, boolean>;
   prices: PlanPrices;
@@ -66,6 +68,7 @@ const EMPTY_SUBSCRIPTION: Subscription = {
   expiresAt: null,
   willRenew: null,
   renewalRequired: false,
+  billingIssue: false,
   ready: false,
   availablePlans: EMPTY_AVAILABLE_PLANS,
   prices: PLAN_PRICES,
@@ -201,16 +204,16 @@ function createPlanPrice(
 
 function applyCustomerInfo(customerInfo: CustomerInfo) {
   const entitlement = customerInfo.entitlements.all[ENTITLEMENT_ID];
-  const active = entitlement?.isActive === true;
+  const status = subscriptionStatusFromEntitlement(entitlement);
 
   updateSubscription({
+    ...status,
     customerUserId: configuredUserId,
-    active,
-    plan: active ? planFromProductIdentifier(entitlement.productIdentifier) : null,
-    since: active ? entitlement.latestPurchaseDate : null,
-    expiresAt: entitlement?.expirationDate ?? null,
-    willRenew: active ? entitlement.willRenew : null,
-    renewalRequired: !active && Boolean(entitlement?.expirationDate),
+    plan:
+      entitlement && status.active
+        ? planFromProductIdentifier(entitlement.productIdentifier)
+        : null,
+    since: entitlement && status.active ? entitlement.latestPurchaseDate : null,
     ready: true,
   });
 }
@@ -389,6 +392,7 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       since: null,
       expiresAt: null,
       renewalRequired: false,
+      billingIssue: false,
       ready: true,
       error: CHECKOUT_OFFERING_ERROR,
     });

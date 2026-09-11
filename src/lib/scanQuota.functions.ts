@@ -49,6 +49,21 @@ export async function claimScanQuota(
   submissionId: string,
   scanType: ScanQuotaType,
 ) {
+  // Retrying the same submission after a timeout or failed analysis must not use another scan.
+  const { data: existingClaim, error: existingClaimError } = await supabase
+    .from("scan_quota_usage")
+    .select("id")
+    .eq("submission_id", submissionId)
+    .eq("scan_type", scanType)
+    .limit(1)
+    .maybeSingle();
+  if (existingClaimError) throw new Error(existingClaimError.message);
+  if (existingClaim) {
+    const { data, error } = await supabase.rpc("get_scan_quota", { p_scan_type: scanType });
+    if (error) throw new Error(error.message);
+    return parseQuota(data);
+  }
+
   const { data, error } = await supabase.rpc("claim_scan_quota", {
     p_submission_id: submissionId,
     p_scan_type: scanType,

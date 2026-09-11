@@ -5,7 +5,10 @@ import { useProfile } from "@/lib/profile";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { startCloudSync } from "@/lib/cloudSync";
 import { claimLocalDataOwnership, localDataBelongsToAccount } from "@/lib/accountOwnership";
+import { useCloudProfileRestore } from "@/lib/cloudProfileRestore";
 import { useSubscription } from "@/lib/subscription";
+import { subscriptionNotice } from "@/lib/subscriptionState";
+import { SubscriptionNoticeBanner } from "@/components/SubscriptionNoticeBanner";
 import { saveSubscriptionResumePath } from "@/lib/subscriptionResume";
 import { cn } from "@/lib/utils";
 import { AppTour } from "@/components/tour/AppTour";
@@ -70,6 +73,7 @@ function AppShell() {
   const signedIn = accountUserId !== null;
   const subscriptionMatchesAccount = signedIn && subscription.customerUserId === accountUserId;
   const localDataOwnerMatches = accountUserId ? localDataBelongsToAccount(accountUserId) : false;
+  const profileRestore = useCloudProfileRestore(session, profile, ready);
   const hasPremiumAccess =
     signedIn &&
     subscriptionMatchesAccount &&
@@ -82,7 +86,8 @@ function AppShell() {
   useEffect(() => {
     if (subscriptionExempt || !ready) return;
     if (!profile) {
-      navigate({ to: "/onboarding", replace: true });
+      // Signed-in members get their saved profile back before onboarding is considered.
+      if (!profileRestore.pending) navigate({ to: "/onboarding", replace: true });
       return;
     }
     if (!subscription.ready || session === "loading" || (signedIn && !subscriptionMatchesAccount)) {
@@ -108,6 +113,7 @@ function AppShell() {
     navigate,
     pathname,
     profile,
+    profileRestore.pending,
     ready,
     session,
     signedIn,
@@ -139,6 +145,7 @@ function AppShell() {
     }
   }, [ready, profile, pathname, tourCompleted, tourOpen]);
 
+  const notice = subscriptionNotice(subscription);
   const hideTabs =
     subscriptionExempt ||
     pathname.startsWith("/workout/") ||
@@ -155,7 +162,9 @@ function AppShell() {
           : signedIn && !localDataOwnerMatches
             ? "Securing this device for your account..."
             : !profile
-              ? "Preparing your private fitness profile..."
+              ? profileRestore.pending
+                ? "Restoring your fitness profile..."
+                : "Preparing your private fitness profile..."
               : !subscription.ready
                 ? "Checking your subscription..."
                 : subscription.renewalRequired
@@ -183,6 +192,7 @@ function AppShell() {
         }}
       >
         <div className="mx-auto w-full min-w-0 max-w-md overflow-x-clip">
+          {pathname === "/home" && notice && <SubscriptionNoticeBanner notice={notice} />}
           <Outlet />
         </div>
       </div>

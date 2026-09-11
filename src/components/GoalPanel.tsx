@@ -37,7 +37,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { setNutritionGoals } from "@/lib/nutritionStore";
-import { suggestNutrition } from "@/lib/nutritionService";
+import { nutritionGoalType, suggestNutrition } from "@/lib/nutritionService";
 import { cn } from "@/lib/utils";
 
 /**
@@ -66,7 +66,8 @@ export function GoalPanel() {
             heightCm: profile.heightCm,
             currentWeightKg: profile.currentWeightKg,
             goalWeightKg: profile.goalWeightKg,
-            goalType: profile.goal,
+            // Same goal as the saved daily targets, so this panel and Fuel agree.
+            goalType: nutritionGoalType(profile),
             activity: profile.activityLevel,
             targetDate,
             splitPreset: profile.deficitSplit,
@@ -285,27 +286,9 @@ export function GoalPanel() {
             <p className="mt-2 text-[12px] text-muted-foreground">{recal.suggestion}</p>
             <button
               onClick={() => {
-                // Re-compute with observed maintenance, then derive macros from that plan.
-                const plan2 = computePlan({
-                  gender: profile.gender,
-                  age: profile.age,
-                  heightCm: profile.heightCm,
-                  currentWeightKg: profile.currentWeightKg,
-                  goalWeightKg: profile.goalWeightKg,
-                  goalType: profile.goal,
-                  activity: profile.activityLevel,
-                  targetDate,
-                  splitPreset: profile.deficitSplit,
-                  bulkPace: profile.bulkPace,
-                  observedMaintenanceKcal: recal.blendedMaintenanceKcal,
-                });
-                const base = suggestNutrition(profile);
-                setNutritionGoals({
-                  kcal: plan2.recommendedIntakeKcal,
-                  protein: base.protein,
-                  carbs: base.carbs,
-                  fat: base.fat,
-                });
+                // Re-compute with observed maintenance and derive macros from that same
+                // plan, so protein, carbs, and fat add up to the new calorie target.
+                setNutritionGoals(suggestNutrition(profile, recal.blendedMaintenanceKcal));
               }}
               className="mt-3 w-full h-10 rounded-full bg-neon text-neon-foreground font-semibold text-xs"
             >

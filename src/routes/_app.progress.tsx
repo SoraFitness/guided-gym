@@ -409,7 +409,7 @@ function PhysiqueMomentum({
               </div>
             ))}
           </div>
-          {typeof delta === "number" && (
+          {typeof delta === "number" && delta !== 0 && (
             <p className="relative mt-3 inline-flex rounded-full border border-analytics-violet/20 bg-analytics-violet/10 px-2.5 py-1 text-[9px] font-bold text-analytics-violet">
               {delta > 0 ? "+" : ""}
               {delta} overall since your matched baseline

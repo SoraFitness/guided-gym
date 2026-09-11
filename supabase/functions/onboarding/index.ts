@@ -1,8 +1,11 @@
-import { corsPreflightResponse, jsonResponse } from "../_shared/cors.ts";
+import { corsPreflightResponse, jsonResponse, withCors } from "../_shared/cors.ts";
 import { UnauthorizedError, createAdminClient, requireUser } from "../_shared/auth.ts";
 import { optionalEnv } from "../_shared/env.ts";
 
 type RecordValue = Record<string, unknown>;
+
+// Onboarding events are anonymous, so cap their size to stop storage abuse.
+const MAX_EVENT_BYTES = 16_000;
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value ? value : null;
@@ -92,12 +95,16 @@ async function getInsights() {
   };
 }
 
-Deno.serve(async (request) => {
+Deno.serve(withCors(async (request) => {
   if (request.method === "OPTIONS") return corsPreflightResponse();
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   try {
-    const body = (await request.json()) as { action?: string; payload?: unknown };
+    const raw = await request.text();
+    if (raw.length > MAX_EVENT_BYTES) {
+      return jsonResponse({ error: "Onboarding event is too large" }, 413);
+    }
+    const body = JSON.parse(raw) as { action?: string; payload?: unknown };
     if (body.action === "started" || body.action === "completed") {
       if (!validStartPayload(body.payload)) return jsonResponse({ error: "Invalid onboarding event" }, 400);
       const payload = body.payload as RecordValue & {
@@ -134,4 +141,4 @@ Deno.serve(async (request) => {
     console.error("[onboarding] failed", error);
     return jsonResponse({ error: "Onboarding request failed" }, 500);
   }
-});
+}));

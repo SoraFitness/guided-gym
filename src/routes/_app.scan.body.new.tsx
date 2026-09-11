@@ -284,7 +284,7 @@ function NewBodyScan() {
                 capture="environment"
                 value={photo}
                 onChange={changePhoto}
-                hint="Take one still photo with your full body visible from head to toe and the camera level."
+                hint="Take one still photo with your full body visible from head to toe, arms slightly away from your sides, and the camera level."
               />
             </div>
 

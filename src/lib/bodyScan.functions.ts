@@ -6,9 +6,23 @@ import { requireActiveSubscriptionMiddleware } from "@/lib/subscription-middlewa
 import { claimScanQuota } from "@/lib/scanQuota.functions";
 import { claimRateLimit } from "@/lib/rateLimit.server";
 import { fetchAscendrAi } from "@/lib/edge-functions.server";
+import {
+  contentText,
+  formatScanDate,
+  loadMemberContext,
+  loadPhotoBytes,
+  photoFingerprint,
+  type OpenRouterResponse,
+} from "@/lib/scanAnalysis.server";
+import {
+  BODY_CHANGE_RULES,
+  isReferenceComparison,
+  isReliableChange,
+  physiqueOverallScore,
+} from "@/lib/scanProgress";
 
 const OPENROUTER_BODY_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
-const BODY_SCAN_ANALYSIS_VERSION = "body-consistency-v1";
+const BODY_SCAN_ANALYSIS_VERSION = "body-progress-v2";
 
 const Input = z.object({
   submissionId: z.string().uuid(),
@@ -59,6 +73,7 @@ const ComparisonDeltas = z.object({
   muscleDevelopment: z.number().int().min(-100).max(100),
   vTaper: z.number().int().min(-100).max(100),
   symmetry: z.number().int().min(-100).max(100),
+  visibleConditioning: z.number().int().min(-100).max(100).optional(),
   bodyFatMidpoint: z.number().min(-60).max(60),
 });
 const ScanComparison = z.object({
@@ -68,6 +83,7 @@ const ScanComparison = z.object({
   summary: z.string().min(1).max(360),
   basis: z.enum(["baseline", "exact_match", "visual_comparison"]).optional(),
   previousScanId: z.string().uuid().nullable().optional(),
+  previousScanAt: z.string().nullable().optional(),
   scoreDeltas: ComparisonDeltas.optional(),
 });
 
@@ -101,6 +117,8 @@ const BodyScanSchema = z.object({
   }),
   vTaper: Metric,
   symmetry: Metric,
+  // Reports saved before body-progress-v2 have no conditioning score.
+  visibleConditioning: Score.optional(),
   potential: Metric,
   strongestAreas: z.array(z.string().min(1).max(180)).min(2).max(4),
   actionPlan: z
@@ -200,6 +218,7 @@ const bodyScanJsonSchema = {
     },
     vTaper: metricJsonSchema,
     symmetry: metricJsonSchema,
+    visibleConditioning: { type: "number", minimum: 0, maximum: 100 },
     potential: metricJsonSchema,
     strongestAreas: {
       type: "array",
@@ -250,6 +269,7 @@ const bodyScanJsonSchema = {
     "bodyFatEstimate",
     "vTaper",
     "symmetry",
+    "visibleConditioning",
     "potential",
     "strongestAreas",
     "actionPlan",
@@ -283,27 +303,46 @@ const bodyScanPreviewJsonSchema = {
   required: ["photoUsable", "photoIssue", "metrics", "visibleConditioning", "confidence"],
 } as const;
 
-const SYSTEM_PROMPT = `You are Ascendr's supportive visual physique coach. Analyze only what is visibly present in the supplied full-body photo.
+// Shared by the onboarding preview and the full report so a photo is rated on
+// the same scale before and after someone subscribes.
+const PHYSIQUE_SCORING_GUIDE = `Score calibration (applies to every 0-100 score):
+- 90-100: elite, competition-level development and conditioning. Very rare.
+- 75-89: clearly athletic, with well-developed muscle and visible definition.
+- 60-74: fit, with noticeable muscle, some definition, and clear room to build.
+- 45-59: typical recreational level, with limited visible development or definition.
+- 30-44: early stage, with little visible muscle or definition.
+- Below 30: very little visible development in this photo.
+Score only what is visible. Use the full range and do not inflate scores to be encouraging; encouragement belongs in the insights and the plan.
+Visible conditioning measures visible muscular definition relative to visible body fat. It is not a body-fat percentage or a health judgment: less definition and more visible fat must lower it, and clear definition must raise it.`;
+
+const SYSTEM_PROMPT = `You are Ascendr's honest, encouraging physique coach. Analyze only what is visibly present in the supplied full-body photo.
 
 Return a subjective, photo-dependent fitness assessment. Pose, lighting, clothing, camera angle, muscle pump, hydration, and image quality can materially change the result.
 
+${PHYSIQUE_SCORING_GUIDE}
+
 Hard rules:
-- Never identify the person or infer age, ethnicity, nationality, sex, gender, health, medical conditions, personality, intelligence, or lifestyle.
+- Never identify the person. Never infer age, ethnicity, nationality, sex, gender, health, medical conditions, personality, intelligence, or lifestyle from the photo. You may use the self-reported MEMBER CONTEXT when it is supplied.
 - Never diagnose a condition or present body composition as a medical measurement.
 - Never insult, shame, sexualize, or use degrading language.
 - Never present the scores, body-fat estimate, frame, proportions, or potential as objective fact or a genetic conclusion.
 - Do not recommend surgery, prescription medication, performance-enhancing drugs, starvation, crash dieting, purging, dehydration, or other unsafe interventions.
-- Keep advice practical and fitness-focused: resistance training, balanced conditioning, adequate protein, sustainable nutrition, recovery, posture, posing, and better scan-photo technique.
-- Use the full 0-100 range while keeping every score plausible and internally consistent.
+- Keep every score plausible and internally consistent.
 - Clearly distinguish shoulders, chest, back, arms, core, glutes, quads, hamstrings, and calves. Do not combine them into a generic upper-body or lower-body claim.
 - For each muscle group, report visibility as clear, partial, or not_visible. If a group cannot genuinely be assessed from this photo, set score to null and visibility to not_visible instead of guessing. Keep partial-visibility scores cautious and mention the limitation.
 - Overall Muscle Development should be broadly consistent with the visible muscle-group scores.
-- Body-fat estimate must be a broad visual range, never an exact percentage. Make highPercent at least 3 points greater than lowPercent.
-- Potential is an encouraging estimate of achievable physique upside through sustainable training, nutrition, recovery, and presentation. A higher score means stronger visible upside; it is an opinion, not a prediction, and is not simply the inverse of the current score.
+- Body-fat estimate must be a broad visual range, never an exact percentage. Make highPercent at least 3 points greater than lowPercent. When the member context gives a sex, calibrate the range for that sex.
+- Potential is an estimate of achievable physique upside through sustainable training, nutrition, recovery, and presentation. A higher score means stronger visible upside; it is an opinion, not a prediction, and is not simply the inverse of the current score.
 - Confidence must reflect how clearly this specific photo supports the assessment. Reduce it for loose clothing, uneven light, perspective distortion, dramatic posing, partial cropping, or obscured muscle groups even when the image remains usable.
-- When a PREVIOUS PHOTO is supplied, compare it conservatively with the CURRENT PHOTO. Only use change_detected when a visible physique difference is supported across comparable body regions and cannot reasonably be explained by pose, distance, lens, lighting, clothing, pump, or cropping. Otherwise use no_reliable_change and direction unchanged. Never infer progress from score differences alone.
-- For a first scan with no previous photo, use comparison status baseline, direction unchanged, and explain that future scans can be compared.
 - If there is no single clearly visible full body, the person is substantially cropped or obscured, the photo is too dark or blurry, or the image is nude or not fitness-appropriate, set photoUsable to false and explain the retake needed in photoIssue.
+
+Action plan rules:
+- Give 3-5 steps ordered by expected visible impact for this member: resistance training, conditioning, protein and nutrition, recovery, or posture.
+- Tie every step to a specific finding in this photo (name the muscle group or proportion) and make it concrete: what to do, how often, and how to progress it.
+- Match the member's goals, experience, schedule, and equipment when that context is supplied. Do not prescribe a calorie surplus to someone trying to lose weight, or aggressive cutting to someone building muscle, unless the photo clearly supports it and you explain why.
+- At most one step may be about posing or scan-photo technique.
+- Never target a muscle group you marked not_visible as if it had been assessed; you may suggest a rear or side photo to assess it.
+- Skip generic filler such as "stay hydrated" or "be consistent" unless it is tied to a visible finding.
 
 Write concise, respectful insights. Address the user directly. Return JSON only.`;
 
@@ -314,47 +353,38 @@ const USER_PROMPT = `Assess this full-body photo and return:
 4. Body Fat Estimate: a broad visual percentage range with lowPercent and highPercent, not an exact measurement.
 5. V-Taper (0-100): visible shoulder-to-waist proportions and upper-body shape.
 6. Symmetry (0-100): visible left/right balance and overall body proportions, allowing for pose and angle.
-7. Potential (0-100): realistic improvement potential based only on the visible frame, proportions, and current physique; opinion only.
+7. Visible Conditioning (0-100): visible muscular definition relative to visible body fat.
+8. Potential (0-100): realistic improvement potential based only on the visible frame, proportions, and current physique; opinion only.
 
-Also provide a short overall summary, 2-4 strongest visible areas, a prioritized 3-5 step sustainable action plan, and the required comparison object. Make every insight photo-specific, explain what is visibly driving each score, and avoid generic filler.`;
+Also provide a short overall summary, 2-4 strongest visible areas, a prioritized 3-5 step action plan that follows the action plan rules, and the required comparison object. Make every insight photo-specific, explain what is visibly driving each score, and avoid generic filler.`;
 
 const BASELINE_COMPARISON_PROMPT = `There is no previous Body Scan. Set comparison.status to baseline, comparison.direction to unchanged, and briefly explain that this report establishes the baseline.`;
+
+const REFERENCE_COMPARISON_RULES = `Compare the two photos conservatively:
+- Use change_detected only when a genuine visible physique change (muscle size or shape, definition, or body-fat loss or gain) is supported across comparable body regions and cannot reasonably be explained by pose, distance, lens, lighting, clothing, pump, or cropping. Set direction to improved, regressed, or mixed.
+- Otherwise use no_reliable_change with direction unchanged, and keep every score equal to the REFERENCE REPORT.
+- When you detect a change, move only the scores for regions that visibly changed and keep the rest equal to the REFERENCE REPORT.
+- comparison.confidence is your confidence in the change judgment, not general photo quality.
+- comparison.summary names what changed and where, or why no change could be confirmed, in under 240 characters.
+- In the action plan, follow up on the reference priorities: keep what is working and adjust what is not.`;
 
 const PREVIEW_SYSTEM_PROMPT = `You are Ascendr's visual physique rater. Analyze only what is visibly supported by the supplied full-body photo.
 
 Return a concise scoring preview, not a medical or health assessment.
 
+${PHYSIQUE_SCORING_GUIDE}
+
 Hard rules:
 - Never identify the person or infer age, ethnicity, nationality, sex, gender, health, medical conditions, personality, intelligence, or lifestyle.
 - Never insult, shame, sexualize, or use degrading language.
 - Score the current visible physique in this specific photo. Pose, lighting, clothing, camera angle, muscle pump, and image quality can affect the result.
-- Use the full 0-100 range. Do not default most people to the 70s and do not inflate scores to be encouraging.
 - Muscle measures overall visible muscular development. V-Taper measures visible shoulder-to-waist shape. Symmetry measures visible balance and proportions. Potential measures realistic improvement upside. Shoulders and Core measure their visibly supported development.
-- visibleConditioning measures visible muscular definition relative to visible adiposity. It is not a body-fat percentage or a health judgment. Less visible definition and more visible adiposity must produce a lower conditioning score; clear muscular definition must produce a higher one.
 - Scores must be internally consistent with the photo. Potential can be encouraging, but it must not inflate the current-physique factors.
 - If there is no single clearly visible full body, the person is substantially cropped or obscured, the photo is too dark or blurry, or the image is nude or not fitness-appropriate, set photoUsable to false and explain the retake needed in photoIssue.
 
 Return JSON only.`;
 
 const PREVIEW_USER_PROMPT = `Score this photo for a locked Body Scan preview. Return photoUsable, photoIssue, confidence, visibleConditioning, and these six 0-100 metrics: muscle, vTaper, symmetry, potential, shoulders, and core. Judge only the current visible physique and avoid generous score clustering.`;
-
-const PREVIOUS_SCAN_COMPARISON_PROMPT = `Two labeled photos follow. Analyze the CURRENT PHOTO for the report and compare it with the PREVIOUS PHOTO. Be conservative: set comparison.status to change_detected only when a genuine visible physique change is supported despite differences in photo conditions. Otherwise set it to no_reliable_change with direction unchanged. The comparison confidence is confidence in the change judgment, not general photo quality.`;
-
-interface OpenRouterResponse {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }>;
-    };
-  }>;
-  error?: { message?: string };
-}
-
-function contentText(payload: OpenRouterResponse): string {
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map((part) => part.text ?? "").join("");
-  return "";
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -453,130 +483,149 @@ function normalizeResult(result: BodyScanAiResult): BodyScanAiResult {
     score: group.score === null ? null : Math.round(group.score),
   });
 
+  const muscleDevelopment = roundMetric(result.muscleDevelopment);
+  const muscleGroups = {
+    upperBody: {
+      shoulders: roundGroup(result.muscleGroups.upperBody.shoulders),
+      chest: roundGroup(result.muscleGroups.upperBody.chest),
+      back: roundGroup(result.muscleGroups.upperBody.back),
+      arms: roundGroup(result.muscleGroups.upperBody.arms),
+    },
+    core: {
+      core: roundGroup(result.muscleGroups.core.core),
+    },
+    lowerBody: {
+      glutes: roundGroup(result.muscleGroups.lowerBody.glutes),
+      quads: roundGroup(result.muscleGroups.lowerBody.quads),
+      hamstrings: roundGroup(result.muscleGroups.lowerBody.hamstrings),
+      calves: roundGroup(result.muscleGroups.lowerBody.calves),
+    },
+  };
+  const vTaper = roundMetric(result.vTaper);
+  const symmetry = roundMetric(result.symmetry);
+  const potential = roundMetric(result.potential);
+  const visibleConditioning =
+    result.visibleConditioning === undefined ? undefined : Math.round(result.visibleConditioning);
+  // Reports that rate conditioning use the same overall formula as the onboarding preview.
+  const overallScore =
+    visibleConditioning === undefined
+      ? Math.round(result.overallScore)
+      : physiqueOverallScore({
+          muscle: muscleDevelopment.score,
+          vTaper: vTaper.score,
+          symmetry: symmetry.score,
+          potential: potential.score,
+          shoulders: muscleGroups.upperBody.shoulders.score ?? muscleDevelopment.score,
+          core: muscleGroups.core.core.score ?? muscleDevelopment.score,
+          conditioning: visibleConditioning,
+        });
+
   return {
     ...result,
-    overallScore: Math.round(result.overallScore),
-    muscleDevelopment: roundMetric(result.muscleDevelopment),
-    muscleGroups: {
-      upperBody: {
-        shoulders: roundGroup(result.muscleGroups.upperBody.shoulders),
-        chest: roundGroup(result.muscleGroups.upperBody.chest),
-        back: roundGroup(result.muscleGroups.upperBody.back),
-        arms: roundGroup(result.muscleGroups.upperBody.arms),
-      },
-      core: {
-        core: roundGroup(result.muscleGroups.core.core),
-      },
-      lowerBody: {
-        glutes: roundGroup(result.muscleGroups.lowerBody.glutes),
-        quads: roundGroup(result.muscleGroups.lowerBody.quads),
-        hamstrings: roundGroup(result.muscleGroups.lowerBody.hamstrings),
-        calves: roundGroup(result.muscleGroups.lowerBody.calves),
-      },
-    },
+    overallScore,
+    muscleDevelopment,
+    muscleGroups,
     bodyFatEstimate: {
       ...result.bodyFatEstimate,
       lowPercent,
       highPercent,
     },
-    vTaper: roundMetric(result.vTaper),
-    symmetry: roundMetric(result.symmetry),
-    potential: roundMetric(result.potential),
+    vTaper,
+    symmetry,
+    visibleConditioning,
+    potential,
   };
 }
 
 type BodyScanComparison = NonNullable<BodyScanAiResult["comparison"]>;
 type BodyScanDeltas = NonNullable<BodyScanComparison["scoreDeltas"]>;
 
-function comparisonDeltas(current: BodyScanAiResult, previous: BodyScanAiResult): BodyScanDeltas {
+interface PreviousBodyScan {
+  id: string;
+  record: Record<string, unknown>;
+  analysis: BodyScanAiResult;
+  photoPath: string;
+  fingerprint: string | null;
+  createdAt: string;
+}
+
+function comparisonDeltas(current: BodyScanAiResult, reference: BodyScanAiResult): BodyScanDeltas {
   const currentBodyFat =
     (current.bodyFatEstimate.lowPercent + current.bodyFatEstimate.highPercent) / 2;
-  const previousBodyFat =
-    (previous.bodyFatEstimate.lowPercent + previous.bodyFatEstimate.highPercent) / 2;
+  const referenceBodyFat =
+    (reference.bodyFatEstimate.lowPercent + reference.bodyFatEstimate.highPercent) / 2;
   return {
-    overallScore: current.overallScore - previous.overallScore,
-    muscleDevelopment: current.muscleDevelopment.score - previous.muscleDevelopment.score,
-    vTaper: current.vTaper.score - previous.vTaper.score,
-    symmetry: current.symmetry.score - previous.symmetry.score,
-    bodyFatMidpoint: Math.round((currentBodyFat - previousBodyFat) * 10) / 10,
+    overallScore: current.overallScore - reference.overallScore,
+    muscleDevelopment: current.muscleDevelopment.score - reference.muscleDevelopment.score,
+    vTaper: current.vTaper.score - reference.vTaper.score,
+    symmetry: current.symmetry.score - reference.symmetry.score,
+    ...(current.visibleConditioning !== undefined && reference.visibleConditioning !== undefined
+      ? { visibleConditioning: current.visibleConditioning - reference.visibleConditioning }
+      : {}),
+    bodyFatMidpoint: Math.round((currentBodyFat - referenceBodyFat) * 10) / 10,
   };
 }
 
-function anchorMetric<T extends { score: number }>(current: T, previous: T): T {
-  return { ...current, score: previous.score };
+function anchorMetric<T extends { score: number }>(current: T, reference: T): T {
+  return { ...current, score: reference.score };
 }
 
-function anchorGroup<T extends { score: number | null }>(current: T, previous: T): T {
-  if (current.score === null || previous.score === null) return current;
-  return { ...current, score: previous.score };
+function anchorGroup<T extends { score: number | null }>(current: T, reference: T): T {
+  if (current.score === null || reference.score === null) return current;
+  return { ...current, score: reference.score };
 }
 
-function anchorScoresToPrevious(
+function anchorScoresToReference(
   current: BodyScanAiResult,
-  previous: BodyScanAiResult,
+  reference: BodyScanAiResult,
 ): BodyScanAiResult {
+  const currentGroups = current.muscleGroups;
+  const referenceGroups = reference.muscleGroups;
   return {
     ...current,
-    overallScore: previous.overallScore,
-    muscleDevelopment: anchorMetric(current.muscleDevelopment, previous.muscleDevelopment),
+    overallScore: reference.overallScore,
+    muscleDevelopment: anchorMetric(current.muscleDevelopment, reference.muscleDevelopment),
     muscleGroups: {
       upperBody: {
         shoulders: anchorGroup(
-          current.muscleGroups.upperBody.shoulders,
-          previous.muscleGroups.upperBody.shoulders,
+          currentGroups.upperBody.shoulders,
+          referenceGroups.upperBody.shoulders,
         ),
-        chest: anchorGroup(
-          current.muscleGroups.upperBody.chest,
-          previous.muscleGroups.upperBody.chest,
-        ),
-        back: anchorGroup(
-          current.muscleGroups.upperBody.back,
-          previous.muscleGroups.upperBody.back,
-        ),
-        arms: anchorGroup(
-          current.muscleGroups.upperBody.arms,
-          previous.muscleGroups.upperBody.arms,
-        ),
+        chest: anchorGroup(currentGroups.upperBody.chest, referenceGroups.upperBody.chest),
+        back: anchorGroup(currentGroups.upperBody.back, referenceGroups.upperBody.back),
+        arms: anchorGroup(currentGroups.upperBody.arms, referenceGroups.upperBody.arms),
       },
       core: {
-        core: anchorGroup(current.muscleGroups.core.core, previous.muscleGroups.core.core),
+        core: anchorGroup(currentGroups.core.core, referenceGroups.core.core),
       },
       lowerBody: {
-        glutes: anchorGroup(
-          current.muscleGroups.lowerBody.glutes,
-          previous.muscleGroups.lowerBody.glutes,
-        ),
-        quads: anchorGroup(
-          current.muscleGroups.lowerBody.quads,
-          previous.muscleGroups.lowerBody.quads,
-        ),
+        glutes: anchorGroup(currentGroups.lowerBody.glutes, referenceGroups.lowerBody.glutes),
+        quads: anchorGroup(currentGroups.lowerBody.quads, referenceGroups.lowerBody.quads),
         hamstrings: anchorGroup(
-          current.muscleGroups.lowerBody.hamstrings,
-          previous.muscleGroups.lowerBody.hamstrings,
+          currentGroups.lowerBody.hamstrings,
+          referenceGroups.lowerBody.hamstrings,
         ),
-        calves: anchorGroup(
-          current.muscleGroups.lowerBody.calves,
-          previous.muscleGroups.lowerBody.calves,
-        ),
+        calves: anchorGroup(currentGroups.lowerBody.calves, referenceGroups.lowerBody.calves),
       },
     },
     bodyFatEstimate: {
       ...current.bodyFatEstimate,
-      lowPercent: previous.bodyFatEstimate.lowPercent,
-      highPercent: previous.bodyFatEstimate.highPercent,
+      lowPercent: reference.bodyFatEstimate.lowPercent,
+      highPercent: reference.bodyFatEstimate.highPercent,
     },
-    vTaper: anchorMetric(current.vTaper, previous.vTaper),
-    symmetry: anchorMetric(current.symmetry, previous.symmetry),
-    potential: anchorMetric(current.potential, previous.potential),
+    vTaper: anchorMetric(current.vTaper, reference.vTaper),
+    symmetry: anchorMetric(current.symmetry, reference.symmetry),
+    // Follow the reference exactly so a legacy reference keeps its saved overall score.
+    visibleConditioning: reference.visibleConditioning,
+    potential: anchorMetric(current.potential, reference.potential),
   };
 }
 
-function stabilizeAgainstPrevious(
+function stabilizeAgainstReference(
   current: BodyScanAiResult,
-  previous: BodyScanAiResult | null,
-  previousScanId: string | null,
+  reference: PreviousBodyScan | null,
 ): BodyScanAiResult {
-  if (!previous || !previousScanId) {
+  if (!reference) {
     return {
       ...current,
       comparison: {
@@ -588,58 +637,59 @@ function stabilizeAgainstPrevious(
           "This scan establishes your baseline. Repeat the pose and lighting for future comparisons.",
         basis: "baseline",
         previousScanId: null,
+        previousScanAt: null,
       },
     };
   }
 
-  const deltas = comparisonDeltas(current, previous);
-  const supportingChanges = [deltas.muscleDevelopment, deltas.vTaper, deltas.symmetry].filter(
-    (delta) => Math.abs(delta) >= 3,
-  ).length;
-  const hasMeaningfulSignal =
-    (Math.abs(deltas.overallScore) >= 3 && supportingChanges >= 1) ||
-    (Math.abs(deltas.bodyFatMidpoint) >= 2 && supportingChanges >= 1) ||
-    supportingChanges >= 2;
+  const deltas = comparisonDeltas(current, reference.analysis);
   const proposed = current.comparison;
-  const changeIsReliable =
-    proposed?.status === "change_detected" &&
-    proposed.direction !== "unchanged" &&
-    proposed.confidence >= 0.72 &&
-    hasMeaningfulSignal;
+  const supporting = [
+    deltas.muscleDevelopment,
+    deltas.vTaper,
+    ...(deltas.visibleConditioning === undefined ? [] : [deltas.visibleConditioning]),
+  ];
 
-  if (changeIsReliable) {
+  if (
+    proposed &&
+    isReliableChange(proposed, { overall: deltas.overallScore, supporting }, BODY_CHANGE_RULES)
+  ) {
     return {
       ...current,
       comparison: {
         ...proposed,
         basis: "visual_comparison",
-        previousScanId,
+        previousScanId: reference.id,
+        previousScanAt: reference.createdAt,
         scoreDeltas: deltas,
       },
     };
   }
 
-  const anchored = anchorScoresToPrevious(current, previous);
+  const anchored = normalizeResult(anchorScoresToReference(current, reference.analysis));
   return {
     ...anchored,
     comparison: {
       status: "no_reliable_change",
       direction: "unchanged",
-      confidence: proposed?.confidence ?? Math.min(current.confidence, previous.confidence),
+      confidence:
+        proposed?.confidence ?? Math.min(current.confidence, reference.analysis.confidence),
       summary:
         proposed?.status === "no_reliable_change"
           ? proposed.summary
           : "No reliable physique change was visible after accounting for pose, lighting, distance, and clothing, so your scores were held steady.",
       basis: "visual_comparison",
-      previousScanId,
-      scoreDeltas: comparisonDeltas(anchored, previous),
+      previousScanId: reference.id,
+      previousScanAt: reference.createdAt,
+      scoreDeltas: comparisonDeltas(anchored, reference.analysis),
     },
   };
 }
 
-function exactMatchResult(previous: BodyScanAiResult, previousScanId: string): BodyScanAiResult {
+function exactMatchResult(duplicate: PreviousBodyScan): BodyScanAiResult {
+  const analysis = duplicate.analysis;
   return {
-    ...previous,
+    ...analysis,
     comparison: {
       status: "no_reliable_change",
       direction: "unchanged",
@@ -647,38 +697,37 @@ function exactMatchResult(previous: BodyScanAiResult, previousScanId: string): B
       summary:
         "This exact photo was already analyzed, so Ascendr reused the same report and kept every score unchanged.",
       basis: "exact_match",
-      previousScanId,
+      previousScanId: duplicate.id,
+      previousScanAt: duplicate.createdAt,
       scoreDeltas: {
         overallScore: 0,
         muscleDevelopment: 0,
         vTaper: 0,
         symmetry: 0,
+        ...(analysis.visibleConditioning === undefined ? {} : { visibleConditioning: 0 }),
         bodyFatMidpoint: 0,
       },
     },
   };
 }
 
-async function photoFingerprint(bytes: ArrayBuffer): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
-  return `sha256:${hex}`;
+function groupScore(group: { score: number | null }) {
+  return group.score === null ? "not visible" : String(group.score);
 }
 
-async function loadPhotoBytes(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(25_000) });
-  if (!response.ok) throw new Error(`Could not read scan photo (${response.status}).`);
-  return response.arrayBuffer();
-}
-
-interface PreviousBodyScan {
-  id: string;
-  record: Record<string, unknown>;
-  analysis: BodyScanAiResult;
-  photoPath: string;
-  fingerprint: string | null;
+function referenceReportPrompt(reference: PreviousBodyScan) {
+  const report = reference.analysis;
+  const groups = report.muscleGroups;
+  return [
+    `Two labeled photos follow: the CURRENT PHOTO to analyze for this report, and the REFERENCE PHOTO from ${formatScanDate(reference.createdAt)}.`,
+    `REFERENCE REPORT scores: overall ${report.overallScore}, muscle development ${report.muscleDevelopment.score}, V-taper ${report.vTaper.score}, symmetry ${report.symmetry.score}, visible conditioning ${report.visibleConditioning ?? "not recorded"}, potential ${report.potential.score}, body-fat range ${report.bodyFatEstimate.lowPercent}-${report.bodyFatEstimate.highPercent}%.`,
+    `REFERENCE muscle groups: shoulders ${groupScore(groups.upperBody.shoulders)}, chest ${groupScore(groups.upperBody.chest)}, back ${groupScore(groups.upperBody.back)}, arms ${groupScore(groups.upperBody.arms)}, core ${groupScore(groups.core.core)}, glutes ${groupScore(groups.lowerBody.glutes)}, quads ${groupScore(groups.lowerBody.quads)}, hamstrings ${groupScore(groups.lowerBody.hamstrings)}, calves ${groupScore(groups.lowerBody.calves)}.`,
+    `REFERENCE priorities: ${report.actionPlan
+      .slice(0, 3)
+      .map((action) => `"${action.title}"`)
+      .join("; ")}.`,
+    REFERENCE_COMPARISON_RULES,
+  ].join("\n");
 }
 
 const PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -710,15 +759,10 @@ function buildBodyScanPreview(
     shoulders: Math.round(raw.metrics.shoulders),
     core: Math.round(raw.metrics.core),
   };
-  const overallScore = Math.round(
-    metrics.muscle * 0.2 +
-      metrics.vTaper * 0.13 +
-      metrics.symmetry * 0.13 +
-      metrics.potential * 0.08 +
-      metrics.shoulders * 0.13 +
-      metrics.core * 0.13 +
-      raw.visibleConditioning * 0.2,
-  );
+  const overallScore = physiqueOverallScore({
+    ...metrics,
+    conditioning: raw.visibleConditioning,
+  });
   return BodyScanPreviewSchema.parse({ overallScore, metrics });
 }
 
@@ -799,7 +843,7 @@ export const analyzeBodyScanPreview = createServerFn({ method: "POST" })
   });
 
 function previousBodyScan(
-  row: { id: string; result: Json },
+  row: { id: string; result: Json; created_at: string },
   userId: string,
 ): PreviousBodyScan | null {
   if (!isRecord(row.result)) return null;
@@ -827,6 +871,7 @@ function previousBodyScan(
     analysis,
     photoPath,
     fingerprint: typeof record.photo_fingerprint === "string" ? record.photo_fingerprint : null,
+    createdAt: typeof record.analyzed_at === "string" ? record.analyzed_at : row.created_at,
   };
 }
 
@@ -901,52 +946,55 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
           status: "complete",
         })
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(60);
       if (previousRowsError) throw new Error(previousRowsError.message);
 
       const previousScans = (previousRows ?? [])
         .map((previousRow) => previousBodyScan(previousRow, userId))
         .filter((scan): scan is PreviousBodyScan => scan !== null);
       let duplicate = previousScans.find((scan) => scan.fingerprint === fingerprint) ?? null;
-      let previous: PreviousBodyScan | null = previousScans[0] ?? null;
-      let previousSignedUrl: string | null = null;
+      // Compare with the scan the current scores came from, not simply the latest
+      // one, so gradual change keeps accumulating until it is visible.
+      let reference =
+        previousScans.find((scan) => isReferenceComparison(scan.analysis.comparison)) ?? null;
+      let referenceSignedUrl: string | null = null;
 
-      if (!duplicate && previous) {
-        const { data: previousSigned, error: previousSignedError } = await supabase.storage
+      if (!duplicate && reference) {
+        const { data: referenceSigned, error: referenceSignedError } = await supabase.storage
           .from("progress-photos")
-          .createSignedUrl(previous.photoPath, 60 * 10);
-        if (previousSignedError || !previousSigned?.signedUrl) {
+          .createSignedUrl(reference.photoPath, 60 * 10);
+        if (referenceSignedError || !referenceSigned?.signedUrl) {
           console.warn(
-            "Could not load the previous Body Scan for comparison:",
-            previousSignedError?.message ?? "Missing signed URL",
+            "Could not load the reference Body Scan for comparison:",
+            referenceSignedError?.message ?? "Missing signed URL",
           );
-          previous = null;
+          reference = null;
         } else {
-          previousSignedUrl = previousSigned.signedUrl;
-          if (!previous.fingerprint) {
+          referenceSignedUrl = referenceSigned.signedUrl;
+          if (!reference.fingerprint) {
             try {
-              const previousFingerprint = await photoFingerprint(
-                await loadPhotoBytes(previousSignedUrl),
+              const referenceFingerprint = await photoFingerprint(
+                await loadPhotoBytes(referenceSignedUrl),
               );
-              previous.fingerprint = previousFingerprint;
+              reference.fingerprint = referenceFingerprint;
               await supabase
                 .from("body_scans")
                 .update({
                   result: {
-                    ...previous.record,
-                    photo_fingerprint: previousFingerprint,
+                    ...reference.record,
+                    photo_fingerprint: referenceFingerprint,
                     analysis_version:
-                      typeof previous.record.analysis_version === "string"
-                        ? previous.record.analysis_version
+                      typeof reference.record.analysis_version === "string"
+                        ? reference.record.analysis_version
                         : "legacy",
                   } as Json,
                 })
-                .eq("id", previous.id)
+                .eq("id", reference.id)
                 .eq("user_id", userId);
-              if (previousFingerprint === fingerprint) duplicate = previous;
+              if (referenceFingerprint === fingerprint) duplicate = reference;
             } catch (fingerprintError) {
               console.warn(
-                "Could not fingerprint the previous Body Scan:",
+                "Could not fingerprint the reference Body Scan:",
                 fingerprintError instanceof Error
                   ? fingerprintError.message
                   : "Unknown fingerprint error",
@@ -957,7 +1005,7 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
       }
 
       if (duplicate) {
-        const result = exactMatchResult(duplicate.analysis, duplicate.id);
+        const result = exactMatchResult(duplicate);
         const completed: Json = {
           ...existing,
           status: "complete",
@@ -982,17 +1030,20 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
 
       await claimScanQuota(supabase, data.submissionId, "body");
 
+      const memberContext = await loadMemberContext(supabase, userId);
+      const promptText = (comparisonPrompt: string) =>
+        [USER_PROMPT, memberContext, comparisonPrompt].filter(Boolean).join("\n\n");
       const userContent =
-        previous && previousSignedUrl
+        reference && referenceSignedUrl
           ? [
-              { type: "text", text: `${USER_PROMPT}\n\n${PREVIOUS_SCAN_COMPARISON_PROMPT}` },
+              { type: "text", text: promptText(referenceReportPrompt(reference)) },
               { type: "text", text: "CURRENT PHOTO" },
               { type: "image_url", image_url: { url: signed.signedUrl } },
-              { type: "text", text: "PREVIOUS PHOTO" },
-              { type: "image_url", image_url: { url: previousSignedUrl } },
+              { type: "text", text: "REFERENCE PHOTO" },
+              { type: "image_url", image_url: { url: referenceSignedUrl } },
             ]
           : [
-              { type: "text", text: `${USER_PROMPT}\n\n${BASELINE_COMPARISON_PROMPT}` },
+              { type: "text", text: promptText(BASELINE_COMPARISON_PROMPT) },
               { type: "image_url", image_url: { url: signed.signedUrl } },
             ];
 
@@ -1026,11 +1077,7 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
           `PHOTO_QUALITY:${rawResult.photoIssue || "Use a clear, uncropped full-body photo and try again."}`,
         );
       }
-      const result = stabilizeAgainstPrevious(
-        rawResult,
-        previous?.analysis ?? null,
-        previous?.id ?? null,
-      );
+      const result = stabilizeAgainstReference(rawResult, referenceSignedUrl ? reference : null);
 
       const completed: Json = {
         ...existing,
