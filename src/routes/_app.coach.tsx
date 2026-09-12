@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import ReactMarkdown from "react-markdown";
 import {
   Send,
   Trash2,
@@ -64,6 +63,10 @@ const COACH_STARTERS: Array<{
     icon: Target,
   },
 ];
+
+// The markdown renderer is large; the chat opens without waiting for it and
+// replies fall back to plain text for the moment before it arrives.
+const ReactMarkdown = lazy(() => import("react-markdown"));
 
 const GUEST_MESSAGES_KEY = "fitness:guest-coach-messages";
 
@@ -190,6 +193,12 @@ function CoachChat({ session }: { session: AuthSession }) {
     inputRef.current?.focus();
   }, [threadId, status]);
 
+  useEffect(() => {
+    // Fetch the markdown renderer while the member reads, so replies are
+    // formatted the moment they stream in.
+    void import("react-markdown");
+  }, []);
+
   async function submit(text: string) {
     const t = text.trim();
     if (!t || !transport || status === "submitted" || status === "streaming") return;
@@ -226,25 +235,25 @@ function CoachChat({ session }: { session: AuthSession }) {
             <AscendrLogo decorative className="size-full" />
           </div>
           <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">
-              Personal training intelligence
+            <div className="flex items-center gap-2">
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">
+                Personal training intelligence
+              </p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/10 px-2 py-0.5 text-[8px] font-bold text-emerald-300">
+                <span className="size-1.5 rounded-full bg-emerald-300" /> Online
+              </span>
+            </div>
+            <h1 className="mt-1 text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
+              Ascendr Coach
+            </h1>
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+              {session.isAnonymous
+                ? "Guest mode · save an account to back up your coach memory"
+                : profile
+                  ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
+                  : "Ask about training, nutrition, recovery, or progress"}
             </p>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/10 px-2 py-0.5 text-[8px] font-bold text-emerald-300">
-              <span className="size-1.5 rounded-full bg-emerald-300" /> Online
-            </span>
           </div>
-          <h1 className="mt-1 text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
-            Ascendr Coach
-          </h1>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">
-            {session.isAnonymous
-              ? "Guest mode · save an account to back up your coach memory"
-              : profile
-                ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
-                : "Ask about training, nutrition, recovery, or progress"}
-          </p>
-        </div>
         </div>
         {messages.length > 0 && (
           <button
@@ -418,7 +427,9 @@ function MessageBubble({
                   isUser && "prose-p:mb-0 prose-ul:mb-0 prose-ol:mb-0",
                 )}
               >
-                <ReactMarkdown>{p.text ?? ""}</ReactMarkdown>
+                <Suspense fallback={<p className="whitespace-pre-wrap">{p.text ?? ""}</p>}>
+                  <ReactMarkdown>{p.text ?? ""}</ReactMarkdown>
+                </Suspense>
               </div>
             );
           }

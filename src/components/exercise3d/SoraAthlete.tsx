@@ -97,30 +97,33 @@ interface AthleteMaterials {
 function useAthleteMaterials(female: boolean): AthleteMaterials {
   return useMemo(
     () => ({
+      // The male athlete used the same grey for skin and top, which read as a
+      // plastic mannequin. Both sexes now use real skin tones; the male torso
+      // stays bare so the muscle highlights sit on anatomy, like a reference chart.
       skin: new THREE.MeshStandardMaterial({
-        color: female ? "#c88b72" : "#898a86",
-        roughness: 0.52,
-        metalness: 0.02,
+        color: female ? "#c88b72" : "#c08a5f",
+        roughness: 0.62,
+        metalness: 0.015,
       }),
       skinShadow: new THREE.MeshStandardMaterial({
-        color: female ? "#9e624f" : "#555956",
-        roughness: 0.58,
+        color: female ? "#9e624f" : "#95603a",
+        roughness: 0.66,
         metalness: 0.01,
       }),
       top: new THREE.MeshStandardMaterial({
-        color: female ? "#202936" : "#898a86",
-        roughness: female ? 0.62 : 0.48,
-        metalness: female ? 0.04 : 0.02,
+        color: female ? "#202936" : "#c08a5f",
+        roughness: female ? 0.62 : 0.62,
+        metalness: female ? 0.04 : 0.015,
       }),
       bottoms: new THREE.MeshStandardMaterial({
-        color: female ? "#161c26" : "#171a1f",
+        color: female ? "#161c26" : "#1b2026",
         roughness: 0.66,
         metalness: 0.03,
       }),
       shoes: new THREE.MeshStandardMaterial({
-        color: "#d9e0e8",
-        roughness: 0.46,
-        metalness: 0.05,
+        color: "#e4eaf1",
+        roughness: 0.44,
+        metalness: 0.06,
       }),
       hair: new THREE.MeshStandardMaterial({
         color: female ? "#2a1a12" : "#151011",
@@ -151,18 +154,20 @@ function useHighlightMaterials() {
         color: "#ff6245",
         emissive: "#b92c17",
         emissiveIntensity: 0.62,
-        roughness: 0.35,
+        roughness: 0.42,
         transparent: true,
-        opacity: 0.88,
+        // Slightly softer than before so worked muscles read as part of the
+        // body instead of stickers floating on top of it.
+        opacity: 0.8,
         depthWrite: false,
       }),
       secondary: new THREE.MeshStandardMaterial({
         color: "#45aaff",
         emissive: "#1168b3",
         emissiveIntensity: 0.48,
-        roughness: 0.4,
+        roughness: 0.46,
         transparent: true,
-        opacity: 0.74,
+        opacity: 0.66,
         depthWrite: false,
       }),
     }),

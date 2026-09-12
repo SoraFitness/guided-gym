@@ -97,6 +97,8 @@ let subscription = EMPTY_SUBSCRIPTION;
 let packagesByPlan: Partial<Record<Plan, PurchasesPackage>> = {};
 let configured = false;
 let configuredUserId: string | null = null;
+// True once RevenueCat has told us whether this member is entitled.
+let entitlementKnown = false;
 let configureQueue: Promise<void> = Promise.resolve();
 let revenueCatModule: RevenueCatModule | null = null;
 
@@ -205,6 +207,7 @@ function createPlanPrice(
 function applyCustomerInfo(customerInfo: CustomerInfo) {
   const entitlement = customerInfo.entitlements.all[ENTITLEMENT_ID];
   const status = subscriptionStatusFromEntitlement(entitlement);
+  entitlementKnown = true;
 
   updateSubscription({
     ...status,
@@ -245,10 +248,10 @@ function applyOfferings(availablePackages: PurchasesPackage[]) {
 
   packagesByPlan = nextPackages;
   const hasPackages = PLAN_ORDER.some((plan) => availablePlans[plan]);
+  // Prices alone don't open the app: `ready` waits for the entitlement check.
   updateSubscription({
     availablePlans,
     prices,
-    ready: true,
     error: hasPackages ? null : CHECKOUT_PRODUCTS_ERROR,
   });
 
@@ -295,18 +298,29 @@ async function loadCurrentOffering() {
 async function refreshSubscription(forceRefresh = false) {
   const { Purchases } = await getRevenueCatModule();
   if (forceRefresh) await Purchases.invalidateCustomerInfoCache();
-  const offerings = await loadCurrentOffering();
-  applyOfferings(offerings.current?.availablePackages ?? []);
+  // The entitlement check runs alongside the offerings download instead of
+  // after it, so members reach the app as soon as their subscription is known.
+  const customerInfoTask = withTimeout(
+    Purchases.getCustomerInfo(),
+    PURCHASES_OPERATION_TIMEOUT_MS,
+    "RevenueCat subscription check timed out.",
+  ).then(
+    ({ customerInfo }) => {
+      applyCustomerInfo(customerInfo);
+      return true;
+    },
+    (error: unknown) => {
+      console.warn("[revenuecat] Could not refresh customer information", error);
+      return false;
+    },
+  );
 
   try {
-    const { customerInfo } = await withTimeout(
-      Purchases.getCustomerInfo(),
-      PURCHASES_OPERATION_TIMEOUT_MS,
-      "RevenueCat subscription check timed out.",
-    );
-    applyCustomerInfo(customerInfo);
-  } catch (error) {
-    console.warn("[revenuecat] Could not refresh customer information", error);
+    const offerings = await loadCurrentOffering();
+    applyOfferings(offerings.current?.availablePackages ?? []);
+  } finally {
+    // The entitlement may be unknown, but the app must never wait forever.
+    if (!(await customerInfoTask)) updateSubscription({ ready: true });
   }
 }
 
@@ -363,12 +377,14 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
       });
     } else if (userId && configuredUserId !== userId) {
       packagesByPlan = {};
+      entitlementKnown = false;
       publish({ ...EMPTY_SUBSCRIPTION, customerUserId: userId, ready: false, error: null });
       const result = await Purchases.logIn({ appUserID: userId });
       configuredUserId = userId;
       applyCustomerInfo(result.customerInfo);
     } else if (!userId && configuredUserId) {
       packagesByPlan = {};
+      entitlementKnown = false;
       publish({ ...EMPTY_SUBSCRIPTION, customerUserId: null, ready: false, error: null });
       const result = await Purchases.logOut();
       configuredUserId = null;
@@ -387,12 +403,17 @@ async function syncRevenueCatUser(userId: string | null, email: string | null) {
     publish({
       ...subscription,
       customerUserId: userId,
-      active: false,
-      plan: null,
-      since: null,
-      expiresAt: null,
-      renewalRequired: false,
-      billingIssue: false,
+      // A confirmed entitlement stands: only checkout is unavailable here.
+      ...(entitlementKnown
+        ? {}
+        : {
+            active: false,
+            plan: null,
+            since: null,
+            expiresAt: null,
+            renewalRequired: false,
+            billingIssue: false,
+          }),
       ready: true,
       error: CHECKOUT_OFFERING_ERROR,
     });

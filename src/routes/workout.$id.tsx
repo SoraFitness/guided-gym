@@ -78,6 +78,15 @@ function WorkoutDetail() {
     setFavoriteIds(readFavoriteWorkoutIds());
   }, []);
 
+  // Both "Let's workout" and the 3D demo need the 3D engine: fetch it while
+  // the member reads this page so it is ready the moment they tap.
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void import("@/components/exercise3d/Exercise3DViewer");
+    }, 800);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   if (!isDetailPage) return <Outlet />;
 
   const toggleFavorite = () => {

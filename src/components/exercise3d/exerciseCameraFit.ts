@@ -27,8 +27,14 @@ export function calculateCameraFit({
   const fov = preset.fov;
   const fovRad = THREE.MathUtils.degToRad(fov);
   const [boxWidth, boxHeight, boxDepth] = config.fitBox.size;
+  // The viewer overlays a muscle legend along the top and a control bar along
+  // the bottom, so the athlete has less usable height than the canvas suggests.
+  // Framing to the raw canvas clipped heads and feet, worst of all on phones
+  // where the frame is portrait; both allowances are applied to height only.
+  const chromeAllowance = 1.14;
+  const portraitAllowance = aspect < 1 ? 1 + (1 - Math.max(0.4, aspect)) * 0.35 : 1;
   const paddedWidth = boxWidth * config.fitBox.padding;
-  const paddedHeight = boxHeight * config.fitBox.padding;
+  const paddedHeight = boxHeight * config.fitBox.padding * chromeAllowance * portraitAllowance;
   const verticalDistance = paddedHeight / 2 / Math.tan(fovRad / 2);
   const horizontalFov = 2 * Math.atan(Math.tan(fovRad / 2) * Math.max(0.1, aspect));
   const horizontalDistance = paddedWidth / 2 / Math.tan(horizontalFov / 2);

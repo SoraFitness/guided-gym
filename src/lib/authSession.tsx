@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import type { Session } from "@supabase/supabase-js";
@@ -138,71 +138,86 @@ export function startNativeAuthCallbackListener() {
   return nativeAuthCallbackListener;
 }
 
+// The session is looked up once per app load and shared by every screen, so
+// moving between tabs never drops back to a loading state.
+let sessionState: AuthSessionState = "loading";
+const sessionListeners = new Set<() => void>();
+let watcherStarted = false;
+
+function publishSession(next: AuthSessionState) {
+  if (sessionState === next) return;
+  sessionState = next;
+  for (const listener of sessionListeners) listener();
+}
+
+function startAuthSessionWatcher() {
+  if (watcherStarted || typeof window === "undefined") return;
+  watcherStarted = true;
+
+  let initialSessionResolved = false;
+  let pendingSession: AuthSession | null = null;
+  const timeoutId = window.setTimeout(() => {
+    if (sessionState !== "loading") return;
+    console.warn("[auth] Session lookup timed out; continuing signed out");
+    publishSession(null);
+  }, AUTH_SESSION_TIMEOUT_MS);
+
+  const setResolvedSession = (nextSession: AuthSession | null) => {
+    window.clearTimeout(timeoutId);
+    publishSession(nextSession);
+  };
+
+  try {
+    supabase.auth.onAuthStateChange((event, nextSession) => {
+      const next = toAuthSession(nextSession);
+      if (event === "PASSWORD_RECOVERY") {
+        clearPasswordRecoveryRequest();
+        openPasswordRecoveryScreen();
+      }
+      if (!initialSessionResolved) {
+        pendingSession = next;
+        return;
+      }
+      setResolvedSession(next);
+    });
+
+    void (async () => {
+      try {
+        await startNativeAuthCallbackListener();
+      } catch (error: unknown) {
+        console.warn("[auth] Native callback listener is unavailable", error);
+      }
+
+      try {
+        const { data } = await supabase.auth.getSession();
+        initialSessionResolved = true;
+        setResolvedSession(toAuthSession(data.session) ?? pendingSession);
+      } catch (error: unknown) {
+        console.warn("[auth] Session is unavailable; continuing locally", error);
+        initialSessionResolved = true;
+        setResolvedSession(pendingSession);
+      }
+    })();
+  } catch (error) {
+    console.warn("[auth] Supabase is unavailable; continuing locally", error);
+    setResolvedSession(null);
+  }
+}
+
+function subscribeToAuthSession(listener: () => void) {
+  startAuthSessionWatcher();
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
+const loadingSession: AuthSessionState = "loading";
+
 export function useAuthSession(): AuthSessionState {
-  const [session, setSession] = useState<AuthSessionState>("loading");
-
-  useEffect(() => {
-    let mounted = true;
-    let initialSessionResolved = false;
-    let pendingSession: AuthSession | null = null;
-    const timeoutId = window.setTimeout(() => {
-      if (!mounted) return;
-      console.warn("[auth] Session lookup timed out; continuing signed out");
-      setSession(null);
-    }, AUTH_SESSION_TIMEOUT_MS);
-
-    const setResolvedSession = (nextSession: AuthSession | null) => {
-      window.clearTimeout(timeoutId);
-      if (mounted) setSession(nextSession);
-    };
-
-    try {
-      const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
-        const next = toAuthSession(nextSession);
-        if (event === "PASSWORD_RECOVERY") {
-          clearPasswordRecoveryRequest();
-          openPasswordRecoveryScreen();
-        }
-        if (!initialSessionResolved) {
-          pendingSession = next;
-          return;
-        }
-        setResolvedSession(next);
-      });
-
-      void (async () => {
-        try {
-          await startNativeAuthCallbackListener();
-        } catch (error: unknown) {
-          console.warn("[auth] Native callback listener is unavailable", error);
-        }
-
-        try {
-          const { data } = await supabase.auth.getSession();
-          initialSessionResolved = true;
-          setResolvedSession(toAuthSession(data.session) ?? pendingSession);
-        } catch (error: unknown) {
-          console.warn("[auth] Session is unavailable; continuing locally", error);
-          initialSessionResolved = true;
-          setResolvedSession(pendingSession);
-        }
-      })();
-
-      return () => {
-        mounted = false;
-        window.clearTimeout(timeoutId);
-        sub.subscription.unsubscribe();
-      };
-    } catch (error) {
-      console.warn("[auth] Supabase is unavailable; continuing locally", error);
-      setResolvedSession(null);
-    }
-
-    return () => {
-      mounted = false;
-      window.clearTimeout(timeoutId);
-    };
-  }, []);
-
-  return session;
+  return useSyncExternalStore(
+    subscribeToAuthSession,
+    () => sessionState,
+    () => loadingSession,
+  );
 }

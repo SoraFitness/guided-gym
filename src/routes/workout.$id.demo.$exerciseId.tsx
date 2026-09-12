@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import {
   ArrowLeft,
   Dumbbell,
@@ -9,7 +9,12 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { Exercise3DViewer } from "@/components/exercise3d/Exercise3DViewer";
+// The 3D engine is large; the coaching notes render without waiting for it.
+const Exercise3DViewer = lazy(() =>
+  import("@/components/exercise3d/Exercise3DViewer").then((module) => ({
+    default: module.Exercise3DViewer,
+  })),
+);
 import { getExerciseAnimationConfig } from "@/components/exercise3d/exerciseSceneConfig";
 import { resolveDemoModelGender } from "@/lib/demoModel";
 import {
@@ -77,17 +82,23 @@ function DemoPage() {
         </header>
 
         <main className="flex flex-1 flex-col gap-3 pb-5">
-          <Exercise3DViewer
-            animation={demo.animation}
-            gender={resolveDemoModelGender(profile)}
-            defaultSpeed={speed}
-            label={ex.name}
-            exerciseId={ex.id}
-            primaryMuscles={demo.primaryMuscles}
-            secondaryMuscles={demo.secondaryMuscles}
-            equipment={demo.equipment}
-            className="h-[clamp(430px,58dvh,620px)] min-h-[430px]"
-          />
+          <Suspense
+            fallback={
+              <div className="h-[clamp(430px,58dvh,620px)] min-h-[430px] w-full animate-pulse rounded-[28px] border border-white/[0.08] bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]" />
+            }
+          >
+            <Exercise3DViewer
+              animation={demo.animation}
+              gender={resolveDemoModelGender(profile)}
+              defaultSpeed={speed}
+              label={ex.name}
+              exerciseId={ex.id}
+              primaryMuscles={demo.primaryMuscles}
+              secondaryMuscles={demo.secondaryMuscles}
+              equipment={demo.equipment}
+              className="h-[clamp(430px,58dvh,620px)] min-h-[430px]"
+            />
+          </Suspense>
 
           <section className="grid grid-cols-2 gap-2">
             <MetricTile

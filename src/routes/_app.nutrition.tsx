@@ -24,6 +24,10 @@ import {
   History,
   Heart,
   Utensils,
+  Zap,
+  Wheat,
+  Droplet,
+  type LucideIcon,
 } from "lucide-react";
 import {
   foods,
@@ -74,6 +78,7 @@ import {
   type NutritionQuality,
 } from "@/lib/nutritionQuality";
 import { compressImage } from "@/lib/imageCompress";
+import { FoodCameraPanel } from "@/components/nutrition/FoodCameraPanel";
 import { readNutritionLabel } from "@/lib/nutritionLabel.functions";
 
 const BarcodeScannerPanel = lazy(() =>
@@ -113,88 +118,81 @@ function NutritionPage() {
   const dayLabel = isToday
     ? "Today"
     : day.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  const kcalRemaining = goals.kcal - Math.round(totals.kcal);
 
   return (
     <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
-      <header className="px-1">
-        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Fuel</p>
-        <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
-          Eat with intention.
-        </h1>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          See the quality of your fuel—not only the calories.
-        </p>
+      <header className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Fuel</p>
+          <h1 className="mt-1 truncate text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
+            {dayLabel}
+          </h1>
+        </div>
+        <span className="mt-2 shrink-0 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold text-muted-foreground">
+          {today.length} item{today.length === 1 ? "" : "s"}
+        </span>
       </header>
 
-      <div className="mt-5">
-        <DayStepper day={day} setDay={setDay} label={dayLabel} />
+      <div className="mt-4">
+        <DayTabs day={day} setDay={setDay} />
       </div>
 
-      <FuelQualityHero quality={quality.day} itemCount={today.length} />
-
-      {/* Summary card */}
+      {/* Calories */}
       <section className="relative mt-4 overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(160deg,oklch(0.22_0_0)_0%,oklch(0.16_0_0)_100%)] p-5 shadow-[0_10px_40px_-20px_oklch(0_0_0/0.8)]">
-        <div className="absolute -top-16 -right-16 size-48 rounded-full bg-neon/10 blur-3xl pointer-events-none" />
-        <div className="relative mb-4 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
-              {isToday ? "Today’s energy" : "Daily energy"}
+        <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-neon/10 blur-3xl" />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[46px] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
+              {Math.abs(kcalRemaining)}
+            </div>
+            <p className="mt-2 text-[12px] font-medium text-muted-foreground">
+              {kcalRemaining < 0 ? "Calories over" : "Calories left"}
             </p>
-            <h2 className="mt-1 text-base font-extrabold">
-              {totals.kcal === 0
-                ? "Ready when you are"
-                : totals.kcal <= goals.kcal
-                  ? "You’re on track"
-                  : "Daily target reached"}
-            </h2>
+            <FuelScorePill quality={quality.day} />
           </div>
-          <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold text-muted-foreground">
-            {today.length} item{today.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="relative flex items-center gap-5">
           <CalorieRing consumed={Math.round(totals.kcal)} goal={goals.kcal} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tabular-nums">
-                {Math.round(totals.kcal)}
-              </span>
-              <span className="text-xs text-muted-foreground">/ {goals.kcal} kcal</span>
-            </div>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-0.5">
-              Daily target
-            </p>
-            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon/10 border border-neon/20">
-              <Flame className="size-3 text-neon" />
-              <span className="text-[11px] font-semibold text-neon tabular-nums">
-                {Math.max(0, goals.kcal - Math.round(totals.kcal))} kcal left
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative mt-5 grid grid-cols-3 gap-3">
-          <MacroChip
-            label="Protein"
-            value={totals.protein}
-            goal={goals.protein}
-            hue="oklch(0.92 0.21 130)"
-          />
-          <MacroChip
-            label="Carbs"
-            value={totals.carbs}
-            goal={goals.carbs}
-            hue="oklch(0.82 0.17 65)"
-          />
-          <MacroChip label="Fat" value={totals.fat} goal={goals.fat} hue="oklch(0.72 0.18 25)" />
-        </div>
-        <div className="relative mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4 text-[10px]">
-          <span className="text-muted-foreground">Protein remaining</span>
-          <span className="font-bold text-neon tabular-nums">
-            {Math.max(0, goals.protein - Math.round(totals.protein))}g
-          </span>
         </div>
       </section>
+
+      {/* Macros */}
+      <div className="mt-3 grid grid-cols-3 gap-2.5">
+        <MacroRingCard
+          label="Protein"
+          value={totals.protein}
+          goal={goals.protein}
+          hue="oklch(0.92 0.21 130)"
+          Icon={Zap}
+        />
+        <MacroRingCard
+          label="Carbs"
+          value={totals.carbs}
+          goal={goals.carbs}
+          hue="oklch(0.82 0.15 80)"
+          Icon={Wheat}
+        />
+        <MacroRingCard
+          label="Fats"
+          value={totals.fat}
+          goal={goals.fat}
+          hue="oklch(0.78 0.14 185)"
+          Icon={Droplet}
+        />
+      </div>
+
+      {quality.day.score != null && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <QualitySignal
+            label="Positive"
+            value={quality.day.positives[0] ?? "Nutrition details tracked"}
+            positive
+          />
+          <QualitySignal
+            label="Watch"
+            value={quality.day.watchItems[0] ?? "No major watch item detected"}
+          />
+        </div>
+      )}
 
       {/* Scan CTA */}
       <button
@@ -281,47 +279,18 @@ function NutritionPage() {
   );
 }
 
-function FuelQualityHero({ quality, itemCount }: { quality: NutritionQuality; itemCount: number }) {
+function FuelScorePill({ quality }: { quality: NutritionQuality }) {
+  if (quality.score == null) {
+    return (
+      <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-white/45">
+        <Sparkles className="size-3" /> Log a meal for your fuel score
+      </span>
+    );
+  }
   return (
-    <section className="premium-panel relative mt-4 overflow-hidden rounded-[29px] p-5">
-      <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-analytics-teal/10 blur-3xl" />
-      <div className="relative flex items-start gap-4">
-        <div className="grid size-[76px] shrink-0 place-items-center rounded-[24px] border border-white/10 bg-black/25">
-          <div className="text-center">
-            <strong className="block text-[27px] font-extrabold leading-none tabular-nums text-analytics-teal">
-              {quality.score ?? "—"}
-            </strong>
-            <span className="mt-1 block text-[8px] font-extrabold uppercase tracking-[0.15em] text-white/35">
-              Fuel score
-            </span>
-          </div>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="data-kicker text-analytics-teal">Daily fuel quality</p>
-          <h2 className="mt-1 text-xl font-extrabold">
-            {quality.score == null ? "Quality starts with your log." : quality.band}
-          </h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {quality.score == null
-              ? "Add a meal with nutrition details to see positive signals and what to watch."
-              : `${quality.confidence === "partial" ? "Partial" : quality.confidence === "estimated" ? "Estimated" : "Verified"} score from ${itemCount} logged item${itemCount === 1 ? "" : "s"}. Missing nutrients are excluded.`}
-          </p>
-        </div>
-      </div>
-      {quality.score != null && (
-        <div className="relative mt-4 grid grid-cols-2 gap-2">
-          <QualitySignal
-            label="Positive"
-            value={quality.positives[0] ?? "Protein and nutrient data tracked"}
-            positive
-          />
-          <QualitySignal
-            label="Watch"
-            value={quality.watchItems[0] ?? "No major watch items detected"}
-          />
-        </div>
-      )}
-    </section>
+    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-analytics-teal/25 bg-analytics-teal/10 px-2.5 py-1 text-[10px] font-bold text-analytics-teal">
+      <Sparkles className="size-3" /> Fuel score {quality.score} · {quality.band}
+    </span>
   );
 }
 
@@ -346,6 +315,28 @@ function QualitySignal({
       </p>
       <p className="mt-1 text-[9px] leading-snug text-white/65">{value}</p>
     </div>
+  );
+}
+
+// A single dot keeps a logged item's fuel quality readable without stealing
+// the row width the food name needs.
+function QualityDot({ quality }: { quality: NutritionQuality }) {
+  const score = quality.score;
+  return (
+    <span
+      title={score == null ? "Partial data" : `Fuel score ${score} · ${quality.band}`}
+      aria-label={score == null ? "Partial nutrition data" : `Fuel score ${score}, ${quality.band}`}
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        score == null
+          ? "bg-white/20"
+          : score >= 70
+            ? "bg-analytics-teal"
+            : score >= 55
+              ? "bg-neon"
+              : "bg-analytics-amber",
+      )}
+    />
   );
 }
 
@@ -378,65 +369,80 @@ function currentMeal(): Meal {
   return "Snack";
 }
 
-function DayStepper({
-  day,
-  setDay,
-  label,
-}: {
-  day: Date;
-  setDay: (d: Date) => void;
-  label: string;
-}) {
+function DayTabs({ day, setDay }: { day: Date; setDay: (d: Date) => void }) {
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const onToday = sameDay(day, now);
+  const onYesterday = sameDay(day, yesterday);
   const shift = (delta: number) => {
     const d = new Date(day);
     d.setDate(d.getDate() + delta);
     setDay(d);
   };
-  const isToday = day.toDateString() === new Date().toDateString();
-  return (
-    <div className="flex w-full items-center gap-1 rounded-2xl border border-white/[0.06] bg-surface/80 p-1">
-      <button
-        onClick={() => shift(-1)}
-        className="grid h-[44px] w-[44px] place-items-center rounded-full active:bg-surface-2"
-        aria-label="Previous day"
-      >
-        <ChevronLeft className="size-4" />
-      </button>
-      <button
-        onClick={() => setDay(new Date())}
+
+  const tab = (label: string, active: boolean, onClick: () => void) => (
+    <button onClick={onClick} className="relative h-9 px-0.5 text-left">
+      <span
         className={cn(
-          "h-[44px] flex-1 rounded-xl px-3 text-xs font-semibold tabular-nums",
-          isToday ? "text-neon" : "text-foreground",
+          "text-[17px] font-extrabold tracking-[-0.02em] transition",
+          active ? "text-foreground" : "text-white/35",
         )}
       >
         {label}
-      </button>
-      <button
-        onClick={() => shift(1)}
-        disabled={isToday}
-        className="grid h-[44px] w-[44px] place-items-center rounded-full active:bg-surface-2 disabled:opacity-30"
-        aria-label="Next day"
-      >
-        <ChevronRight className="size-4" />
-      </button>
+      </span>
+      {active && (
+        <span className="absolute -bottom-0.5 left-1/2 size-1 -translate-x-1/2 rounded-full bg-neon" />
+      )}
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-5 px-1">
+      {tab("Today", onToday, () => setDay(new Date()))}
+      {tab("Yesterday", onYesterday, () => setDay(yesterday))}
+      {!onToday && !onYesterday && (
+        <span className="text-[17px] font-extrabold tracking-[-0.02em] text-foreground">
+          {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          onClick={() => shift(-1)}
+          className="grid size-9 place-items-center rounded-full border border-white/[0.06] bg-white/[0.03] active:bg-surface-2"
+          aria-label="Previous day"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <button
+          onClick={() => shift(1)}
+          disabled={onToday}
+          className="grid size-9 place-items-center rounded-full border border-white/[0.06] bg-white/[0.03] active:bg-surface-2 disabled:opacity-25"
+          aria-label="Next day"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
 
 function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
   const pct = goal > 0 ? Math.min(100, (consumed / goal) * 100) : 0;
+  const over = goal > 0 && consumed > goal;
   const C = 2 * Math.PI * 42;
   return (
-    <div className="relative size-28 shrink-0">
+    <div className="relative size-[108px] shrink-0">
       <svg viewBox="0 0 100 100" className="-rotate-90 size-full">
-        <circle cx="50" cy="50" r="42" fill="none" stroke="oklch(1 0 0 / 0.07)" strokeWidth="8" />
+        <circle cx="50" cy="50" r="42" fill="none" stroke="oklch(1 0 0 / 0.07)" strokeWidth="11" />
         <circle
           cx="50"
           cy="50"
           r="42"
           fill="none"
-          stroke="url(#calGrad)"
-          strokeWidth="8"
+          stroke={over ? "oklch(0.82 0.15 80)" : "url(#calGrad)"}
+          strokeWidth="11"
           strokeLinecap="round"
           strokeDasharray={`${(pct / 100) * C} ${C}`}
           style={{ transition: "stroke-dasharray 0.6s ease" }}
@@ -448,47 +454,88 @@ function CalorieRing({ consumed, goal }: { consumed: number; goal: number }) {
           </linearGradient>
         </defs>
       </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">
-        <div>
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider">eaten</div>
-          <div className="text-xl font-extrabold tabular-nums leading-none mt-0.5">{consumed}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">kcal</div>
+      <div className="absolute inset-0 grid place-items-center">
+        <span className="grid size-10 place-items-center rounded-full border border-white/[0.07] bg-black/35">
+          <Flame className={cn("size-[18px]", over ? "text-analytics-amber" : "text-neon")} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MacroRingCard({
+  label,
+  value,
+  goal,
+  hue,
+  Icon,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  hue: string;
+  Icon: LucideIcon;
+}) {
+  const eaten = Math.round(value);
+  const remaining = Math.round(goal) - eaten;
+  const over = remaining < 0;
+  const pct = goal > 0 ? Math.min(100, (eaten / goal) * 100) : 0;
+  const C = 2 * Math.PI * 40;
+  return (
+    <div className="rounded-[22px] border border-white/[0.06] bg-white/[0.035] px-2 py-3.5 text-center">
+      <div className="text-[19px] font-extrabold leading-none tabular-nums">
+        {Math.abs(remaining)}
+        <span className="text-[13px] font-bold">g</span>
+      </div>
+      <p className="mt-1 text-[10px] font-medium text-muted-foreground">
+        {label} {over ? "over" : "left"}
+      </p>
+      <div className="relative mx-auto mt-3 size-[58px]">
+        <svg viewBox="0 0 100 100" className="-rotate-90 size-full">
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="oklch(1 0 0 / 0.07)"
+            strokeWidth="12"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke={hue}
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={`${(pct / 100) * C} ${C}`}
+            style={{ transition: "stroke-dasharray 0.6s ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 grid place-items-center">
+          <span className="grid size-6 place-items-center rounded-full bg-black/40">
+            <Icon className="size-3" style={{ color: hue }} />
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-function MacroChip({
-  label,
-  value,
-  goal,
-  hue,
-}: {
-  label: string;
-  value: number;
-  goal: number;
-  hue: string;
-}) {
-  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0;
+function MacroTag({ Icon, hue, value }: { Icon: LucideIcon; hue: string; value: number }) {
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-muted-foreground">{label}</span>
-        <span className="text-[10px] text-muted-foreground tabular-nums">{goal}g</span>
-      </div>
-      <div className="mt-1 text-base font-bold tabular-nums">
-        {Math.round(value)}
-        <span className="text-xs text-muted-foreground font-medium">g</span>
-      </div>
-      <div className="mt-1.5 h-1.5 rounded-full bg-white/5 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, background: hue }}
-        />
-      </div>
-    </div>
+    <span className="inline-flex items-center gap-1">
+      <Icon className="size-3" style={{ color: hue }} />
+      {value}g
+    </span>
   );
+}
+
+function loggedTime(iso: string) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function MealSection({
@@ -579,27 +626,45 @@ function MealSection({
                 >
                   <FoodThumbnail
                     food={{ id: e.foodId, name: f.name, brand: f.brand, imageUrl: f.imageUrl }}
-                    size="sm"
+                    size="lg"
+                    className="size-14 rounded-2xl"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {f.name}
-                      {f.brand ? (
-                        <span className="text-muted-foreground font-normal"> · {f.brand}</span>
-                      ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight">
+                        {f.name}
+                        {f.brand ? (
+                          <span className="font-normal text-muted-foreground"> · {f.brand}</span>
+                        ) : null}
+                      </div>
+                      <QualityDot quality={itemQuality} />
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate tabular-nums">
-                      {e.servings}× · P{Math.round(f.protein * e.servings)} · C
-                      {Math.round(f.carbs * e.servings)} · F{Math.round(f.fat * e.servings)}
+                    <div className="mt-1.5 flex items-center gap-2 tabular-nums">
+                      <span className="flex items-center gap-1.5 text-[13px] font-bold">
+                        <Flame className="size-3.5 text-neon" />
+                        {kcal} kcal
+                      </span>
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        {loggedTime(e.loggedAt)}
+                      </span>
                     </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <QualityBadge quality={itemQuality} />
-                    <div className="text-sm font-bold text-neon tabular-nums leading-none">
-                      {kcal}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">
-                      kcal
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold tabular-nums text-white/70">
+                      <MacroTag
+                        Icon={Zap}
+                        hue="oklch(0.92 0.21 130)"
+                        value={Math.round(f.protein * e.servings)}
+                      />
+                      <MacroTag
+                        Icon={Wheat}
+                        hue="oklch(0.82 0.15 80)"
+                        value={Math.round(f.carbs * e.servings)}
+                      />
+                      <MacroTag
+                        Icon={Droplet}
+                        hue="oklch(0.78 0.14 185)"
+                        value={Math.round(f.fat * e.servings)}
+                      />
+                      {e.servings !== 1 && <span className="text-white/40">{e.servings}×</span>}
                     </div>
                   </div>
                 </button>
@@ -1160,18 +1225,21 @@ function PhotoPanel({
     setResult(null);
     setFile(f);
     setPreview(URL.createObjectURL(f));
+    // Snap and go: scanning starts immediately instead of asking for a second tap.
+    void runAnalyze(f);
   };
 
-  const runAnalyze = async () => {
-    if (!file) return;
+  const runAnalyze = async (target?: File) => {
+    const source = target ?? file;
+    if (!source) return;
     setLoading(true);
     setError("");
     try {
       // Phone photos are several megabytes; a resized JPEG uploads quickly and
       // stays inside request limits while keeping package text legible.
-      const compressed = await compressImage(file, 1600, 0.85).catch(() => file);
+      const compressed = await compressImage(source, 1600, 0.85).catch(() => source);
       const dataUrl = await fileToDataUrl(
-        new File([compressed], "meal.jpg", { type: compressed.type || file.type }),
+        new File([compressed], "meal.jpg", { type: compressed.type || source.type }),
       );
       const resp = await analyzeFn({ data: { image: dataUrl } });
       if (resp.ok) {
@@ -1260,28 +1328,10 @@ function PhotoPanel({
         onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])}
       />
 
-      {!preview && (
-        <div className="mb-3 flex items-start gap-2 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5 text-[11px] text-muted-foreground">
-          <Sparkles className="size-3.5 text-neon shrink-0 mt-0.5" />
-          <span>For best results, take the photo from above with the full plate visible.</span>
-        </div>
-      )}
-
       {!preview ? (
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="w-full aspect-[4/5] rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] grid place-items-center text-center p-6 active:scale-[0.99]"
-        >
-          <div>
-            <div className="size-14 mx-auto rounded-2xl bg-neon/15 grid place-items-center mb-3">
-              <Upload className="size-6 text-neon" />
-            </div>
-            <p className="font-semibold text-sm">Take or upload a meal photo</p>
-            <p className="text-[11px] text-muted-foreground mt-1">We'll analyze it with AI</p>
-          </div>
-        </button>
+        <FoodCameraPanel onFile={pick} onGalleryClick={() => inputRef.current?.click()} />
       ) : (
-        <div className="aspect-[4/5] rounded-3xl overflow-hidden relative border border-white/[0.06]">
+        <div className="aspect-[3/4] rounded-[28px] overflow-hidden relative border border-white/[0.06]">
           <img src={preview} alt="meal" className="size-full object-cover" />
           <button
             onClick={reset}
@@ -1310,7 +1360,7 @@ function PhotoPanel({
           <div className="mt-3 flex gap-2">
             {preview && (
               <button
-                onClick={runAnalyze}
+                onClick={() => void runAnalyze()}
                 className="flex-1 h-10 rounded-full bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5"
               >
                 <RotateCcw className="size-3.5" /> Try again
@@ -1337,10 +1387,10 @@ function PhotoPanel({
 
       {preview && !loading && !error && (
         <button
-          onClick={runAnalyze}
-          className="mt-4 w-full h-12 rounded-full bg-neon text-neon-foreground font-semibold text-sm flex items-center justify-center gap-2 glow-neon active:scale-[0.98]"
+          onClick={reset}
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] text-sm font-semibold active:scale-[0.98]"
         >
-          <Sparkles className="size-4" /> Analyze meal
+          <RotateCcw className="size-4" /> Retake photo
         </button>
       )}
       <p className="mt-3 text-[10px] text-muted-foreground text-center">
@@ -1431,29 +1481,48 @@ function PhotoConfirm({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        {preview && (
-          <img
-            src={preview}
-            alt="meal"
-            className="size-16 rounded-2xl object-cover border border-white/10"
-          />
-        )}
+      {preview ? (
+        <div className="relative overflow-hidden rounded-[24px] border border-white/[0.08]">
+          <img src={preview} alt="meal" className="aspect-[4/3] w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
+          <div className="absolute inset-x-3 top-3 flex flex-wrap gap-1.5">
+            {items.slice(0, 4).map((it, idx) => (
+              <span
+                key={idx}
+                className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[10px] font-semibold backdrop-blur"
+              >
+                {it.name.trim() || "Item"}
+              </span>
+            ))}
+            {items.length > 4 && (
+              <span className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[10px] font-semibold backdrop-blur">
+                +{items.length - 4}
+              </span>
+            )}
+          </div>
+          <div className="absolute inset-x-3 bottom-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+              Confirm your meal
+            </p>
+            <h3 className="mt-0.5 truncate text-lg font-extrabold">{result.meal_name}</h3>
+            <span
+              className={cn(
+                "mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                confColor,
+              )}
+            >
+              {Math.round(result.confidence * 100)}% confidence
+            </span>
+          </div>
+        </div>
+      ) : (
         <div className="min-w-0 flex-1">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Confirm your meal
           </p>
-          <h3 className="font-bold text-base truncate">{result.meal_name}</h3>
-          <span
-            className={cn(
-              "mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold",
-              confColor,
-            )}
-          >
-            {Math.round(result.confidence * 100)}% confidence
-          </span>
+          <h3 className="truncate text-base font-bold">{result.meal_name}</h3>
         </div>
-      </div>
+      )}
 
       {lowConfidence && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-[11px] text-amber-200">

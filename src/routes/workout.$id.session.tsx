@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -50,7 +50,13 @@ import {
   type WeightUnit,
 } from "@/lib/workoutSessionStore";
 import { logWorkout } from "@/lib/progressStore";
-import { Exercise3DViewer } from "@/components/exercise3d/Exercise3DViewer";
+// The 3D engine is large; the timer and set tracker render without waiting for it.
+const Exercise3DViewer = lazy(() =>
+  import("@/components/exercise3d/Exercise3DViewer").then((module) => ({
+    default: module.Exercise3DViewer,
+  })),
+);
+const VIEWER_HEIGHT_CLASS = "h-[clamp(360px,calc(100dvh-7rem),720px)]";
 import { getExerciseDemoInfo } from "@/lib/exerciseCoaching";
 import { resolveDemoModelGender } from "@/lib/demoModel";
 import { EXERCISE_LIBRARY, type ExerciseLibraryItem } from "@/lib/workoutCatalog";
@@ -96,6 +102,17 @@ function formatDurationShort(seconds: number | undefined) {
   if (!seconds) return "Timed";
   if (seconds % 60 === 0) return `${seconds / 60} min`;
   return `${seconds} sec`;
+}
+
+function ViewerPlaceholder({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "w-full animate-pulse rounded-[28px] border border-white/[0.08] bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]",
+        className,
+      )}
+    />
+  );
 }
 
 type Phase = "exercise" | "rest" | "complete";
@@ -393,16 +410,18 @@ function SessionPage() {
 
             {/* 3D viewer */}
             <div className="px-5 mt-4">
-              <Exercise3DViewer
-                animation={demo.animation}
-                gender={gender}
-                showControls={false}
-                label={ex.name}
-                exerciseId={ex.id}
-                primaryMuscles={demo.primaryMuscles}
-                secondaryMuscles={demo.secondaryMuscles}
-                equipment={demo.equipment}
-              />
+              <Suspense fallback={<ViewerPlaceholder className={VIEWER_HEIGHT_CLASS} />}>
+                <Exercise3DViewer
+                  animation={demo.animation}
+                  gender={gender}
+                  showControls={false}
+                  label={ex.name}
+                  exerciseId={ex.id}
+                  primaryMuscles={demo.primaryMuscles}
+                  secondaryMuscles={demo.secondaryMuscles}
+                  equipment={demo.equipment}
+                />
+              </Suspense>
             </div>
 
             {/* set tracker */}

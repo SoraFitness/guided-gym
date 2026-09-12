@@ -117,11 +117,11 @@ function ExerciseStudio() {
     <group>
       <mesh receiveShadow position={[0, 1.55, -2.15]}>
         <planeGeometry args={[6.4, 3.8]} />
-        <meshStandardMaterial color="#111315" roughness={0.96} metalness={0.01} />
+        <meshStandardMaterial color="#151a20" roughness={0.95} metalness={0.01} />
       </mesh>
       <mesh position={[0, 1.28, -2.08]}>
-        <circleGeometry args={[1.85, 96]} />
-        <meshBasicMaterial color="#27292b" transparent opacity={0.32} />
+        <circleGeometry args={[2.05, 96]} />
+        <meshBasicMaterial color="#2c3138" transparent opacity={0.38} />
       </mesh>
     </group>
   );
@@ -365,11 +365,12 @@ export function Exercise3DViewer({
               />
               {/* No HDR environment map — it requires an external CDN fetch that can
                   suspend the scene forever offline. The light rig below covers it. */}
-              <ambientLight intensity={0.38} />
-              <hemisphereLight args={["#f4f0e8", "#141517", 0.76]} />
+              <ambientLight intensity={0.34} />
+              <hemisphereLight args={["#f4f0e8", "#141517", 0.72]} />
               <directionalLight
                 position={[3.4, 4.8, 3.2]}
-                intensity={1.25}
+                intensity={1.32}
+                color="#fff3e4"
                 castShadow
                 shadow-mapSize-width={2048}
                 shadow-mapSize-height={2048}
@@ -378,11 +379,14 @@ export function Exercise3DViewer({
                 position={[-2.6, 3.4, 2.4]}
                 angle={0.5}
                 penumbra={0.62}
-                intensity={0.88}
+                intensity={0.8}
                 color="#d9f7ff"
               />
-              <pointLight position={[-1.9, 1.7, -1.2]} intensity={0.46} color="#ff765b" />
-              <pointLight position={[2.2, 1.6, -0.8]} intensity={0.34} color="#6ab8ff" />
+              {/* Rim light from behind so the athlete's silhouette separates
+                  from the dark studio instead of sinking into it. */}
+              <directionalLight position={[-2.4, 3.1, -3.4]} intensity={0.85} color="#9fd8ff" />
+              <pointLight position={[-1.9, 1.7, -1.2]} intensity={0.4} color="#ff765b" />
+              <pointLight position={[2.2, 1.6, -0.8]} intensity={0.3} color="#6ab8ff" />
               <Suspense fallback={null}>
                 <ExerciseStudio />
                 <SceneProps props={config.props} />
@@ -404,7 +408,7 @@ export function Exercise3DViewer({
               </mesh>
               <ContactShadows
                 position={[0, 0.004, 0]}
-                opacity={0.46}
+                opacity={0.55}
                 scale={5.6}
                 blur={2.7}
                 far={3.5}

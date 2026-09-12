@@ -1,4 +1,11 @@
-import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Outlet,
+  Link,
+  useRouterState,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Home, Dumbbell, Apple, Sparkles, ChartNoAxesCombined, ScanLine } from "lucide-react";
 import { useProfile } from "@/lib/profile";
@@ -65,6 +72,7 @@ function AppShell() {
   const session = useAuthSession();
   const subscription = useSubscription();
   const navigate = useNavigate();
+  const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tourCompleted = useTourCompleted();
   const [tourOpen, setTourOpen] = useState(false);
@@ -137,6 +145,17 @@ function AppShell() {
 
     return () => window.clearTimeout(timeoutId);
   }, [navigate, profile, ready, session, subscription.ready, subscriptionExempt]);
+
+  // Fetch every tab's code once the app is idle, so switching tabs is instant.
+  useEffect(() => {
+    if (!hasPremiumAccess) return;
+    const timeoutId = window.setTimeout(() => {
+      for (const tab of tabs) {
+        void Promise.resolve(router.preloadRoute({ to: tab.to })).catch(() => undefined);
+      }
+    }, 1500);
+    return () => window.clearTimeout(timeoutId);
+  }, [hasPremiumAccess, router]);
 
   // auto-open tour the first time the user lands in the app with a profile
   useEffect(() => {
