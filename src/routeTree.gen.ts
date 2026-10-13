@@ -9,62 +9,56 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PaywallRouteImport } from './routes/paywall'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as AccountRouteImport } from './routes/account'
-import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
-import { Route as ApiCoachRouteImport } from './routes/api/coach'
-import { Route as AdminScanRouteImport } from './routes/admin.scan'
-import { Route as AdminOnboardingRouteImport } from './routes/admin.onboarding'
-import { Route as AdminFaceScanRouteImport } from './routes/admin.face-scan'
-import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
-import { Route as AppTermsRouteImport } from './routes/_app.terms'
-import { Route as AppProgressRouteImport } from './routes/_app.progress'
-import { Route as AppProfileRouteImport } from './routes/_app.profile'
-import { Route as AppPrivacyRouteImport } from './routes/_app.privacy'
-import { Route as AppPhotosRouteImport } from './routes/_app.photos'
-import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
-import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
-import { Route as AppHomeRouteImport } from './routes/_app.home'
-import { Route as AppHealthDisclaimerRouteImport } from './routes/_app.health-disclaimer'
-import { Route as AppDeleteAccountRouteImport } from './routes/_app.delete-account'
-import { Route as AppContactRouteImport } from './routes/_app.contact'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as PaywallRouteImport } from './routes/paywall'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AppCoachRouteImport } from './routes/_app.coach'
-import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
-import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
-import { Route as AppReportIndexRouteImport } from './routes/_app.report.index'
+import { Route as AppContactRouteImport } from './routes/_app.contact'
+import { Route as AppDeleteAccountRouteImport } from './routes/_app.delete-account'
+import { Route as AppHealthDisclaimerRouteImport } from './routes/_app.health-disclaimer'
+import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
+import { Route as AppNutritionRouteImport } from './routes/_app.nutrition'
+import { Route as AppPhotosRouteImport } from './routes/_app.photos'
+import { Route as AppPrivacyRouteImport } from './routes/_app.privacy'
+import { Route as AppProfileRouteImport } from './routes/_app.profile'
+import { Route as AppProgressRouteImport } from './routes/_app.progress'
+import { Route as AppTermsRouteImport } from './routes/_app.terms'
+import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
+import { Route as AdminFaceScanRouteImport } from './routes/admin.face-scan'
+import { Route as AdminOnboardingRouteImport } from './routes/admin.onboarding'
+import { Route as AdminScanRouteImport } from './routes/admin.scan'
+import { Route as ApiCoachRouteImport } from './routes/api/coach'
+import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
 import { Route as AppPhotosIndexRouteImport } from './routes/_app.photos.index'
-import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
-import { Route as WorkoutIdSessionRouteImport } from './routes/workout.$id.session'
-import { Route as AppReportHistoryRouteImport } from './routes/_app.report.history'
-import { Route as AppReportWeekStartRouteImport } from './routes/_app.report.$weekStart'
-import { Route as AppPhotosNewRouteImport } from './routes/_app.photos.new'
-import { Route as AppPhotosCompareRouteImport } from './routes/_app.photos.compare'
 import { Route as AppPhotosPhotoIdRouteImport } from './routes/_app.photos.$photoId'
-import { Route as AppScanFaceIndexRouteImport } from './routes/_app.scan.face.index'
+import { Route as AppPhotosCompareRouteImport } from './routes/_app.photos.compare'
+import { Route as AppPhotosNewRouteImport } from './routes/_app.photos.new'
+import { Route as AppReportIndexRouteImport } from './routes/_app.report.index'
+import { Route as AppReportWeekStartRouteImport } from './routes/_app.report.$weekStart'
+import { Route as AppReportHistoryRouteImport } from './routes/_app.report.history'
+import { Route as AppScanIndexRouteImport } from './routes/_app.scan.index'
+import { Route as WorkoutIdSessionRouteImport } from './routes/workout.$id.session'
+import { Route as WorkoutHistoryIndexRouteImport } from './routes/workout.history.index'
+import { Route as WorkoutHistoryIdRouteImport } from './routes/workout.history.$id'
 import { Route as AppScanBodyIndexRouteImport } from './routes/_app.scan.body.index'
-import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$id.demo.$exerciseId'
-import { Route as ApiPublicHooksFinalizeWeeklyReportsRouteImport } from './routes/api/public/hooks/finalize-weekly-reports'
-import { Route as AppScanFaceIdRouteImport } from './routes/_app.scan.face.$id'
-import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
 import { Route as AppScanBodyIdRouteImport } from './routes/_app.scan.body.$id'
+import { Route as AppScanBodyNewRouteImport } from './routes/_app.scan.body.new'
+import { Route as AppScanFaceIndexRouteImport } from './routes/_app.scan.face.index'
+import { Route as AppScanFaceIdRouteImport } from './routes/_app.scan.face.$id'
+import { Route as ApiPublicHooksFinalizeWeeklyReportsRouteImport } from './routes/api/public/hooks/finalize-weekly-reports'
+import { Route as WorkoutIdDemoExerciseIdRouteImport } from './routes/workout.$id.demo.$exerciseId'
 
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PaywallRoute = PaywallRouteImport.update({
-  id: '/paywall',
-  path: '/paywall',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -72,93 +66,24 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const PaywallRoute = PaywallRouteImport.update({
+  id: '/paywall',
+  path: '/paywall',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WorkoutIdRoute = WorkoutIdRouteImport.update({
-  id: '/workout/$id',
-  path: '/workout/$id',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCoachRoute = ApiCoachRouteImport.update({
-  id: '/api/coach',
-  path: '/api/coach',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminScanRoute = AdminScanRouteImport.update({
-  id: '/admin/scan',
-  path: '/admin/scan',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
-  id: '/admin/onboarding',
-  path: '/admin/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminFaceScanRoute = AdminFaceScanRouteImport.update({
-  id: '/admin/face-scan',
-  path: '/admin/face-scan',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
-  id: '/workouts',
-  path: '/workouts',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTermsRoute = AppTermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProgressRoute = AppProgressRouteImport.update({
-  id: '/progress',
-  path: '/progress',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProfileRoute = AppProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPrivacyRoute = AppPrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPhotosRoute = AppPhotosRouteImport.update({
-  id: '/photos',
-  path: '/photos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppNutritionRoute = AppNutritionRouteImport.update({
-  id: '/nutrition',
-  path: '/nutrition',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppNotificationsRoute = AppNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppHomeRoute = AppHomeRouteImport.update({
-  id: '/home',
-  path: '/home',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppHealthDisclaimerRoute = AppHealthDisclaimerRouteImport.update({
-  id: '/health-disclaimer',
-  path: '/health-disclaimer',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDeleteAccountRoute = AppDeleteAccountRouteImport.update({
-  id: '/delete-account',
-  path: '/delete-account',
+const AppCoachRoute = AppCoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
   getParentRoute: () => AppRoute,
 } as any)
 const AppContactRoute = AppContactRouteImport.update({
@@ -166,59 +91,89 @@ const AppContactRoute = AppContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCoachRoute = AppCoachRouteImport.update({
-  id: '/coach',
-  path: '/coach',
+const AppDeleteAccountRoute = AppDeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
   getParentRoute: () => AppRoute,
 } as any)
-const WorkoutHistoryIndexRoute = WorkoutHistoryIndexRouteImport.update({
-  id: '/workout/history/',
-  path: '/workout/history/',
+const AppHealthDisclaimerRoute = AppHealthDisclaimerRouteImport.update({
+  id: '/health-disclaimer',
+  path: '/health-disclaimer',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHomeRoute = AppHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNutritionRoute = AppNutritionRouteImport.update({
+  id: '/nutrition',
+  path: '/nutrition',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPhotosRoute = AppPhotosRouteImport.update({
+  id: '/photos',
+  path: '/photos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPrivacyRoute = AppPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProgressRoute = AppProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTermsRoute = AppTermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
+  id: '/workouts',
+  path: '/workouts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AdminFaceScanRoute = AdminFaceScanRouteImport.update({
+  id: '/admin/face-scan',
+  path: '/admin/face-scan',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppScanIndexRoute = AppScanIndexRouteImport.update({
-  id: '/scan/',
-  path: '/scan/',
-  getParentRoute: () => AppRoute,
+const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
+  id: '/admin/onboarding',
+  path: '/admin/onboarding',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AppReportIndexRoute = AppReportIndexRouteImport.update({
-  id: '/report/',
-  path: '/report/',
-  getParentRoute: () => AppRoute,
+const AdminScanRoute = AdminScanRouteImport.update({
+  id: '/admin/scan',
+  path: '/admin/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCoachRoute = ApiCoachRouteImport.update({
+  id: '/api/coach',
+  path: '/api/coach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkoutIdRoute = WorkoutIdRouteImport.update({
+  id: '/workout/$id',
+  path: '/workout/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppPhotosIndexRoute = AppPhotosIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppPhotosRoute,
-} as any)
-const WorkoutHistoryIdRoute = WorkoutHistoryIdRouteImport.update({
-  id: '/workout/history/$id',
-  path: '/workout/history/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorkoutIdSessionRoute = WorkoutIdSessionRouteImport.update({
-  id: '/session',
-  path: '/session',
-  getParentRoute: () => WorkoutIdRoute,
-} as any)
-const AppReportHistoryRoute = AppReportHistoryRouteImport.update({
-  id: '/report/history',
-  path: '/report/history',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportWeekStartRoute = AppReportWeekStartRouteImport.update({
-  id: '/report/$weekStart',
-  path: '/report/$weekStart',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPhotosNewRoute = AppPhotosNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => AppPhotosRoute,
-} as any)
-const AppPhotosCompareRoute = AppPhotosCompareRouteImport.update({
-  id: '/compare',
-  path: '/compare',
   getParentRoute: () => AppPhotosRoute,
 } as any)
 const AppPhotosPhotoIdRoute = AppPhotosPhotoIdRouteImport.update({
@@ -226,30 +181,59 @@ const AppPhotosPhotoIdRoute = AppPhotosPhotoIdRouteImport.update({
   path: '/$photoId',
   getParentRoute: () => AppPhotosRoute,
 } as any)
-const AppScanFaceIndexRoute = AppScanFaceIndexRouteImport.update({
-  id: '/scan/face/',
-  path: '/scan/face/',
+const AppPhotosCompareRoute = AppPhotosCompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => AppPhotosRoute,
+} as any)
+const AppPhotosNewRoute = AppPhotosNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppPhotosRoute,
+} as any)
+const AppReportIndexRoute = AppReportIndexRouteImport.update({
+  id: '/report/',
+  path: '/report/',
   getParentRoute: () => AppRoute,
+} as any)
+const AppReportWeekStartRoute = AppReportWeekStartRouteImport.update({
+  id: '/report/$weekStart',
+  path: '/report/$weekStart',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportHistoryRoute = AppReportHistoryRouteImport.update({
+  id: '/report/history',
+  path: '/report/history',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppScanIndexRoute = AppScanIndexRouteImport.update({
+  id: '/scan/',
+  path: '/scan/',
+  getParentRoute: () => AppRoute,
+} as any)
+const WorkoutIdSessionRoute = WorkoutIdSessionRouteImport.update({
+  id: '/session',
+  path: '/session',
+  getParentRoute: () => WorkoutIdRoute,
+} as any)
+const WorkoutHistoryIndexRoute = WorkoutHistoryIndexRouteImport.update({
+  id: '/workout/history/',
+  path: '/workout/history/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkoutHistoryIdRoute = WorkoutHistoryIdRouteImport.update({
+  id: '/workout/history/$id',
+  path: '/workout/history/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppScanBodyIndexRoute = AppScanBodyIndexRouteImport.update({
   id: '/scan/body/',
   path: '/scan/body/',
   getParentRoute: () => AppRoute,
 } as any)
-const WorkoutIdDemoExerciseIdRoute = WorkoutIdDemoExerciseIdRouteImport.update({
-  id: '/demo/$exerciseId',
-  path: '/demo/$exerciseId',
-  getParentRoute: () => WorkoutIdRoute,
-} as any)
-const ApiPublicHooksFinalizeWeeklyReportsRoute =
-  ApiPublicHooksFinalizeWeeklyReportsRouteImport.update({
-    id: '/api/public/hooks/finalize-weekly-reports',
-    path: '/api/public/hooks/finalize-weekly-reports',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const AppScanFaceIdRoute = AppScanFaceIdRouteImport.update({
-  id: '/scan/face/$id',
-  path: '/scan/face/$id',
+const AppScanBodyIdRoute = AppScanBodyIdRouteImport.update({
+  id: '/scan/body/$id',
+  path: '/scan/body/$id',
   getParentRoute: () => AppRoute,
 } as any)
 const AppScanBodyNewRoute = AppScanBodyNewRouteImport.update({
@@ -257,10 +241,26 @@ const AppScanBodyNewRoute = AppScanBodyNewRouteImport.update({
   path: '/scan/body/new',
   getParentRoute: () => AppRoute,
 } as any)
-const AppScanBodyIdRoute = AppScanBodyIdRouteImport.update({
-  id: '/scan/body/$id',
-  path: '/scan/body/$id',
+const AppScanFaceIndexRoute = AppScanFaceIndexRouteImport.update({
+  id: '/scan/face/',
+  path: '/scan/face/',
   getParentRoute: () => AppRoute,
+} as any)
+const AppScanFaceIdRoute = AppScanFaceIdRouteImport.update({
+  id: '/scan/face/$id',
+  path: '/scan/face/$id',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiPublicHooksFinalizeWeeklyReportsRoute =
+  ApiPublicHooksFinalizeWeeklyReportsRouteImport.update({
+    id: '/api/public/hooks/finalize-weekly-reports',
+    path: '/api/public/hooks/finalize-weekly-reports',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const WorkoutIdDemoExerciseIdRoute = WorkoutIdDemoExerciseIdRouteImport.update({
+  id: '/demo/$exerciseId',
+  path: '/demo/$exerciseId',
+  getParentRoute: () => WorkoutIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -544,32 +544,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/paywall': {
-      id: '/paywall'
-      path: '/paywall'
-      fullPath: '/paywall'
-      preLoaderRoute: typeof PaywallRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/account': {
-      id: '/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AccountRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -579,123 +558,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/workout/$id': {
-      id: '/workout/$id'
-      path: '/workout/$id'
-      fullPath: '/workout/$id'
-      preLoaderRoute: typeof WorkoutIdRouteImport
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/coach': {
-      id: '/api/coach'
-      path: '/api/coach'
-      fullPath: '/api/coach'
-      preLoaderRoute: typeof ApiCoachRouteImport
+    '/paywall': {
+      id: '/paywall'
+      path: '/paywall'
+      fullPath: '/paywall'
+      preLoaderRoute: typeof PaywallRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/scan': {
-      id: '/admin/scan'
-      path: '/admin/scan'
-      fullPath: '/admin/scan'
-      preLoaderRoute: typeof AdminScanRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/onboarding': {
-      id: '/admin/onboarding'
-      path: '/admin/onboarding'
-      fullPath: '/admin/onboarding'
-      preLoaderRoute: typeof AdminOnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/face-scan': {
-      id: '/admin/face-scan'
-      path: '/admin/face-scan'
-      fullPath: '/admin/face-scan'
-      preLoaderRoute: typeof AdminFaceScanRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/workouts': {
-      id: '/_app/workouts'
-      path: '/workouts'
-      fullPath: '/workouts'
-      preLoaderRoute: typeof AppWorkoutsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/terms': {
-      id: '/_app/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof AppTermsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/progress': {
-      id: '/_app/progress'
-      path: '/progress'
-      fullPath: '/progress'
-      preLoaderRoute: typeof AppProgressRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/profile': {
-      id: '/_app/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof AppProfileRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/privacy': {
-      id: '/_app/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof AppPrivacyRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/photos': {
-      id: '/_app/photos'
-      path: '/photos'
-      fullPath: '/photos'
-      preLoaderRoute: typeof AppPhotosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/nutrition': {
-      id: '/_app/nutrition'
-      path: '/nutrition'
-      fullPath: '/nutrition'
-      preLoaderRoute: typeof AppNutritionRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/notifications': {
-      id: '/_app/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof AppNotificationsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/home': {
-      id: '/_app/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof AppHomeRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/health-disclaimer': {
-      id: '/_app/health-disclaimer'
-      path: '/health-disclaimer'
-      fullPath: '/health-disclaimer'
-      preLoaderRoute: typeof AppHealthDisclaimerRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/delete-account': {
-      id: '/_app/delete-account'
-      path: '/delete-account'
-      fullPath: '/delete-account'
-      preLoaderRoute: typeof AppDeleteAccountRouteImport
+    '/_app/coach': {
+      id: '/_app/coach'
+      path: '/coach'
+      fullPath: '/coach'
+      preLoaderRoute: typeof AppCoachRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/contact': {
@@ -705,81 +600,123 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppContactRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/coach': {
-      id: '/_app/coach'
-      path: '/coach'
-      fullPath: '/coach'
-      preLoaderRoute: typeof AppCoachRouteImport
+    '/_app/delete-account': {
+      id: '/_app/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof AppDeleteAccountRouteImport
       parentRoute: typeof AppRoute
     }
-    '/workout/history/': {
-      id: '/workout/history/'
-      path: '/workout/history'
-      fullPath: '/workout/history/'
-      preLoaderRoute: typeof WorkoutHistoryIndexRouteImport
+    '/_app/health-disclaimer': {
+      id: '/_app/health-disclaimer'
+      path: '/health-disclaimer'
+      fullPath: '/health-disclaimer'
+      preLoaderRoute: typeof AppHealthDisclaimerRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/home': {
+      id: '/_app/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/nutrition': {
+      id: '/_app/nutrition'
+      path: '/nutrition'
+      fullPath: '/nutrition'
+      preLoaderRoute: typeof AppNutritionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/photos': {
+      id: '/_app/photos'
+      path: '/photos'
+      fullPath: '/photos'
+      preLoaderRoute: typeof AppPhotosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/privacy': {
+      id: '/_app/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof AppPrivacyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/progress': {
+      id: '/_app/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof AppProgressRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/terms': {
+      id: '/_app/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof AppTermsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/workouts': {
+      id: '/_app/workouts'
+      path: '/workouts'
+      fullPath: '/workouts'
+      preLoaderRoute: typeof AppWorkoutsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/admin/face-scan': {
+      id: '/admin/face-scan'
+      path: '/admin/face-scan'
+      fullPath: '/admin/face-scan'
+      preLoaderRoute: typeof AdminFaceScanRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/scan/': {
-      id: '/_app/scan/'
-      path: '/scan'
-      fullPath: '/scan/'
-      preLoaderRoute: typeof AppScanIndexRouteImport
-      parentRoute: typeof AppRoute
+    '/admin/onboarding': {
+      id: '/admin/onboarding'
+      path: '/admin/onboarding'
+      fullPath: '/admin/onboarding'
+      preLoaderRoute: typeof AdminOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/report/': {
-      id: '/_app/report/'
-      path: '/report'
-      fullPath: '/report/'
-      preLoaderRoute: typeof AppReportIndexRouteImport
-      parentRoute: typeof AppRoute
+    '/admin/scan': {
+      id: '/admin/scan'
+      path: '/admin/scan'
+      fullPath: '/admin/scan'
+      preLoaderRoute: typeof AdminScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/coach': {
+      id: '/api/coach'
+      path: '/api/coach'
+      fullPath: '/api/coach'
+      preLoaderRoute: typeof ApiCoachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workout/$id': {
+      id: '/workout/$id'
+      path: '/workout/$id'
+      fullPath: '/workout/$id'
+      preLoaderRoute: typeof WorkoutIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/photos/': {
       id: '/_app/photos/'
       path: '/'
       fullPath: '/photos/'
       preLoaderRoute: typeof AppPhotosIndexRouteImport
-      parentRoute: typeof AppPhotosRoute
-    }
-    '/workout/history/$id': {
-      id: '/workout/history/$id'
-      path: '/workout/history/$id'
-      fullPath: '/workout/history/$id'
-      preLoaderRoute: typeof WorkoutHistoryIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/workout/$id/session': {
-      id: '/workout/$id/session'
-      path: '/session'
-      fullPath: '/workout/$id/session'
-      preLoaderRoute: typeof WorkoutIdSessionRouteImport
-      parentRoute: typeof WorkoutIdRoute
-    }
-    '/_app/report/history': {
-      id: '/_app/report/history'
-      path: '/report/history'
-      fullPath: '/report/history'
-      preLoaderRoute: typeof AppReportHistoryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/report/$weekStart': {
-      id: '/_app/report/$weekStart'
-      path: '/report/$weekStart'
-      fullPath: '/report/$weekStart'
-      preLoaderRoute: typeof AppReportWeekStartRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/photos/new': {
-      id: '/_app/photos/new'
-      path: '/new'
-      fullPath: '/photos/new'
-      preLoaderRoute: typeof AppPhotosNewRouteImport
-      parentRoute: typeof AppPhotosRoute
-    }
-    '/_app/photos/compare': {
-      id: '/_app/photos/compare'
-      path: '/compare'
-      fullPath: '/photos/compare'
-      preLoaderRoute: typeof AppPhotosCompareRouteImport
       parentRoute: typeof AppPhotosRoute
     }
     '/_app/photos/$photoId': {
@@ -789,12 +726,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPhotosPhotoIdRouteImport
       parentRoute: typeof AppPhotosRoute
     }
-    '/_app/scan/face/': {
-      id: '/_app/scan/face/'
-      path: '/scan/face'
-      fullPath: '/scan/face/'
-      preLoaderRoute: typeof AppScanFaceIndexRouteImport
+    '/_app/photos/compare': {
+      id: '/_app/photos/compare'
+      path: '/compare'
+      fullPath: '/photos/compare'
+      preLoaderRoute: typeof AppPhotosCompareRouteImport
+      parentRoute: typeof AppPhotosRoute
+    }
+    '/_app/photos/new': {
+      id: '/_app/photos/new'
+      path: '/new'
+      fullPath: '/photos/new'
+      preLoaderRoute: typeof AppPhotosNewRouteImport
+      parentRoute: typeof AppPhotosRoute
+    }
+    '/_app/report/': {
+      id: '/_app/report/'
+      path: '/report'
+      fullPath: '/report/'
+      preLoaderRoute: typeof AppReportIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/report/$weekStart': {
+      id: '/_app/report/$weekStart'
+      path: '/report/$weekStart'
+      fullPath: '/report/$weekStart'
+      preLoaderRoute: typeof AppReportWeekStartRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/report/history': {
+      id: '/_app/report/history'
+      path: '/report/history'
+      fullPath: '/report/history'
+      preLoaderRoute: typeof AppReportHistoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/scan/': {
+      id: '/_app/scan/'
+      path: '/scan'
+      fullPath: '/scan/'
+      preLoaderRoute: typeof AppScanIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/workout/$id/session': {
+      id: '/workout/$id/session'
+      path: '/session'
+      fullPath: '/workout/$id/session'
+      preLoaderRoute: typeof WorkoutIdSessionRouteImport
+      parentRoute: typeof WorkoutIdRoute
+    }
+    '/workout/history/': {
+      id: '/workout/history/'
+      path: '/workout/history'
+      fullPath: '/workout/history/'
+      preLoaderRoute: typeof WorkoutHistoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workout/history/$id': {
+      id: '/workout/history/$id'
+      path: '/workout/history/$id'
+      fullPath: '/workout/history/$id'
+      preLoaderRoute: typeof WorkoutHistoryIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/scan/body/': {
       id: '/_app/scan/body/'
@@ -803,25 +796,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppScanBodyIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/workout/$id/demo/$exerciseId': {
-      id: '/workout/$id/demo/$exerciseId'
-      path: '/demo/$exerciseId'
-      fullPath: '/workout/$id/demo/$exerciseId'
-      preLoaderRoute: typeof WorkoutIdDemoExerciseIdRouteImport
-      parentRoute: typeof WorkoutIdRoute
-    }
-    '/api/public/hooks/finalize-weekly-reports': {
-      id: '/api/public/hooks/finalize-weekly-reports'
-      path: '/api/public/hooks/finalize-weekly-reports'
-      fullPath: '/api/public/hooks/finalize-weekly-reports'
-      preLoaderRoute: typeof ApiPublicHooksFinalizeWeeklyReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/scan/face/$id': {
-      id: '/_app/scan/face/$id'
-      path: '/scan/face/$id'
-      fullPath: '/scan/face/$id'
-      preLoaderRoute: typeof AppScanFaceIdRouteImport
+    '/_app/scan/body/$id': {
+      id: '/_app/scan/body/$id'
+      path: '/scan/body/$id'
+      fullPath: '/scan/body/$id'
+      preLoaderRoute: typeof AppScanBodyIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/scan/body/new': {
@@ -831,12 +810,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppScanBodyNewRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/scan/body/$id': {
-      id: '/_app/scan/body/$id'
-      path: '/scan/body/$id'
-      fullPath: '/scan/body/$id'
-      preLoaderRoute: typeof AppScanBodyIdRouteImport
+    '/_app/scan/face/': {
+      id: '/_app/scan/face/'
+      path: '/scan/face'
+      fullPath: '/scan/face/'
+      preLoaderRoute: typeof AppScanFaceIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/scan/face/$id': {
+      id: '/_app/scan/face/$id'
+      path: '/scan/face/$id'
+      fullPath: '/scan/face/$id'
+      preLoaderRoute: typeof AppScanFaceIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/public/hooks/finalize-weekly-reports': {
+      id: '/api/public/hooks/finalize-weekly-reports'
+      path: '/api/public/hooks/finalize-weekly-reports'
+      fullPath: '/api/public/hooks/finalize-weekly-reports'
+      preLoaderRoute: typeof ApiPublicHooksFinalizeWeeklyReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workout/$id/demo/$exerciseId': {
+      id: '/workout/$id/demo/$exerciseId'
+      path: '/demo/$exerciseId'
+      fullPath: '/workout/$id/demo/$exerciseId'
+      preLoaderRoute: typeof WorkoutIdDemoExerciseIdRouteImport
+      parentRoute: typeof WorkoutIdRoute
     }
   }
 }
