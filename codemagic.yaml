@@ -36,8 +36,7 @@ workflows:
       groups:
         - production
       node: 22.14.0
-      # Pinned: the `latest` machine pool was overloaded (Codemagic support, Oct 2026).
-      xcode: 26.6
+      xcode: latest
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.ascendr.org
