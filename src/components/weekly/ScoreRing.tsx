@@ -32,8 +32,8 @@ export function ScoreRing({ score, size = 120, label = "Score" }: Props) {
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">
         <div>
-          <div className="text-3xl font-extrabold tabular-nums leading-none">{Math.round(pct)}</div>
-          <div className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">
+          <div className="text-3xl font-bold tabular-nums leading-none">{Math.round(pct)}</div>
+          <div className="text-[12px] text-muted-foreground mt-1 uppercase tracking-wider">
             {label}
           </div>
         </div>

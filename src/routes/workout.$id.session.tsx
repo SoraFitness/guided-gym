@@ -26,7 +26,8 @@ import {
   Search,
 } from "lucide-react";
 import { getWorkout, type Workout } from "@/lib/workouts";
-import { useProfile } from "@/lib/profile";
+import { readStoredProfile, useProfile } from "@/lib/profile";
+import { personalizeWorkout } from "@/lib/workoutPersonalization";
 import {
   addExtraSet,
   addExerciseToSession,
@@ -41,6 +42,7 @@ import {
   startSession,
   updateSession,
   updateSet,
+  unfinishedSessionFor,
   useActiveSession,
   useCompletedWorkouts,
   parseDurationSeconds,
@@ -108,7 +110,7 @@ function ViewerPlaceholder({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "w-full animate-pulse rounded-[28px] border border-white/[0.08] bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]",
+        "w-full animate-pulse rounded-[24px] border border-hairline bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]",
         className,
       )}
     />
@@ -118,15 +120,19 @@ function ViewerPlaceholder({ className }: { className?: string }) {
 type Phase = "exercise" | "rest" | "complete";
 
 function SessionPage() {
-  const w = Route.useLoaderData() as Workout;
+  const loaded = Route.useLoaderData() as Workout;
   const navigate = useNavigate();
   const { profile } = useProfile();
+  // The session is seeded on first render, before the profile provider has loaded,
+  // so read the saved profile directly to include the member's finisher.
+  const w = useMemo(
+    () => personalizeWorkout(loaded, profile ?? readStoredProfile()),
+    [loaded, profile],
+  );
   const completedHistory = useCompletedWorkouts();
 
-  // Seed session synchronously so first render has data.
-  useState(() => {
-    if (typeof window === "undefined") return null;
-    return startSession(
+  const seedSession = () =>
+    startSession(
       w.id,
       w.title,
       w.exercises.map((e) => ({
@@ -138,7 +144,17 @@ function SessionPage() {
         muscleGroup: e.muscleGroup,
       })),
     );
+  // Seed session synchronously so first render has data, unless another workout is
+  // mid-way through: starting this one would silently throw its logged sets away.
+  const [unfinished, setUnfinished] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const other = unfinishedSessionFor(w.id);
+    if (!other) seedSession();
+    return other;
   });
+  // The server renders the loading state; show the prompt only once hydrated.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const session = useActiveSession();
 
   const [phase, setPhase] = useState<Phase>("exercise");
@@ -305,6 +321,53 @@ function SessionPage() {
     }
   };
 
+  if (unfinished && mounted) {
+    const loggedSets = unfinished.exercises.reduce(
+      (sum, log) => sum + log.sets.filter((set) => set.completed).length,
+      0,
+    );
+    return (
+      <div className="mx-auto grid min-h-dvh w-full max-w-[480px] place-items-center bg-background px-5 page-pb-safe page-pt-safe">
+        <div className="w-full rounded-[24px] border border-hairline bg-surface p-5">
+          <p className="kicker text-neon">Workout in progress</p>
+          <h1 className="mt-2 text-xl font-bold">
+            Finish {unfinished.workoutTitle || "your workout"}?
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            You've logged {loggedSets} {loggedSets === 1 ? "set" : "sets"} there. Starting {w.title}{" "}
+            discards them.
+          </p>
+          <div className="mt-5 grid gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setUnfinished(null);
+                navigate({
+                  to: "/workout/$id/session",
+                  params: { id: unfinished.workoutId },
+                  replace: true,
+                });
+              }}
+              className="h-12 rounded-full bg-neon font-semibold text-neon-foreground active:scale-[0.98]"
+            >
+              Resume {unfinished.workoutTitle || "workout"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                seedSession();
+                setUnfinished(null);
+              }}
+              className="h-12 rounded-full border border-hairline font-semibold text-muted-foreground active:scale-[0.98]"
+            >
+              Start {w.title} instead
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "complete") {
     return <CompletionScreen workout={w} savedId={savedWorkoutId} />;
   }
@@ -329,7 +392,7 @@ function SessionPage() {
           <ArrowLeft className="size-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-[13px] text-muted-foreground">
             Exercise {idx + 1} of {activeForThis.exercises.length}
           </div>
           <div className="font-bold truncate">{w.title}</div>
@@ -355,7 +418,7 @@ function SessionPage() {
             transition={{ type: "spring", stiffness: 200, damping: 30 }}
           />
         </div>
-        <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+        <div className="mt-1 text-[12px] text-muted-foreground tabular-nums">
           {summary.totalSets}/{plannedTotal} planned sets · {summary.totalReps} reps
         </div>
       </div>
@@ -372,14 +435,14 @@ function SessionPage() {
           >
             {/* exercise hero */}
             <div className="px-5 mt-4">
-              <h1 className="text-2xl font-extrabold leading-tight">{ex.name}</h1>
-              <p className="mt-1.5 max-w-[38ch] text-[11px] font-medium leading-relaxed text-white/65">
-                <span className="mr-1 font-black uppercase tracking-[0.12em] text-neon">
+              <h1 className="text-2xl font-bold leading-tight">{ex.name}</h1>
+              <p className="mt-1.5 max-w-[38ch] text-[13px] font-medium leading-relaxed text-white/65">
+                <span className="mr-1 font-bold uppercase tracking-[0.12em] text-neon">
                   Form cue
                 </span>
                 {demo.trainerCue}
               </p>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[13px]">
                 <Chip className="bg-white/10 font-bold px-2.5 py-1">
                   {ex.reps ? `${ex.reps} reps` : ex.time}
                 </Chip>
@@ -448,13 +511,13 @@ function SessionPage() {
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => startRest(parseRest(ex.rest))}
-                  className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                  className="h-12 rounded-full bg-white/[0.05] border border-hairline text-[12px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <Timer className="size-4" /> Rest
                 </button>
                 <button
                   onClick={handleNextExercise}
-                  className="h-12 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                  className="h-12 rounded-full bg-white/[0.05] border border-hairline text-[12px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <SkipForward className="size-4" />
                   {idx + 1 >= activeForThis.exercises.length ? "Finish" : "Next"}
@@ -466,7 +529,7 @@ function SessionPage() {
                   <X className="size-4" /> End
                 </button>
               </div>
-              <div className="text-[10px] text-muted-foreground text-center pt-1">
+              <div className="text-[12px] text-muted-foreground text-center pt-1">
                 Completed {completedCount} of {exLog.sets.length} sets ·{" "}
                 {completedCount > exLog.sets.length - 1 || exLog.sets.some((s) => s.isExtraSet)
                   ? "extra sets included"
@@ -570,16 +633,16 @@ function ExercisePicker({
         initial={{ y: 40 }}
         animate={{ y: 0 }}
         exit={{ y: 40 }}
-        className="max-h-[88dvh] w-full overflow-hidden rounded-t-[30px] border border-white/[0.08] bg-background page-pb-safe"
+        className="max-h-[88dvh] w-full overflow-hidden rounded-t-[30px] border border-hairline bg-background page-pb-safe"
       >
         <div className="px-5 pb-3 pt-4">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+              <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
                 Exercise library
               </p>
-              <h2 className="text-xl font-extrabold">Add an exercise</h2>
+              <h2 className="text-xl font-bold">Add an exercise</h2>
             </div>
             <button
               type="button"
@@ -590,7 +653,7 @@ function ExercisePicker({
               <X className="size-4" />
             </button>
           </div>
-          <label className="mt-4 flex h-12 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] px-4">
+          <label className="mt-4 flex h-12 items-center gap-3 rounded-2xl border border-hairline bg-white/[0.04] px-4">
             <Search className="size-4 text-muted-foreground" />
             <input
               autoFocus
@@ -607,10 +670,10 @@ function ExercisePicker({
                 type="button"
                 onClick={() => setMuscle(group)}
                 className={cn(
-                  "h-9 shrink-0 rounded-full border px-3 text-[10px] font-semibold",
+                  "h-9 shrink-0 rounded-full border px-3 text-[12px] font-semibold",
                   muscle === group
                     ? "border-neon bg-neon text-neon-foreground"
-                    : "border-white/[0.07] bg-white/[0.03] text-muted-foreground",
+                    : "border-hairline bg-white/[0.03] text-muted-foreground",
                 )}
               >
                 {group}
@@ -619,22 +682,22 @@ function ExercisePicker({
           </div>
         </div>
 
-        <div className="max-h-[58dvh] overflow-y-auto border-t border-white/[0.06] px-5 pb-8 pt-3">
-          <p className="mb-2 text-[10px] text-muted-foreground">{matches.length} exercises</p>
+        <div className="max-h-[58dvh] overflow-y-auto border-t border-hairline px-5 pb-8 pt-3">
+          <p className="mb-2 text-[12px] text-muted-foreground">{matches.length} exercises</p>
           <div className="grid gap-2">
             {matches.map((exercise) => (
               <button
                 key={exercise.id}
                 type="button"
                 onClick={() => onAdd(exercise)}
-                className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-left active:bg-neon/10"
+                className="flex items-center gap-3 rounded-2xl border border-hairline bg-white/[0.03] p-3 text-left active:bg-neon/10"
               >
                 <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-neon/10 text-neon">
                   <Dumbbell className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">{exercise.name}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
                     {exercise.muscleGroup} · {exercise.defaultSets} sets · {exercise.defaultReps}{" "}
                     reps
                   </p>
@@ -683,14 +746,14 @@ function LiveSetBoard({
     <section className="mx-5 mt-4 overflow-hidden rounded-[23px] border border-neon/20 bg-gradient-to-br from-neon/[0.13] via-neon/[0.045] to-white/[0.025] p-3.5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[8px] font-black uppercase tracking-[0.18em] text-neon">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
             Live set board
           </p>
-          <h2 className="mt-1 text-[15px] font-extrabold">
+          <h2 className="mt-1 text-[15px] font-bold">
             {completed ? "Exercise complete" : `Set ${nextSet.setNumber} is up next`}
           </h2>
         </div>
-        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[9px] font-bold tabular-nums text-white/75">
+        <span className="rounded-full border border-hairline bg-black/20 px-2.5 py-1 text-[11px] font-bold tabular-nums text-white/75">
           {completedCount}/{totalSets} logged
         </span>
       </div>
@@ -734,11 +797,11 @@ function LiveSetBoard({
 
 function LiveSetMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/[0.065] bg-black/20 px-2.5 py-2">
-      <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+    <div className="min-w-0 rounded-2xl border border-hairline bg-black/20 px-2.5 py-2">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1 truncate text-[11px] font-extrabold tabular-nums">{value}</p>
+      <p className="mt-1 truncate text-[13px] font-bold tabular-nums">{value}</p>
     </div>
   );
 }
@@ -766,42 +829,42 @@ function ProgressionTargetCard({
           <TrendingUp className="size-[17px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[8px] font-black uppercase tracking-[0.17em] text-analytics-violet">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-analytics-violet">
             Smart progression
           </p>
-          <h2 className="mt-1 text-[14px] font-extrabold leading-tight">{target.title}</h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{target.detail}</p>
+          <h2 className="mt-1 text-[14px] font-bold leading-tight">{target.title}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{target.detail}</p>
         </div>
       </div>
 
       <div className="relative mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2">
-          <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+        <div className="rounded-2xl border border-hairline bg-black/20 px-3 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             Last logged · {sourceDate}
           </p>
-          <p className="mt-1 text-[12px] font-extrabold tabular-nums">
+          <p className="mt-1 text-[12px] font-bold tabular-nums">
             {formatSet(target.lastWeight, target.lastReps)}
           </p>
         </div>
         <div className="rounded-2xl border border-analytics-violet/20 bg-analytics-violet/[0.09] px-3 py-2">
-          <p className="text-[8px] font-bold uppercase tracking-wider text-analytics-violet">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-analytics-violet">
             Today&apos;s target
           </p>
-          <p className="mt-1 text-[12px] font-extrabold tabular-nums">
+          <p className="mt-1 text-[12px] font-bold tabular-nums">
             {formatSet(target.targetWeight, target.targetReps)}
           </p>
         </div>
       </div>
 
       {applied ? (
-        <div className="relative mt-3 flex h-10 items-center justify-center gap-1.5 rounded-full border border-neon/20 bg-neon/10 text-[10px] font-extrabold text-neon">
+        <div className="relative mt-3 flex h-10 items-center justify-center gap-1.5 rounded-full border border-neon/20 bg-neon/10 text-[12px] font-bold text-neon">
           <Check className="size-3.5" /> Target applied to remaining sets
         </div>
       ) : (
         <button
           type="button"
           onClick={onApply}
-          className="relative mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-white text-[10px] font-extrabold text-black transition active:scale-[0.98]"
+          className="relative mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-white text-[12px] font-bold text-black transition active:scale-[0.98]"
         >
           Apply target to remaining sets <TrendingUp className="size-3.5" />
         </button>
@@ -840,13 +903,13 @@ function SetTracker({
     <div className="px-5 mt-5">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold">Sets</h3>
-        <span className="text-[10px] text-muted-foreground tabular-nums">
+        <span className="text-[12px] text-muted-foreground tabular-nums">
           {exLog.sets.filter((s) => s.completed).length}/{exLog.sets.length} done
         </span>
       </div>
 
       {/* column headers */}
-      <div className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 pb-1.5 text-[9px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[10px] min-[380px]:tracking-wider">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 pb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[12px] min-[380px]:tracking-wider">
         <span>#</span>
         <span>Reps</span>
         <span>Weight ({unit})</span>
@@ -933,16 +996,16 @@ function TimedSetTracker({
     <section className="px-5 mt-5">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-analytics-teal">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-analytics-teal">
             Timed interval
           </p>
-          <h3 className="mt-0.5 text-sm font-extrabold">
+          <h3 className="mt-0.5 text-sm font-bold">
             {nextSet
               ? `Set ${nextSet.setNumber} of ${exLog.sets.length}`
               : "All intervals complete"}
           </h3>
         </div>
-        <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-2.5 py-1 text-[9px] font-bold tabular-nums text-muted-foreground">
+        <span className="rounded-full border border-hairline bg-white/[0.025] px-2.5 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
           {completedCount}/{exLog.sets.length} done
         </span>
       </div>
@@ -950,7 +1013,7 @@ function TimedSetTracker({
       <div className="overflow-hidden rounded-[24px] border border-analytics-teal/20 bg-[radial-gradient(circle_at_50%_0%,oklch(0.78_0.14_185/0.13),transparent_54%),linear-gradient(145deg,oklch(0.15_0.012_255),oklch(0.1_0.009_255))] p-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-[8px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
               {running
                 ? "Timer running"
                 : remainingSeconds === 0
@@ -959,16 +1022,16 @@ function TimedSetTracker({
             </p>
             <strong
               aria-live="polite"
-              className="mt-1 block text-[43px] font-extrabold leading-none tracking-[-0.06em] tabular-nums"
+              className="mt-1 block text-[43px] font-bold leading-none tracking-[-0.06em] tabular-nums"
             >
               {fmt(remainingSeconds)}
             </strong>
           </div>
-          <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-3 py-2 text-right">
-            <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="rounded-2xl border border-hairline bg-black/20 px-3 py-2 text-right">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Target
             </p>
-            <p className="mt-0.5 text-sm font-extrabold tabular-nums text-analytics-teal">
+            <p className="mt-0.5 text-sm font-bold tabular-nums text-analytics-teal">
               {formatDurationShort(targetSeconds)}
             </p>
           </div>
@@ -986,7 +1049,7 @@ function TimedSetTracker({
             type="button"
             onClick={() => setRunning((current) => !current)}
             disabled={!nextSet || remainingSeconds === 0}
-            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-neon text-[12px] font-extrabold text-neon-foreground transition active:scale-[0.98] disabled:opacity-40"
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-neon text-[12px] font-bold text-neon-foreground transition active:scale-[0.98] disabled:opacity-40"
           >
             {running ? <Pause className="size-4" /> : <Play className="size-4" />}
             {running ? "Pause" : remainingSeconds === 0 ? "Complete" : "Start timer"}
@@ -995,12 +1058,12 @@ function TimedSetTracker({
             type="button"
             onClick={addFiveSeconds}
             disabled={!nextSet}
-            className="flex h-12 items-center justify-center gap-1.5 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-4 text-[11px] font-extrabold text-white/80 transition active:scale-[0.98] disabled:opacity-40"
+            className="flex h-12 items-center justify-center gap-1.5 rounded-2xl border border-hairline bg-white/[0.04] px-4 text-[13px] font-bold text-white/80 transition active:scale-[0.98] disabled:opacity-40"
           >
             <Plus className="size-3.5 text-analytics-teal" /> 5 sec
           </button>
         </div>
-        <p className="mt-3 text-center text-[9px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-foreground">
           The timer marks this set complete and starts your programmed rest automatically.
         </p>
       </div>
@@ -1017,11 +1080,11 @@ function TimedSetTracker({
                   ? "border-neon/20 bg-neon/10 text-neon"
                   : isActive
                     ? "border-analytics-teal/30 bg-analytics-teal/10 text-analytics-teal"
-                    : "border-white/[0.06] bg-white/[0.025] text-muted-foreground",
+                    : "border-hairline bg-white/[0.025] text-muted-foreground",
               )}
             >
-              <p className="text-[8px] font-black uppercase tracking-wider">Set {set.setNumber}</p>
-              <p className="mt-1 text-[10px] font-extrabold tabular-nums">
+              <p className="text-[11px] font-bold uppercase tracking-wider">Set {set.setNumber}</p>
+              <p className="mt-1 text-[12px] font-bold tabular-nums">
                 {set.completed
                   ? "Done"
                   : formatDurationShort(set.plannedDurationSec ?? durationSeconds)}
@@ -1034,7 +1097,7 @@ function TimedSetTracker({
       <button
         type="button"
         onClick={onAddSet}
-        className="mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-[11px] font-semibold text-muted-foreground transition hover:border-analytics-teal/40 hover:text-foreground"
+        className="mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-[13px] font-semibold text-muted-foreground transition hover:border-analytics-teal/40 hover:text-foreground"
       >
         <Plus className="size-4" /> Add {formatDurationShort(durationSeconds)} interval
       </button>
@@ -1069,13 +1132,13 @@ function SetRow({
     <div
       className={
         "rounded-2xl border " +
-        (set.completed ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-white/[0.05]")
+        (set.completed ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-hairline")
       }
     >
       <div className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] items-center gap-1.5 p-1.5 min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:p-2">
-        <div className="text-center text-[11px] font-bold tabular-nums">
+        <div className="text-center text-[13px] font-bold tabular-nums">
           {set.setNumber}
-          {set.isExtraSet && <div className="text-[8px] text-neon font-bold">+1</div>}
+          {set.isExtraSet && <div className="text-[11px] text-neon font-bold">+1</div>}
         </div>
 
         {/* reps */}
@@ -1191,7 +1254,7 @@ function SetRow({
 
 function UnitToggle({ unit, onChange }: { unit: WeightUnit; onChange: (u: WeightUnit) => void }) {
   return (
-    <div className="flex bg-white/[0.05] rounded-full p-0.5 text-[10px] font-bold">
+    <div className="flex bg-white/[0.05] rounded-full p-0.5 text-[12px] font-bold">
       {(["lb", "kg"] as const).map((u) => (
         <button
           key={u}
@@ -1212,7 +1275,7 @@ function Chip({ children, className }: { children: React.ReactNode; className?: 
   return (
     <span
       className={
-        "px-2 py-1 rounded-full bg-white/[0.06] text-[11px] font-medium " + (className ?? "")
+        "px-2 py-1 rounded-full bg-white/[0.06] text-[13px] font-medium " + (className ?? "")
       }
     >
       {children}
@@ -1285,8 +1348,8 @@ function RestScreen({
         </svg>
         <div className="absolute inset-0 grid place-items-center">
           <div className="text-center">
-            <div className="text-5xl font-extrabold tabular-nums">{fmt(restLeft)}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">seconds remaining</div>
+            <div className="text-5xl font-bold tabular-nums">{fmt(restLeft)}</div>
+            <div className="mt-1 text-[13px] text-muted-foreground">seconds remaining</div>
           </div>
         </div>
       </div>
@@ -1306,8 +1369,8 @@ function RestScreen({
         </button>
       </div>
 
-      <div className="mt-6 w-full max-w-sm rounded-3xl bg-surface border border-white/[0.05] p-4 text-center">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="mt-6 w-full max-w-sm rounded-3xl bg-surface border border-hairline p-4 text-center">
+        <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
           {isNextExercise ? "Next exercise" : "Up next"}
         </div>
         <div className="mt-1 font-bold text-lg">{nextName}</div>
@@ -1446,23 +1509,23 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
         transition={{ type: "spring", stiffness: 240, damping: 24 }}
         className="relative mx-auto max-w-md"
       >
-        <section className="relative overflow-hidden rounded-[32px] border border-white/[0.09] bg-[linear-gradient(145deg,oklch(1_0_0/0.075),oklch(0.14_0.012_255/0.9)_48%,oklch(0.12_0.01_255/0.92))] px-4 pb-4 pt-5 shadow-[0_30px_80px_-45px_oklch(0_0_0/0.95)]">
+        <section className="relative overflow-hidden rounded-[24px] border border-hairline bg-[linear-gradient(145deg,oklch(1_0_0/0.075),oklch(0.14_0.012_255/0.9)_48%,oklch(0.12_0.01_255/0.92))] px-4 pb-4 pt-5 shadow-[0_30px_80px_-45px_oklch(0_0_0/0.95)]">
           <div className="pointer-events-none absolute -right-10 -top-12 size-44 rounded-full border border-neon/15" />
           <div className="pointer-events-none absolute -right-2 -top-4 size-24 rounded-full bg-neon/10 blur-2xl" />
           <div className="relative text-center">
-            <span className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-neon/25 bg-neon/10 px-3 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-neon">
+            <span className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-neon/25 bg-neon/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
               <Check className="size-3" strokeWidth={3} />{" "}
               {isFullWorkout ? "Session complete" : "Session saved"}
             </span>
-            <div className="mx-auto mt-4 grid size-[74px] place-items-center rounded-[26px] border border-neon/25 bg-neon/[0.14] text-neon shadow-[0_0_42px_-16px_var(--color-neon)]">
+            <div className="mx-auto mt-4 grid size-[74px] place-items-center rounded-[24px] border border-neon/25 bg-neon/[0.14] text-neon shadow-[0_0_42px_-16px_var(--color-neon)]">
               <Trophy className="size-8" />
             </div>
-            <h1 className="mt-4 text-balance text-[29px] font-extrabold leading-[1.02] tracking-[-0.045em]">
+            <h1 className="mt-4 text-balance text-[29px] font-bold leading-[1.02] tracking-[-0.045em]">
               {isFullWorkout ? "Workout complete." : "Your session is saved."}
             </h1>
-            <p className="mt-2 text-[11px] font-medium text-white/60">{workout.title}</p>
+            <p className="mt-2 text-[13px] font-medium text-white/60">{workout.title}</p>
             {!isFullWorkout && (
-              <p className="mx-auto mt-2 max-w-[31ch] text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mx-auto mt-2 max-w-[31ch] text-[12px] leading-relaxed text-muted-foreground">
                 You logged {completedSets} training block{completedSets === 1 ? "" : "s"}. Every
                 completed set still counts toward your trend.
               </p>
@@ -1502,12 +1565,12 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
         </section>
 
         {totals.best && (
-          <div className="mt-4 rounded-[25px] border border-neon/20 bg-gradient-to-br from-neon/[0.14] to-surface p-4">
-            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+          <div className="mt-4 rounded-[25px] border border-neon/20 bg-surface p-4">
+            <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
               Best set
             </div>
-            <div className="mt-1 font-extrabold">{totals.best.exerciseName}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
+            <div className="mt-1 font-bold">{totals.best.exerciseName}</div>
+            <div className="mt-1 text-[13px] text-muted-foreground">
               {totals.best.weight} {totals.best.unit} × {totals.best.reps} reps
             </div>
           </div>
@@ -1515,13 +1578,13 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
 
         {momentum && <PerformanceReplay momentum={momentum} />}
 
-        <div className="mt-4 rounded-[25px] border border-white/[0.07] bg-white/[0.025] p-4">
+        <div className="mt-4 rounded-[25px] border border-hairline bg-white/[0.025] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
                 {recordCopy.eyebrow}
               </div>
-              <div className="mt-1 text-[15px] font-extrabold">{recordCopy.title}</div>
+              <div className="mt-1 text-[15px] font-bold">{recordCopy.title}</div>
             </div>
             <span className="grid size-9 place-items-center rounded-2xl bg-neon/10 text-neon">
               {needsWeightReview ? (
@@ -1537,7 +1600,7 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
                 entry ? (
                   <div
                     key={entry.name}
-                    className="flex items-center justify-between text-[11px] text-muted-foreground"
+                    className="flex items-center justify-between text-[13px] text-muted-foreground"
                   >
                     <span className="truncate pr-3">{entry.name}</span>
                     <span className="shrink-0 font-semibold text-foreground">
@@ -1548,7 +1611,7 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
               )}
             </div>
           )}
-          <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
             {recordCopy.body}
           </p>
         </div>
@@ -1558,7 +1621,7 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
             <Link
               to="/workout/history/$id"
               params={{ id: savedId }}
-              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-extrabold text-neon-foreground glow-neon transition active:scale-[0.98]"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-bold text-neon-foreground glow-neon transition active:scale-[0.98]"
             >
               <Dumbbell className="size-4" /> Add load details
             </Link>
@@ -1566,7 +1629,7 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
           {!needsWeightReview && (
             <Link
               to="/progress"
-              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-extrabold text-neon-foreground glow-neon transition active:scale-[0.98]"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-full bg-neon text-sm font-bold text-neon-foreground glow-neon transition active:scale-[0.98]"
             >
               <TrendingUp className="size-4" /> See your progress
             </Link>
@@ -1574,14 +1637,14 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
           <div className="grid grid-cols-2 gap-2">
             <Link
               to="/home"
-              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.045] text-[11px] font-bold text-white/85 transition active:scale-[0.98]"
+              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-hairline bg-white/[0.045] text-[13px] font-bold text-white/85 transition active:scale-[0.98]"
             >
               <Home className="size-3.5" /> Home
             </Link>
             <Link
               to="/workout/$id/session"
               params={{ id: workout.id }}
-              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.045] text-[11px] font-bold text-white/85 transition active:scale-[0.98]"
+              className="flex h-12 items-center justify-center gap-1.5 rounded-full border border-hairline bg-white/[0.045] text-[13px] font-bold text-white/85 transition active:scale-[0.98]"
               onClick={() =>
                 restartSession(
                   workout.id,
@@ -1604,7 +1667,7 @@ function CompletionScreen({ workout, savedId }: { workout: Workout; savedId: str
             <Link
               to="/workout/history/$id"
               params={{ id: savedId }}
-              className="flex h-10 items-center justify-center gap-1.5 text-[10px] font-bold text-muted-foreground transition hover:text-white"
+              className="flex h-10 items-center justify-center gap-1.5 text-[12px] font-bold text-muted-foreground transition hover:text-white"
             >
               <HistoryIcon className="size-3.5" /> Review workout record
             </Link>
@@ -1624,11 +1687,11 @@ function PerformanceReplay({ momentum }: { momentum: WorkoutMomentum }) {
           <TrendingUp className="size-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-black uppercase tracking-[0.17em] text-analytics-violet">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-analytics-violet">
             Performance replay
           </p>
-          <h2 className="mt-1 text-[16px] font-extrabold leading-tight">{momentum.headline}</h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+          <h2 className="mt-1 text-[16px] font-bold leading-tight">{momentum.headline}</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
             {momentum.detail}
           </p>
         </div>
@@ -1636,28 +1699,28 @@ function PerformanceReplay({ momentum }: { momentum: WorkoutMomentum }) {
 
       {momentum.comparison && (
         <div className="relative mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
-            <p className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="rounded-2xl border border-hairline bg-black/20 px-3 py-2.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Last session
             </p>
-            <p className="mt-1 text-[15px] font-extrabold tabular-nums">
+            <p className="mt-1 text-[15px] font-bold tabular-nums">
               {momentum.comparison.previous.toLocaleString()}
               {momentum.comparison.unit && (
-                <span className="ml-1 text-[9px] text-muted-foreground">
+                <span className="ml-1 text-[11px] text-muted-foreground">
                   {momentum.comparison.unit}
                 </span>
               )}
             </p>
           </div>
           <div className="rounded-2xl border border-analytics-violet/20 bg-analytics-violet/[0.09] px-3 py-2.5">
-            <p className="text-[8px] font-bold uppercase tracking-wider text-analytics-violet">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-analytics-violet">
               Today · {momentum.comparison.changePercent > 0 ? "+" : ""}
               {momentum.comparison.changePercent}% {momentum.comparison.label.toLowerCase()}
             </p>
-            <p className="mt-1 text-[15px] font-extrabold tabular-nums">
+            <p className="mt-1 text-[15px] font-bold tabular-nums">
               {momentum.comparison.current.toLocaleString()}
               {momentum.comparison.unit && (
-                <span className="ml-1 text-[9px] text-muted-foreground">
+                <span className="ml-1 text-[11px] text-muted-foreground">
                   {momentum.comparison.unit}
                 </span>
               )}
@@ -1671,13 +1734,13 @@ function PerformanceReplay({ momentum }: { momentum: WorkoutMomentum }) {
           {momentum.personalRecords.map((record) => (
             <div
               key={record.exerciseName}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-neon/15 bg-neon/[0.08] px-3 py-2 text-[10px]"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-neon/15 bg-neon/[0.08] px-3 py-2 text-[12px]"
             >
               <span className="flex min-w-0 items-center gap-1.5 font-bold text-neon">
                 <Trophy className="size-3.5 shrink-0" />
                 <span className="truncate">{record.exerciseName}</span>
               </span>
-              <span className="shrink-0 font-extrabold tabular-nums">{record.value}</span>
+              <span className="shrink-0 font-bold tabular-nums">{record.value}</span>
             </div>
           ))}
         </div>
@@ -1698,14 +1761,14 @@ function CompletionMetric({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-2 py-2.5 text-center">
-      <div className="flex items-center justify-center gap-1 text-[8px] font-bold uppercase tracking-[0.13em] text-muted-foreground">
+    <div className="rounded-2xl border border-hairline bg-black/20 px-2 py-2.5 text-center">
+      <div className="flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
         {icon} {label}
       </div>
-      <div className="mt-1 text-[19px] font-extrabold leading-none tabular-nums">
+      <div className="mt-1 text-[19px] font-bold leading-none tabular-nums">
         {value}
         {suffix && (
-          <span className="ml-1 text-[8px] font-bold text-muted-foreground">{suffix}</span>
+          <span className="ml-1 text-[11px] font-bold text-muted-foreground">{suffix}</span>
         )}
       </div>
     </div>
@@ -1714,7 +1777,7 @@ function CompletionMetric({
 
 function CompletionPill({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-black/20 px-3 py-1.5 text-[9px] font-bold text-white/70">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-black/20 px-3 py-1.5 text-[11px] font-bold text-white/70">
       <span className="text-neon">{icon}</span>
       {children}
     </span>

@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { ProfileProvider } from "../lib/profile";
 import { RevenueCatProvider } from "../lib/subscription";
+import { Toaster } from "@/components/ui/sonner";
 import { SingleDeviceGuard } from "../components/SingleDeviceGuard";
 
 function NotFoundComponent() {
@@ -116,7 +117,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap",
       },
     ],
   }),
@@ -164,6 +165,7 @@ function RootComponent() {
         <ProfileProvider>
           <SingleDeviceGuard />
           <Outlet />
+          <Toaster />
         </ProfileProvider>
       </RevenueCatProvider>
     </QueryClientProvider>

@@ -23,7 +23,7 @@ export function SubscriptionNoticeBanner({ notice }: { notice: SubscriptionNotic
       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-300" />
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-bold text-amber-100">{title}</span>
-        <span className="mt-0.5 block text-[11px] leading-relaxed text-amber-100/75">{body}</span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-amber-100/75">{body}</span>
       </span>
       <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-amber-200/70" />
     </a>

@@ -51,13 +51,13 @@ function HistoryPage() {
               <Link
                 to="/report/$weekStart"
                 params={{ weekStart: r.week_start as string }}
-                className="flex items-center justify-between rounded-2xl bg-surface border border-white/[0.05] p-4 active:bg-white/[0.02]"
+                className="flex items-center justify-between rounded-2xl bg-surface border border-hairline p-4 active:bg-white/[0.02]"
               >
                 <div>
                   <div className="font-semibold text-sm">
                     {fmt(r.week_start as string)} – {fmt(r.week_end as string)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                  <div className="text-[13px] text-muted-foreground mt-0.5">
                     {r.workouts_completed}/{r.planned_workouts} workouts · {r.protein_hit_days}/7
                     protein ·{" "}
                     {r.weight_change_kg !== null
@@ -66,7 +66,7 @@ function HistoryPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-extrabold text-neon tabular-nums">
+                  <span className="text-base font-bold text-neon tabular-nums">
                     {r.overall_score}
                   </span>
                   <ChevronRight className="size-4 text-muted-foreground" />

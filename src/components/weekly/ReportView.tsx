@@ -58,7 +58,7 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
     <div className="space-y-4">
       {/* Summary */}
       <section className="rounded-3xl bg-gradient-to-br from-neon/10 via-surface to-surface border border-neon/20 p-5">
-        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3">
+        <div className="text-[13px] text-muted-foreground uppercase tracking-wider mb-3">
           {fmtRange(r.weekStart, r.weekEnd)}
           {r.isFinalized ? " · Finalized" : " · In progress"}
         </div>
@@ -72,7 +72,7 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
               {r.achievements[0]?.label ?? "Keep logging"}
             </div>
             {r.missedWorkouts > 0 && (
-              <div className="text-[11px] text-muted-foreground mt-1">
+              <div className="text-[13px] text-muted-foreground mt-1">
                 Focus next week: close {r.missedWorkouts} missed session
                 {r.missedWorkouts === 1 ? "" : "s"}
               </div>
@@ -80,7 +80,7 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
           </div>
         </div>
         {r.aiSummary && (
-          <div className="mt-4 rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3 text-sm leading-relaxed">
+          <div className="mt-4 rounded-2xl bg-white/[0.04] border border-hairline p-3 text-sm leading-relaxed">
             {r.aiSummary}
           </div>
         )}
@@ -94,7 +94,7 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
         <Stat label="Total reps" value={`${r.totalReps}`} />
         {r.prs.length > 0 && (
           <div className="mt-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+            <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">
               New PRs
             </div>
             {r.prs.map((p, i) => (
@@ -108,14 +108,14 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
         )}
         {r.topMuscleGroups.length > 0 && (
           <div className="mt-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+            <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">
               Top muscle groups
             </div>
             <div className="flex flex-wrap gap-1.5">
               {r.topMuscleGroups.map((m) => (
                 <span
                   key={m.name}
-                  className="px-2.5 py-1 rounded-full bg-neon/10 border border-neon/20 text-[11px] font-semibold text-neon capitalize"
+                  className="px-2.5 py-1 rounded-full bg-neon/10 border border-neon/20 text-[13px] font-semibold text-neon capitalize"
                 >
                   {m.name}
                   {m.count ? ` · ${m.count}` : ""}
@@ -195,7 +195,7 @@ export function ReportView({ r }: { r: WeeklyReportDTO }) {
               return (
                 <div
                   key={a.id}
-                  className="flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-white/[0.05] p-3"
+                  className="flex items-center gap-2 rounded-2xl bg-white/[0.04] border border-hairline p-3"
                 >
                   <div className="size-8 rounded-full bg-neon/10 grid place-items-center">
                     <Icon className="size-4 text-neon" />
@@ -221,7 +221,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl bg-surface p-5 border border-white/[0.05]">
+    <section className="rounded-3xl bg-surface p-5 border border-hairline">
       <div className="flex items-center gap-2 mb-3">
         <Icon className="size-4 text-neon" />
         <h2 className="font-bold text-sm">{title}</h2>
@@ -232,7 +232,7 @@ function Section({
 }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between py-2 text-sm border-b border-white/[0.05] last:border-b-0">
+    <div className="flex justify-between py-2 text-sm border-b border-hairline last:border-b-0">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-semibold tabular-nums">{value}</span>
     </div>
@@ -242,7 +242,7 @@ function Bar({ label, value }: { label: string; value: number }) {
   const v = Math.max(0, Math.min(100, value));
   return (
     <div className="mb-2 last:mb-0">
-      <div className="flex justify-between text-[11px] mb-1">
+      <div className="flex justify-between text-[13px] mb-1">
         <span className="text-muted-foreground">{label}</span>
         <span className="font-semibold tabular-nums">{Math.round(v)}%</span>
       </div>

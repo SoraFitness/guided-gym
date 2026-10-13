@@ -70,24 +70,24 @@ function ContactPage() {
         <Link
           to="/profile"
           aria-label="Back to profile"
-          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface transition active:scale-95"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-hairline bg-surface transition active:scale-95"
         >
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">
             Ascendr support
           </p>
-          <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight tracking-[-0.04em]">
+          <h1 className="mt-0.5 text-[26px] font-bold leading-tight tracking-[-0.04em]">
             How can we help?
           </h1>
         </div>
       </header>
 
-      <section className="relative mt-5 overflow-hidden rounded-[28px] border border-neon/20 bg-gradient-to-br from-neon/[0.12] via-surface to-surface p-5">
+      <section className="relative mt-5 overflow-hidden rounded-[24px] border border-neon/20 bg-surface p-5">
         <div className="absolute -right-10 -top-12 size-36 rounded-full bg-neon/10 blur-3xl" />
         <div className="relative flex items-start gap-3.5">
-          <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground shadow-[0_0_28px_-12px_var(--color-neon)]">
+          <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground">
             <LifeBuoy className="size-5" />
           </div>
           <div>
@@ -161,7 +161,7 @@ function ContactPage() {
             placeholder="Tell us what happened and what you expected to see…"
             className="min-h-36 w-full resize-none bg-transparent px-4 py-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/55"
           />
-          <div className="flex items-center justify-between border-t border-white/[0.05] px-4 py-2 text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-between border-t border-hairline px-4 py-2 text-[12px] text-muted-foreground">
             <span>{message.trim().length < 10 ? "At least 10 characters" : "Ready to send"}</span>
             <span className="tabular-nums">{message.length}/2000</span>
           </div>
@@ -176,18 +176,18 @@ function ContactPage() {
 
         <button
           type="submit"
-          className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-neon text-sm font-semibold text-neon-foreground shadow-[0_14px_40px_-18px_var(--color-neon)] transition active:scale-[0.98]"
+          className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-neon text-sm font-semibold text-neon-foreground transition active:scale-[0.98]"
         >
           <Send className="size-4" />
           Continue to email
         </button>
       </form>
 
-      <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3.5">
+      <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-hairline bg-white/[0.025] p-3.5">
         <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-neon" />
         <div>
           <p className="text-xs font-semibold">Your message stays in your control</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
             We will open your email app with the details filled in. Review the message, attach any
             helpful screenshots, then tap Send.
           </p>
@@ -209,10 +209,10 @@ function FormField({
   return (
     <label
       className={`block overflow-hidden rounded-2xl border bg-surface transition-colors ${
-        error ? "border-destructive/55" : "border-white/[0.07] focus-within:border-neon/45"
+        error ? "border-destructive/55" : "border-hairline focus-within:border-neon/45"
       }`}
     >
-      <span className="flex items-center gap-1.5 px-4 pt-3 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="flex items-center gap-1.5 px-4 pt-3 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
         {label === "Message" ? (
           <MessageSquareText className="size-3 text-neon" />
         ) : label === "Reply email" ? (

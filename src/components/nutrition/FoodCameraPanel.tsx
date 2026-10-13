@@ -116,14 +116,14 @@ export function FoodCameraPanel({
       <div>
         <button
           onClick={onGalleryClick}
-          className="grid aspect-[3/4] w-full place-items-center rounded-[28px] border-2 border-dashed border-white/10 bg-white/[0.02] p-6 text-center active:scale-[0.99]"
+          className="grid aspect-[3/4] w-full place-items-center rounded-[24px] border-2 border-dashed border-hairline bg-white/[0.02] p-6 text-center active:scale-[0.99]"
         >
           <div>
             <div className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-neon/15">
               <Upload className="size-6 text-neon" />
             </div>
             <p className="text-sm font-semibold">Choose a meal photo</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Your camera isn't available here — pick a photo and we'll scan it
             </p>
           </div>
@@ -133,7 +133,7 @@ export function FoodCameraPanel({
   }
 
   return (
-    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[28px] border border-white/[0.08] bg-black">
+    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[24px] border border-hairline bg-black">
       <video ref={videoRef} className="absolute inset-0 size-full object-cover" muted playsInline />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,oklch(0_0_0/0.72)_100%)]" />
 
@@ -150,7 +150,7 @@ export function FoodCameraPanel({
       ))}
 
       <div className="absolute inset-x-0 top-4 flex justify-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-semibold backdrop-blur">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[13px] font-semibold backdrop-blur">
           <Sparkles className="size-3.5 text-neon" /> Just snap a pic
         </span>
       </div>
@@ -159,13 +159,13 @@ export function FoodCameraPanel({
         <div className="absolute inset-0 grid place-items-center bg-black/60">
           <div className="text-center">
             <Loader2 className="mx-auto size-6 animate-spin text-neon" />
-            <p className="mt-2 text-[11px] text-muted-foreground">Starting camera…</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">Starting camera…</p>
           </div>
         </div>
       )}
 
       <div className="absolute inset-x-0 bottom-0 pb-5 pt-8">
-        <p className="mb-3 text-center text-[10px] text-white/60">
+        <p className="mb-3 text-center text-[12px] text-white/60">
           Shoot from above with the whole plate in frame
         </p>
         <div className="flex items-center justify-center gap-8">
@@ -173,7 +173,7 @@ export function FoodCameraPanel({
             type="button"
             onClick={onGalleryClick}
             aria-label="Choose from gallery"
-            className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-black/50 backdrop-blur active:scale-95"
+            className="grid size-12 place-items-center rounded-2xl border border-hairline bg-black/50 backdrop-blur active:scale-95"
           >
             <ImageIcon className="size-5" />
           </button>
@@ -197,7 +197,7 @@ export function FoodCameraPanel({
               "grid size-12 place-items-center rounded-2xl border backdrop-blur transition active:scale-95",
               torchOn
                 ? "border-neon/40 bg-neon/20 text-neon"
-                : "border-white/10 bg-black/50 text-white",
+                : "border-hairline bg-black/50 text-white",
               !torchSupported && "opacity-30",
             )}
           >

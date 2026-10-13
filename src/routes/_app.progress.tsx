@@ -1,37 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  Flame,
-  Clock,
-  Trophy,
-  TrendingUp,
-  Dumbbell,
-  ChevronRight,
-  Activity,
-  ScanLine,
-  UserRound,
-  Sparkles,
-} from "lucide-react";
+import { Clock, Dumbbell, Flame, History, ScanLine, Timer, Trophy, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useCompletedWorkouts, computePRs } from "@/lib/workoutSessionStore";
 import { useProgress, useWorkoutLog } from "@/lib/progressStore";
 import { GoalPanel } from "@/components/GoalPanel";
 import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
-import { MuscleHeatmap } from "@/components/analytics/MuscleHeatmap";
 import {
   computeMuscleInsights,
-  muscleMetricLabel,
   type CanonicalMuscle,
-  type MuscleScanMetric,
   type MuscleInsight,
+  type MuscleScanMetric,
 } from "@/lib/muscleAnalytics";
 import { useProfile } from "@/lib/profile";
-import { useAuthSession } from "@/lib/authSession";
-import { getScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
+import { getScanSubmission } from "@/lib/scanSubmissions.functions";
 import { parseBodyScanResult, type BodyScanAiResult } from "@/lib/bodyScan.functions";
 import { cn } from "@/lib/utils";
+import {
+  AnatomyPair,
+  regionsForCanonical,
+  type AnatomyFills,
+} from "@/components/app/AnatomyFigure";
+import { BeforeAfter } from "@/components/app/BeforeAfter";
+import { TrendChart } from "@/components/app/charts";
+import {
+  cardClass,
+  EmptyState,
+  iconButtonClass,
+  Page,
+  PageHeader,
+  primaryButtonClass,
+  ScoreGrid,
+  scoreColor,
+  SectionHeader,
+} from "@/components/app/kit";
+import { bodyBreakdown } from "@/components/scans/BodyScanReport";
+import { scanTrendPoints, useScanHistory } from "@/components/scans/useScanHistory";
 
 export const Route = createFileRoute("/_app/progress")({
   head: () => ({ meta: [{ title: "Progress — Ascendr" }] }),
@@ -40,33 +46,40 @@ export const Route = createFileRoute("/_app/progress")({
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+function shortDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function useBodyScanDetail(id: string | undefined) {
+  const getScan = useServerFn(getScanSubmission);
+  return useQuery({
+    queryKey: ["scan-submission", "body", id],
+    queryFn: () => getScan({ data: { id: id as string, scanType: "body" } }),
+    enabled: Boolean(id),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 function ProgressPage() {
   const { profile } = useProfile();
-  const session = useAuthSession();
   const history = useCompletedWorkouts();
   const log = useWorkoutLog();
   const progress = useProgress();
   const prs = useMemo(() => computePRs(history), [history]);
-  const listScans = useServerFn(listScanSubmissions);
-  const getScan = useServerFn(getScanSubmission);
-  const scanHistoryQuery = useQuery({
-    queryKey: ["scan-submissions", "body", "progress"],
-    queryFn: () => listScans({ data: { scanType: "body" } }),
-    enabled: session !== "loading" && Boolean(session),
-    staleTime: 60_000,
-    retry: false,
-  });
-  const latestScanId = scanHistoryQuery.data?.[0]?.id;
-  const scanDetailQuery = useQuery({
-    queryKey: ["scan-submission", "body", latestScanId, "progress"],
-    queryFn: () => getScan({ data: { id: latestScanId as string, scanType: "body" } }),
-    enabled: Boolean(latestScanId),
-    staleTime: 60_000,
-    retry: false,
-  });
+  const scans = useScanHistory("body");
+  const scanList = scans.data ?? [];
+  const latest = scanList[0];
+  const first = scanList.length > 1 ? scanList[scanList.length - 1] : undefined;
+  const latestDetail = useBodyScanDetail(latest?.id);
+  const firstDetail = useBodyScanDetail(first?.id);
   const scanResult = useMemo(
-    () => (scanDetailQuery.data ? parseBodyScanResult(scanDetailQuery.data.analysis) : null),
-    [scanDetailQuery.data],
+    () => (latestDetail.data ? parseBodyScanResult(latestDetail.data.analysis) : null),
+    [latestDetail.data],
+  );
+  const firstResult = useMemo(
+    () => (firstDetail.data ? parseBodyScanResult(firstDetail.data.analysis) : null),
+    [firstDetail.data],
   );
   const muscleInsights = useMemo(
     () =>
@@ -78,6 +91,7 @@ function ProgressPage() {
       }),
     [history, profile?.experience, profile?.focusAreas, scanResult],
   );
+  const scanLoading = scans.isLoading || latestDetail.isLoading;
 
   const week = useMemo(() => {
     const now = new Date();
@@ -92,7 +106,12 @@ function ProgressPage() {
       if (diff >= 0 && diff < 7) minutes[diff] += l.minutes;
     }
     const max = Math.max(60, ...minutes);
-    return DAY_LABELS.map((d, i) => ({ d, v: (minutes[i] / max) * 100, m: minutes[i] }));
+    return DAY_LABELS.map((d, i) => ({
+      d,
+      v: (minutes[i] / max) * 100,
+      m: minutes[i],
+      today: i === day,
+    }));
   }, [log]);
 
   const weeklyCalories = history
@@ -110,7 +129,6 @@ function ProgressPage() {
   const trainedH = Math.floor(trainedMin / 60);
   const trainedM = trainedMin % 60;
   const weeklyMinutes = week.reduce((sum, day) => sum + day.m, 0);
-  const activeDays = week.filter((day) => day.m > 0).length;
 
   const prEntries = Object.entries(prs.maxWeightByExercise)
     .sort((a, b) => b[1].weight - a[1].weight)
@@ -119,48 +137,186 @@ function ProgressPage() {
     .sort((a, b) => b[1].e1rm - a[1].e1rm)
     .slice(0, 3);
 
+  const breakdown = scanResult ? bodyBreakdown(scanResult) : null;
+  const baseline = firstResult ? bodyBreakdown(firstResult) : null;
+  const muscleProgress = breakdown?.map((item, index) => ({
+    label: item.label,
+    score: item.score,
+    delta:
+      baseline && item.score != null && baseline[index]?.score != null
+        ? item.score - (baseline[index].score as number)
+        : null,
+  }));
+  const trend = scanTrendPoints(scanList);
+
   return (
-    <div className="animate-slide-up px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
-      <header className="flex items-start justify-between gap-4 px-1">
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Performance</p>
-          <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
-            Proof you&apos;re progressing.
-          </h1>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Training consistency, volume, records, and physique changes.
+    <Page className="pb-28">
+      <PageHeader
+        kicker={
+          latest
+            ? `${scanList.length} body scan${scanList.length === 1 ? "" : "s"}`
+            : "Your journey"
+        }
+        title="Progress"
+        actions={
+          <>
+            <Link to="/workout/history" aria-label="Workout history" className={iconButtonClass}>
+              <History />
+            </Link>
+            <Link to="/profile" aria-label="Open profile" className={iconButtonClass}>
+              <UserRound />
+            </Link>
+          </>
+        }
+      />
+
+      <SectionHeader className="mt-6" title="Transformation" />
+      {latest?.photoUrl && first?.photoUrl ? (
+        <BeforeAfter
+          before={first.photoUrl}
+          after={latest.photoUrl}
+          beforeLabel={shortDate(first.analyzedAt ?? first.createdAt)}
+          afterLabel={shortDate(latest.analyzedAt ?? latest.createdAt)}
+        />
+      ) : latest?.photoUrl ? (
+        <div className={cn(cardClass, "p-3")}>
+          <div className="grid grid-cols-2 gap-2">
+            <figure className="relative aspect-[3/4] overflow-hidden rounded-[18px] bg-black">
+              <img
+                src={latest.photoUrl}
+                alt="Baseline Body Scan"
+                className="absolute inset-0 size-full object-cover object-top"
+              />
+              <figcaption className="font-data absolute left-2 top-2 rounded-[8px] bg-black/60 px-2 py-1 text-[11px] font-semibold uppercase backdrop-blur-md">
+                Before · {shortDate(latest.analyzedAt ?? latest.createdAt)}
+              </figcaption>
+            </figure>
+            <Link
+              to="/scan/body/new"
+              search={{ pending: undefined }}
+              className="flex aspect-[3/4] flex-col items-center justify-center rounded-[18px] border border-dashed border-white/15 bg-white/[0.02] px-3 text-center transition active:scale-[0.98]"
+            >
+              <span className="grid size-11 place-items-center rounded-full bg-neon/12 text-neon">
+                <ScanLine className="size-5" />
+              </span>
+              <span className="mt-3 text-[15px] font-bold">After</span>
+              <span className="mt-1 text-[12px] leading-snug text-muted-foreground">
+                Your next scan appears here
+              </span>
+            </Link>
+          </div>
+          <p className="mt-3 px-1 text-[13px] text-muted-foreground">
+            Rescan in 2–4 weeks with the same pose and light for a fair comparison.
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Link
-            to="/workout/history"
-            aria-label="Workout history"
-            className="grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface text-muted-foreground transition active:scale-95"
-          >
-            <Clock className="size-5" />
-          </Link>
-          <Link
-            to="/profile"
-            aria-label="Open profile"
-            className="grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface text-neon transition active:scale-95"
-          >
-            <UserRound className="size-5" />
-          </Link>
-        </div>
-      </header>
+      ) : (
+        <EmptyState
+          icon={<ScanLine />}
+          title={scanLoading ? "Loading your scans…" : "Start your transformation"}
+          detail="Your first Body Scan sets the baseline every later scan is compared with."
+          action={
+            !scanLoading && (
+              <Link to="/scan/body" className={primaryButtonClass}>
+                <ScanLine /> Take a Body Scan
+              </Link>
+            )
+          }
+        />
+      )}
+
+      {muscleProgress && (
+        <section className="mt-7">
+          <SectionHeader
+            title={first ? "Muscle progress" : "Muscle scores"}
+            meta={
+              first
+                ? `vs. ${shortDate(first.analyzedAt ?? first.createdAt)}`
+                : latest
+                  ? `Baseline · ${shortDate(latest.analyzedAt ?? latest.createdAt)}`
+                  : "Baseline"
+            }
+          />
+          <ScoreGrid items={muscleProgress} />
+        </section>
+      )}
+
+      {trend.length >= 2 && (
+        <section className="mt-7">
+          <SectionHeader title="Physique score" meta={`${trend.length} scans`} />
+          <div className={cn(cardClass, "px-3 pb-3 pt-4")}>
+            <TrendChart points={trend} />
+          </div>
+        </section>
+      )}
 
       <MuscleIntelligence
         insights={muscleInsights}
         hasScan={Boolean(scanResult)}
-        scanLoading={scanHistoryQuery.isLoading || scanDetailQuery.isLoading}
+        hasTraining={muscleInsights.some((insight) => insight.sets7d > 0)}
       />
 
-      <PhysiqueMomentum
-        result={scanResult}
-        loading={scanHistoryQuery.isLoading || scanDetailQuery.isLoading}
-      />
+      <section className="mt-7">
+        <SectionHeader
+          title="Training"
+          meta={
+            <Link to="/workout/history" className="inline-flex items-center gap-1">
+              History
+            </Link>
+          }
+        />
+        <div className="grid grid-cols-2 gap-2.5">
+          <StatCard icon={Flame} label="Burned this week" value={`${weeklyCalories}`} unit="kcal" />
+          <StatCard
+            icon={Timer}
+            label="Time trained"
+            value={trainedH > 0 ? `${trainedH}h ${trainedM}m` : `${trainedM}m`}
+          />
+          <StatCard icon={Trophy} label="Day streak" value={`${progress.streakDays}`} />
+          <StatCard icon={Dumbbell} label="Workouts" value={`${prs.totalWorkouts}`} />
+        </div>
 
-      <div className="mt-6">
+        <div className={cn(cardClass, "mt-2.5 p-5")}>
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="kicker">This week</p>
+              <p className="mt-1 text-[28px] font-bold leading-none tabular-nums">
+                {weeklyMinutes}
+                <span className="ml-1 text-[14px] font-semibold text-muted-foreground">min</span>
+              </p>
+            </div>
+            <Clock className="size-5 text-muted-foreground" />
+          </div>
+          <div className="mt-5 flex h-36 items-end gap-2.5">
+            {week.map((day) => (
+              <div
+                key={day.d}
+                className="flex h-full flex-1 flex-col items-center justify-end gap-2"
+              >
+                <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+                  {day.m > 0 ? day.m : ""}
+                </span>
+                <div
+                  className={cn(
+                    "w-full rounded-[8px] transition-all",
+                    day.m > 0 ? "bg-neon" : "bg-white/[0.07]",
+                  )}
+                  style={{ height: `${Math.max(6, day.v)}%` }}
+                />
+                <span
+                  className={cn(
+                    "text-[12px] font-semibold",
+                    day.today ? "text-neon" : "text-muted-foreground",
+                  )}
+                >
+                  {day.d.slice(0, 1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-7">
         <WeeklyReportCard />
       </div>
 
@@ -172,114 +328,33 @@ function ProgressPage() {
         <ProgressPicturesCard />
       </div>
 
-      <section className="mt-7">
-        <div className="mb-3 flex items-end justify-between px-1">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
-              At a glance
-            </p>
-            <h2 className="mt-0.5 text-lg font-extrabold">Your training numbers</h2>
-          </div>
-          <Link
-            to="/workout/history"
-            className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"
-          >
-            History <ChevronRight className="size-3" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={Flame} label="This week" value={`${weeklyCalories}`} unit="kcal" />
-          <StatCard
-            icon={Clock}
-            label="Trained"
-            value={trainedH > 0 ? `${trainedH}h ${trainedM}m` : `${trainedM}m`}
+      <section className={cn(cardClass, "mt-7 p-5")}>
+        <h2 className="text-[18px] font-bold">Volume</h2>
+        <div className="mt-2">
+          <Record label="Total sets" value={`${prs.totalSets}`} />
+          <Record label="Total reps" value={`${prs.totalReps}`} />
+          <Record label="Total volume" value={`${prs.totalVolume.toLocaleString()}`} />
+          <Record
+            label="Best session"
+            value={
+              prs.bestVolumeWorkout
+                ? `${prs.bestVolumeWorkout.volume.toLocaleString()} ${prs.bestVolumeWorkout.unit}`
+                : "—"
+            }
+            last
           />
-          <StatCard icon={Trophy} label="Streak" value={`${progress.streakDays} days`} />
-          <StatCard icon={TrendingUp} label="Workouts" value={`${prs.totalWorkouts}`} tint />
         </div>
       </section>
 
-      <section className="relative mt-7 overflow-hidden rounded-[27px] border border-white/[0.07] bg-surface p-5">
-        <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-neon/[0.06] blur-3xl" />
-        <div className="relative flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">This week</p>
-            <h2 className="mt-1 font-extrabold">Training rhythm</h2>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              {activeDays
-                ? `${activeDays} active day${activeDays === 1 ? "" : "s"}`
-                : "Your first session starts the chart"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2 text-right">
-            <p className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Total
-            </p>
-            <p className="mt-0.5 text-lg font-extrabold tabular-nums">
-              {weeklyMinutes}
-              <span className="ml-1 text-[9px] font-semibold text-muted-foreground">min</span>
-            </p>
-          </div>
-        </div>
-        <div className="relative mt-5 flex h-44 items-end gap-3 rounded-2xl border border-white/[0.04] bg-black/15 px-3 pb-3 pt-5">
-          <div className="pointer-events-none absolute inset-x-3 top-1/3 border-t border-dashed border-white/[0.06]" />
-          <div className="pointer-events-none absolute inset-x-3 top-2/3 border-t border-dashed border-white/[0.06]" />
-          {week.map((day) => (
-            <div
-              key={day.d}
-              className="relative z-10 flex h-full flex-1 flex-col items-center justify-end gap-2"
-            >
-              <div className="text-[10px] text-muted-foreground tabular-nums">
-                {day.m > 0 ? day.m : ""}
-              </div>
-              <div
-                className="min-h-0 w-full rounded-t-[9px] bg-gradient-to-t from-neon to-emerald-300 shadow-[0_0_18px_-8px_var(--color-neon)] transition-all"
-                style={{ height: `${Math.max(2, day.v)}%` }}
-              />
-              <span className="text-[9px] font-semibold text-muted-foreground">
-                {day.d.slice(0, 1)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-[27px] border border-white/[0.07] bg-surface p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">Workload</p>
-            <h2 className="mt-1 font-extrabold">Volume & sets</h2>
-          </div>
-          <Activity className="size-5 text-neon" />
-        </div>
-        <Record label="Total sets" value={`${prs.totalSets}`} />
-        <Record label="Total reps" value={`${prs.totalReps}`} />
-        <Record label="Total volume" value={`${prs.totalVolume.toLocaleString()}`} />
-        <Record
-          label="Best workout volume"
-          value={
-            prs.bestVolumeWorkout
-              ? `${prs.bestVolumeWorkout.volume.toLocaleString()} ${prs.bestVolumeWorkout.unit}`
-              : "—"
-          }
-          last
-        />
-      </section>
-
-      <section className="mt-6 rounded-[27px] border border-white/[0.07] bg-surface p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold">Personal records</h2>
-          <Dumbbell className="size-4 text-neon" />
-        </div>
+      <section className={cn(cardClass, "mt-3 p-5")}>
+        <h2 className="text-[18px] font-bold">Personal records</h2>
         {prEntries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Complete a workout with weights to start tracking PRs.
+          <p className="mt-2 text-[14px] text-muted-foreground">
+            Log a weighted workout to start tracking PRs.
           </p>
         ) : (
           <>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-              Heaviest sets
-            </div>
+            <p className="kicker mt-4 text-[11px]">Heaviest sets</p>
             {prEntries.map(([name, pr], i) => (
               <Record
                 key={name}
@@ -290,9 +365,7 @@ function ProgressPage() {
             ))}
             {e1rmEntries.length > 0 && (
               <>
-                <div className="mt-4 text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                  Estimated 1RM
-                </div>
+                <p className="kicker mt-5 text-[11px]">Estimated 1RM</p>
                 {e1rmEntries.map(([name, pr], i) => (
                   <Record
                     key={name}
@@ -306,263 +379,199 @@ function ProgressPage() {
           </>
         )}
       </section>
-    </div>
+    </Page>
   );
 }
 
-function PhysiqueMomentum({
-  result,
-  loading,
-}: {
-  result: BodyScanAiResult | null;
-  loading: boolean;
-}) {
-  const score = result?.overallScore ?? 0;
-  const comparison = result?.comparison;
-  const delta = comparison?.scoreDeltas?.overallScore;
-  const circumference = 2 * Math.PI * 34;
-  const dashOffset = circumference - (circumference * score) / 100;
-  const metrics = result
-    ? [
-        { label: "Muscle", score: result.muscleDevelopment.score },
-        { label: "V-taper", score: result.vTaper.score },
-        { label: "Symmetry", score: result.symmetry.score },
-      ]
-    : [];
-
-  return (
-    <section className="relative mt-4 overflow-hidden rounded-[28px] border border-analytics-violet/20 bg-gradient-to-br from-analytics-violet/[0.16] via-surface to-surface p-4 shadow-[0_24px_55px_-38px_oklch(0.62_0.16_300/0.8)]">
-      <div className="pointer-events-none absolute -bottom-16 -right-14 size-56 rounded-full border border-analytics-violet/10" />
-      <div className="pointer-events-none absolute -bottom-24 -right-8 size-52 rounded-full bg-analytics-violet/[0.08] blur-3xl" />
-      <div className="relative flex items-start gap-3">
-        <div className="relative grid size-[78px] shrink-0 place-items-center">
-          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80" aria-hidden="true">
-            <circle
-              cx="40"
-              cy="40"
-              r="34"
-              fill="none"
-              stroke="rgba(255,255,255,0.1)"
-              strokeWidth="5"
-            />
-            <circle
-              cx="40"
-              cy="40"
-              r="34"
-              fill="none"
-              stroke="var(--analytics-violet)"
-              strokeLinecap="round"
-              strokeWidth="5"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              className="transition-[stroke-dashoffset] duration-700"
-            />
-          </svg>
-          <div className="text-center">
-            <strong className="block text-[24px] font-extrabold leading-none tabular-nums">
-              {result ? score : "—"}
-            </strong>
-            <span className="mt-1 block text-[7px] font-black uppercase tracking-wider text-muted-foreground">
-              scan score
-            </span>
-          </div>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-analytics-violet">
-            Body momentum
-          </p>
-          <h2 className="mt-1 text-[18px] font-extrabold tracking-[-0.025em]">
-            {loading
-              ? "Checking your latest scan…"
-              : result
-                ? "A clearer body-progress story."
-                : "Set your physique baseline."}
-          </h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {loading
-              ? "Your scan data is loading securely."
-              : result
-                ? (comparison?.summary ??
-                  "Your latest scan anchors the visual side of your progress.")
-                : "Pair training data with a private Body Scan—then measure visual changes with clear evidence."}
-          </p>
-        </div>
-      </div>
-
-      {result ? (
-        <>
-          <div className="relative mt-4 grid grid-cols-3 gap-2">
-            {metrics.map((metric) => (
-              <div
-                key={metric.label}
-                className="rounded-2xl border border-white/[0.065] bg-black/20 px-2.5 py-2.5"
-              >
-                <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  {metric.label}
-                </p>
-                <p className="mt-1 text-[17px] font-extrabold tabular-nums">
-                  {metric.score}
-                  <span className="ml-0.5 text-[9px] font-semibold text-muted-foreground">
-                    /100
-                  </span>
-                </p>
-              </div>
-            ))}
-          </div>
-          {typeof delta === "number" && delta !== 0 && (
-            <p className="relative mt-3 inline-flex rounded-full border border-analytics-violet/20 bg-analytics-violet/10 px-2.5 py-1 text-[9px] font-bold text-analytics-violet">
-              {delta > 0 ? "+" : ""}
-              {delta} overall since your matched baseline
-            </p>
-          )}
-          <Link
-            to="/scan/body"
-            className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full bg-white text-[10px] font-extrabold text-black transition active:scale-[0.98]"
-          >
-            Explore body progress <ChevronRight className="size-3.5" />
-          </Link>
-        </>
-      ) : !loading ? (
-        <Link
-          to="/scan/body"
-          className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full bg-analytics-violet text-[10px] font-extrabold text-black transition active:scale-[0.98]"
-        >
-          Create body baseline <ScanLine className="size-3.5" />
-        </Link>
-      ) : null}
-    </section>
-  );
-}
+const RECOVERING = new Set<MuscleInsight["status"]>(["Recovering", "High load"]);
 
 function MuscleIntelligence({
   insights,
   hasScan,
-  scanLoading,
+  hasTraining,
 }: {
   insights: MuscleInsight[];
   hasScan: boolean;
-  scanLoading: boolean;
+  hasTraining: boolean;
 }) {
-  const [mode, setMode] = useState<"training" | "physique">("training");
-  const [selected, setSelected] = useState<CanonicalMuscle>(insights[0]?.muscle ?? "shoulders");
-  const selectedInsight = insights.find((item) => item.muscle === selected) ?? insights[0];
+  // With a scan but nothing logged this week, the physique view is the one with real
+  // data. Scan data loads after first render, so the default follows it until the
+  // member picks a tab themselves.
+  const [picked, setPicked] = useState<"training" | "physique" | null>(null);
+  const mode = picked ?? (!hasTraining && hasScan ? "physique" : "training");
+  const setMode = setPicked;
+  // Insights arrive sorted by priority: the first fresh muscles are what to train next.
+  const trainNext = useMemo(
+    () =>
+      new Set(
+        insights
+          .filter((insight) => !RECOVERING.has(insight.status))
+          .slice(0, 3)
+          .map((insight) => insight.muscle),
+      ),
+    [insights],
+  );
   const ranked = useMemo(
     () =>
-      [...insights].sort((a, b) =>
-        mode === "training" ? b.priority - a.priority : (b.scanScore ?? -1) - (a.scanScore ?? -1),
-      ),
+      mode === "training"
+        ? insights
+        : [...insights].sort((a, b) => (b.scanScore ?? -1) - (a.scanScore ?? -1)),
     [insights, mode],
   );
+  const fills = useMemo<AnatomyFills>(() => {
+    const result: AnatomyFills = {};
+    for (const insight of insights) {
+      let fill: AnatomyFills[keyof AnatomyFills];
+      if (mode === "training") {
+        if (!hasTraining) continue;
+        if (trainNext.has(insight.muscle)) fill = "var(--color-neon)";
+        else if (RECOVERING.has(insight.status))
+          fill = { color: "var(--color-analytics-violet)", hatch: true };
+      } else if (insight.scanScore != null) {
+        fill = scoreColor(insight.scanScore);
+      }
+      if (!fill) continue;
+      for (const region of regionsForCanonical(insight.muscle)) result[region] = fill;
+    }
+    return result;
+  }, [hasTraining, insights, mode, trainNext]);
+  const legend =
+    mode === "training"
+      ? ([
+          ["Train next", "var(--color-neon)"],
+          ["Recovering", "var(--color-analytics-violet)"],
+        ] as const)
+      : ([
+          ["Strong", "var(--color-score-high)"],
+          ["Average", "var(--color-score-mid)"],
+          ["Lagging", "var(--color-score-low)"],
+        ] as const);
 
   return (
-    <section className="premium-panel relative mt-5 overflow-hidden rounded-[30px] p-4 sm:p-5">
-      <div className="pointer-events-none absolute -right-16 -top-20 size-52 rounded-full bg-analytics-teal/[0.07] blur-3xl" />
-      <div className="relative flex items-start justify-between gap-4">
-        <div>
-          <p className="data-kicker text-neon">Muscle intelligence</p>
-          <h2 className="mt-1 text-xl font-extrabold">Each muscle, individually ranked.</h2>
-          <p className="mt-1 max-w-[280px] text-[10px] leading-relaxed text-muted-foreground">
-            Know what to train next—and keep physique development in its own honest view.
-          </p>
-        </div>
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-neon/10 text-neon">
-          <Sparkles className="size-[18px]" />
-        </span>
-      </div>
-
-      <div className="relative mt-4 grid grid-cols-2 gap-1 rounded-[18px] border border-white/[0.06] bg-black/25 p-1">
-        {(["training", "physique"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setMode(value)}
-            className={cn(
-              "tap rounded-[14px] px-3 text-[10px] font-extrabold transition",
-              mode === value
-                ? "bg-white text-black shadow-lg"
-                : "text-muted-foreground hover:text-white",
-            )}
-          >
-            {value === "training" ? "Train next" : "Physique"}
-          </button>
-        ))}
-      </div>
-
-      <div className="relative mt-4">
-        <MuscleHeatmap insights={insights} mode={mode} selected={selected} onSelect={setSelected} />
-      </div>
-
-      {selectedInsight && (
-        <div className="relative mt-4 rounded-[21px] border border-white/[0.07] bg-white/[0.035] p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Selected region
-              </p>
-              <h3 className="mt-1 text-lg font-extrabold">{selectedInsight.label}</h3>
-            </div>
-            <strong className="text-right text-2xl font-extrabold tabular-nums text-neon">
-              {mode === "training"
-                ? `${selectedInsight.priority}%`
-                : selectedInsight.scanScore == null
-                  ? "—"
-                  : `${Math.round(selectedInsight.scanScore)}`}
-              <span className="block text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
-                {mode === "training" ? "priority" : "scan score"}
-              </span>
-            </strong>
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            {mode === "training"
-              ? `${selectedInsight.readiness}% estimated readiness · ${selectedInsight.sets7d} of ${selectedInsight.targetSets} planned weekly sets. ${selectedInsight.status}.`
-              : selectedInsight.scanScore == null
-                ? "Not visible in the latest scan. Ascendr will not invent a development score without clear evidence."
-                : `${muscleMetricLabel(selectedInsight, "physique")} · ${selectedInsight.scanVisibility === "partial" ? "Partially visible" : "Clearly visible"} in the latest scan.`}
-          </p>
-        </div>
-      )}
-
-      <div className="relative mt-4 space-y-2">
-        {ranked.slice(0, 4).map((insight, index) => (
-          <button
-            key={insight.muscle}
-            type="button"
-            onClick={() => setSelected(insight.muscle)}
-            className="tap flex w-full items-center gap-3 rounded-2xl border border-white/[0.055] bg-black/15 px-3 py-2.5 text-left transition hover:border-white/10"
-          >
-            <span className="w-5 text-[11px] font-extrabold text-white/30">{index + 1}</span>
-            <span className="min-w-0 flex-1 text-[11px] font-bold">{insight.label}</span>
-            <span className="text-[10px] font-semibold text-muted-foreground">
-              {mode === "training" ? insight.status : muscleMetricLabel(insight, mode)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {mode === "physique" && !hasScan && (
-        <div className="relative mt-4 rounded-[20px] border border-dashed border-white/10 bg-black/15 p-4 text-center">
-          <ScanLine className="mx-auto size-5 text-neon" />
-          <p className="mt-2 text-[11px] font-bold">
-            {scanLoading ? "Checking your latest scan…" : "No physique scan yet"}
-          </p>
-          {!scanLoading && (
-            <Link
-              to="/scan/body"
-              className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-neon px-5 text-[10px] font-extrabold text-neon-foreground"
+    <section className="mt-7">
+      <SectionHeader title="Muscle map" />
+      <div className={cn(cardClass, "p-5")}>
+        <div className="grid grid-cols-2 gap-1 rounded-full bg-white/[0.05] p-1">
+          {(["training", "physique"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value)}
+              className={cn(
+                "h-10 rounded-full text-[14px] font-semibold transition",
+                mode === value ? "bg-white/[0.12] text-foreground" : "text-muted-foreground",
+              )}
             >
-              Open Body Scan
-            </Link>
-          )}
+              {value === "training" ? "Train next" : "Physique"}
+            </button>
+          ))}
         </div>
-      )}
-      {mode === "physique" && hasScan && (
-        <Link
-          to="/scan/body"
-          className="relative mt-4 flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 text-[10px] font-extrabold text-white/75"
-        >
-          View full scan report <ChevronRight className="size-3.5" />
-        </Link>
-      )}
+
+        {mode === "physique" && !hasScan ? (
+          <div className="mt-5 text-center">
+            <p className="text-[15px] font-semibold">No Body Scan yet</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              A scan scores each muscle group from one photo.
+            </p>
+            <Link to="/scan/body" className={cn(primaryButtonClass, "mt-4 h-12")}>
+              <ScanLine /> Take a Body Scan
+            </Link>
+          </div>
+        ) : (
+          <>
+            <AnatomyPair
+              fills={fills}
+              className="mx-auto mt-5 max-w-[290px]"
+              figureClassName="max-h-[220px]"
+              label={mode === "training" ? "Training map" : "Physique scan map"}
+            />
+
+            {mode === "training" && !hasTraining ? (
+              <div className="mt-5 border-t border-hairline pt-4 text-center">
+                <p className="text-[15px] font-semibold">No workouts logged this week</p>
+                <p className="mx-auto mt-1 max-w-[30ch] text-[13px] text-muted-foreground">
+                  Finish a workout and this map shows which muscles to train next.
+                </p>
+                <Link to="/workouts" className={cn(primaryButtonClass, "mt-4 h-12")}>
+                  <Dumbbell /> Go to today&apos;s workout
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 flex items-center justify-center gap-4 text-[12px] text-muted-foreground">
+                  {legend.map(([label, color]) => (
+                    <span key={label} className="inline-flex items-center gap-1.5">
+                      <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
+                      {label}
+                    </span>
+                  ))}
+                </div>
+                <ul className="mt-5 space-y-3.5 border-t border-hairline pt-4">
+                  {ranked.slice(0, 5).map((insight) => {
+                    if (mode === "training") {
+                      const done = Math.min(1, insight.sets7d / insight.targetSets);
+                      const next = trainNext.has(insight.muscle);
+                      const recovering = RECOVERING.has(insight.status);
+                      const color = recovering
+                        ? "var(--color-analytics-violet)"
+                        : next
+                          ? "var(--color-neon)"
+                          : "var(--color-score-high)";
+                      return (
+                        <li key={insight.muscle}>
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[14px] font-semibold">{insight.label}</span>
+                            <span className="text-[13px] text-muted-foreground">
+                              <span className="font-semibold tabular-nums text-foreground">
+                                {Math.round(insight.sets7d)}/{insight.targetSets}
+                              </span>{" "}
+                              sets ·{" "}
+                              <span style={{ color }}>
+                                {recovering ? "Recovering" : next ? "Train next" : insight.status}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${done * 100}%`, backgroundColor: color }}
+                            />
+                          </div>
+                        </li>
+                      );
+                    }
+                    const value = insight.scanScore;
+                    return (
+                      <li key={insight.muscle}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-[14px] font-semibold">{insight.label}</span>
+                          <span
+                            className="text-[13px] font-semibold tabular-nums"
+                            style={{ color: scoreColor(value) }}
+                          >
+                            {value == null ? "Not visible" : Math.round(value)}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${value ?? 0}%`, backgroundColor: scoreColor(value) }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-4 text-[11px] text-muted-foreground/80">
+                  {mode === "training"
+                    ? "Bars show this week's completed sets against your target. An estimate, not a medical measurement."
+                    : "From your latest scan. Areas the camera couldn't see stay unscored."}
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -587,45 +596,34 @@ function StatCard({
   label,
   value,
   unit,
-  tint,
 }: {
   icon: typeof Flame;
   label: string;
   value: string;
   unit?: string;
-  tint?: boolean;
 }) {
   return (
-    <div
-      className={`relative overflow-hidden rounded-[23px] border p-4 ${
-        tint
-          ? "border-neon bg-neon text-neon-foreground shadow-[0_18px_35px_-24px_var(--color-neon)]"
-          : "border-white/[0.06] bg-surface"
-      }`}
-    >
-      <span
-        className={`grid size-9 place-items-center rounded-xl ${tint ? "bg-black/10" : "bg-white/[0.045] text-neon"}`}
-      >
-        <Icon className="size-[18px]" />
-      </span>
-      <div className="mt-5 text-[22px] font-extrabold tracking-[-0.03em]">
+    <div className={cn(cardClass, "rounded-[20px] p-4")}>
+      <Icon className="size-5 text-neon" />
+      <div className="mt-4 text-[24px] font-bold leading-none tracking-[-0.03em] tabular-nums">
         {value}
-        {unit && <span className="text-sm font-medium ml-1 opacity-70">{unit}</span>}
+        {unit && <span className="ml-1 text-[13px] font-medium text-muted-foreground">{unit}</span>}
       </div>
-      <div
-        className={`mt-0.5 text-[10px] font-semibold ${tint ? "opacity-75" : "text-muted-foreground"}`}
-      >
-        {label}
-      </div>
+      <div className="mt-1.5 text-[13px] text-muted-foreground">{label}</div>
     </div>
   );
 }
 
 function Record({ label, value, last }: { label: string; value: string; last?: boolean }) {
   return (
-    <div className={`flex justify-between py-2.5 text-sm ${last ? "" : "border-b border-border"}`}>
-      <span className="text-muted-foreground truncate pr-3">{label}</span>
-      <span className="font-semibold tabular-nums shrink-0">{value}</span>
+    <div
+      className={cn(
+        "flex justify-between gap-3 py-3 text-[15px]",
+        !last && "border-b border-hairline",
+      )}
+    >
+      <span className="truncate text-muted-foreground">{label}</span>
+      <span className="shrink-0 font-semibold tabular-nums">{value}</span>
     </div>
   );
 }

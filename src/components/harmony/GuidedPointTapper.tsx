@@ -107,27 +107,27 @@ export function GuidedPointTapper<Id extends string>({
       <div className="rounded-[22px] border border-neon/20 bg-neon/[0.06] p-4">
         {nextStep ? (
           <>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neon">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">
               Point {nextIndex + 1} of {steps.length}
             </p>
             <p className="mt-1 text-sm font-bold">{nextStep.label}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-white/60">
+            <p className="mt-0.5 text-[13px] leading-relaxed text-white/60">
               {nextStep.instruction}
             </p>
           </>
         ) : (
           <>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neon">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">
               All points placed
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-white/60">
+            <p className="mt-1 text-[13px] leading-relaxed text-white/60">
               Drag any point to fine-tune it, then see your results.
             </p>
           </>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-[26px] border border-white/[0.09] bg-black">
+      <div className="overflow-hidden rounded-[24px] border border-hairline bg-black">
         {frame ? (
           <svg
             ref={svgRef}
@@ -216,7 +216,7 @@ export function GuidedPointTapper<Id extends string>({
         type="button"
         disabled={Boolean(nextStep) || !frame}
         onClick={() => frame && onComplete(points as Record<Id, Point>, frame)}
-        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-neon text-sm font-black text-neon-foreground disabled:opacity-40"
+        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-neon text-sm font-bold text-neon-foreground disabled:opacity-40"
       >
         <Check className="size-4" /> {completeLabel}
       </button>

@@ -52,7 +52,7 @@ function PhotosIndex() {
     <div className="px-5 pt-6 pb-8 animate-slide-up">
       <header className="flex items-start justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-neon font-bold">
+          <p className="text-xs uppercase tracking-[0.12em] text-neon font-bold">
             {accountSession ? "Private cloud" : "Private device"}
           </p>
           <h1 className="text-3xl font-bold mt-1">Progress Pictures</h1>
@@ -141,7 +141,7 @@ function EmptyState() {
       >
         <Plus className="size-5" /> Add Progress Photo
       </Link>
-      <p className="text-[11px] text-muted-foreground mt-4">
+      <p className="text-[13px] text-muted-foreground mt-4">
         Your progress photos are private and only visible to you.
       </p>
     </div>
@@ -191,7 +191,7 @@ function Timeline({
           <section key={label}>
             <div className="flex items-baseline justify-between mb-2">
               <h3 className="text-sm font-bold">{label}</h3>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[13px] text-muted-foreground">
                 {items.length} photo{items.length === 1 ? "" : "s"}
               </span>
             </div>
@@ -211,7 +211,7 @@ function Timeline({
                       loading="lazy"
                     />
                   )}
-                  <span className="absolute bottom-1 left-1 text-[9px] uppercase bg-black/60 text-neon px-1.5 py-0.5 rounded">
+                  <span className="absolute bottom-1 left-1 text-[11px] uppercase bg-black/60 text-neon px-1.5 py-0.5 rounded">
                     {p.photo_type}
                   </span>
                 </Link>

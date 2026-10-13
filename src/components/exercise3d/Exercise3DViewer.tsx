@@ -100,11 +100,11 @@ function MuscleLegend({ primary, secondary }: { primary: MuscleKey[]; secondary:
 
   return (
     <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex flex-col gap-1.5">
-      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-white/[0.06] bg-black/55 px-3 py-1.5 text-[11px] font-semibold backdrop-blur">
+      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-hairline bg-black/55 px-3 py-1.5 text-[13px] font-semibold backdrop-blur">
         <span className="size-2 rounded-full bg-[#ff6245] shadow-[0_0_12px_rgba(255,98,69,0.8)]" />
         <span className="truncate">Primary: {primaryText || "Full body"}</span>
       </div>
-      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-white/[0.06] bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white/80 backdrop-blur">
+      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-hairline bg-black/45 px-3 py-1.5 text-[13px] font-semibold text-white/80 backdrop-blur">
         <span className="size-2 rounded-full bg-[#45aaff] shadow-[0_0_10px_rgba(69,170,255,0.65)]" />
         <span className="truncate">Secondary: {secondaryText || "Stabilizers"}</span>
       </div>
@@ -132,16 +132,16 @@ function ViewerFailurePanel({ label, error }: { label?: string; error: unknown }
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#111720] via-[#080b10] to-[#030405] p-5">
-      <div className="w-full max-w-sm rounded-[28px] border border-red-300/15 bg-white/[0.055] p-5 text-center shadow-2xl shadow-black/45 backdrop-blur-xl">
+      <div className="w-full max-w-sm rounded-[24px] border border-red-300/15 bg-white/[0.055] p-5 text-center shadow-2xl shadow-black/45 backdrop-blur-xl">
         <div className="mx-auto grid size-12 place-items-center rounded-full bg-red-500/16 text-red-200">
           <AlertTriangle className="size-5" />
         </div>
-        <h2 className="mt-4 text-lg font-extrabold text-white">3D demo unavailable</h2>
+        <h2 className="mt-4 text-lg font-bold text-white">3D demo unavailable</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/68">
           {label ?? "This exercise"} could not render on this device. The form instructions below
           still cover the full movement.
         </p>
-        <div className="mt-4 rounded-2xl border border-white/[0.06] bg-black/40 p-3 text-left font-mono text-[10px] leading-relaxed text-white/70">
+        <div className="mt-4 rounded-2xl border border-hairline bg-black/40 p-3 text-left font-mono text-[12px] leading-relaxed text-white/70">
           {message}
         </div>
       </div>
@@ -191,7 +191,7 @@ function ViewerControls({
   onResetCamera: () => void;
 }) {
   return (
-    <div className="absolute inset-x-3 bottom-3 z-20 flex items-center gap-2 rounded-3xl border border-white/[0.08] bg-black/55 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl pb-safe">
+    <div className="absolute inset-x-3 bottom-3 z-20 flex items-center gap-2 rounded-3xl border border-hairline bg-black/55 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl pb-safe">
       <button
         onClick={onPlayToggle}
         aria-label={playing ? "Pause" : "Play"}
@@ -205,13 +205,13 @@ function ViewerControls({
       </button>
       <button
         onClick={onSpeedCycle}
-        className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 text-[11px] font-semibold text-white backdrop-blur transition active:scale-95"
+        className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 text-[13px] font-semibold text-white backdrop-blur transition active:scale-95"
         aria-label={`Playback speed ${speedLabel(speed)}`}
       >
         <Gauge className="size-3.5" />
         {speedLabel(speed)}
       </button>
-      <div className="flex min-w-0 flex-1 rounded-full bg-white/10 p-0.5 text-[11px] font-semibold backdrop-blur">
+      <div className="flex min-w-0 flex-1 rounded-full bg-white/10 p-0.5 text-[13px] font-semibold backdrop-blur">
         {VIEW_PRESETS.map((preset) => (
           <button
             key={preset}
@@ -325,7 +325,7 @@ export function Exercise3DViewer({
     <div
       ref={rootRef}
       className={cn(
-        "relative w-full overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405] text-white shadow-2xl shadow-black/50",
+        "relative w-full overflow-hidden rounded-[24px] border border-hairline bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405] text-white shadow-2xl shadow-black/50",
         className ?? "h-[clamp(360px,calc(100dvh-7rem),720px)]",
       )}
     >
@@ -430,7 +430,7 @@ export function Exercise3DViewer({
         )}
 
         <MuscleLegend primary={activePrimary} secondary={activeSecondary} />
-        <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-black/50 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.13em] text-white/70 backdrop-blur">
+        <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border border-hairline bg-black/50 px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white/70 backdrop-blur">
           <span
             className={cn(
               "size-1.5 rounded-full",
@@ -443,7 +443,7 @@ export function Exercise3DViewer({
               ? "Auto loop"
               : "Paused"}
         </div>
-        <div className="pointer-events-none absolute bottom-[5.4rem] left-3 z-10 rounded-full border border-white/[0.06] bg-black/45 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/65 backdrop-blur">
+        <div className="pointer-events-none absolute bottom-[5.4rem] left-3 z-10 rounded-full border border-hairline bg-black/45 px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-white/65 backdrop-blur">
           {selectedModel} model · drag to rotate
         </div>
       </div>

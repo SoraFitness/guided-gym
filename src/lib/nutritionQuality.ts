@@ -66,7 +66,11 @@ function bandFor(score: number | null): NutritionQualityBand {
   return "Needs balance";
 }
 
+// Share of calories from protein at which a food counts as a strong protein source.
+const PROTEIN_DENSE_SHARE = 0.3;
+
 export function scoreNutritionQuality({
+  kcal,
   protein,
   proteinGoal,
   meal,
@@ -75,8 +79,13 @@ export function scoreNutritionQuality({
 }: QualityInput): NutritionQuality {
   const mealShare = meal === "Snack" ? 0.1 : 0.25;
   const proteinTarget = Math.max(1, proteinGoal * mealShare);
+  // Credit protein by amount or by density, so a small portion of a lean protein
+  // (one pot of Greek yogurt) isn't told to "add a stronger protein source".
+  const proteinAmount = clamp((Math.max(0, protein) / proteinTarget) * 100);
+  const proteinShare = kcal > 0 ? (Math.max(0, protein) * 4) / kcal : 0;
+  const proteinDensity = clamp((proteinShare / PROTEIN_DENSE_SHARE) * 100);
   const dimensions: NutritionQuality["dimensions"] = {
-    protein: Math.round(clamp((Math.max(0, protein) / proteinTarget) * 100)),
+    protein: Math.round(Math.max(proteinAmount, proteinDensity)),
   };
   const fiber = safe(nutrients?.fiberG);
   const sugars = safe(nutrients?.sugarsG);

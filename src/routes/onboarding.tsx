@@ -35,8 +35,18 @@ import {
   LockKeyhole,
   Loader2,
   ScanLine,
+  Armchair,
+  HardHat,
 } from "lucide-react";
 import { AscendrLogo } from "@/components/AscendrLogo";
+import { HeroCard, Kicker } from "@/components/app/kit";
+import {
+  AscentProgress,
+  AscentRoadmap,
+  FocusPicker,
+  PlanBuildScan,
+  WelcomeShowcase,
+} from "@/components/onboarding/OnboardingKit";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { LockedBodyScanPreview } from "@/components/scans/LockedBodyScanPreview";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
@@ -57,13 +67,14 @@ import {
   type NutritionPlan,
 } from "@/lib/profile";
 import {
+  activityFromLifestyle,
   ACTIVITY_LABELS,
   ACTIVITY_DESCRIPTIONS,
   type ActivityLevel,
   type DeficitSplit,
   type BulkPace,
 } from "@/lib/calorieEngine";
-import { suggestNutrition } from "@/lib/nutritionService";
+import { nutritionPlanFor, suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
 import { fallbackProgram } from "@/lib/workoutProgram";
 import { weeklyScheduleService } from "@/lib/weeklySchedule";
@@ -72,6 +83,7 @@ import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
 import { analyzeBodyScanPreview, type BodyScanPreviewResult } from "@/lib/bodyScan.functions";
 import { compressImage } from "@/lib/imageCompress";
 import {
+  planInputFromProfile,
   saveWorkoutPlan,
   type SavedWorkoutPlan,
   type WorkoutPlanInput,
@@ -310,6 +322,8 @@ interface Draft {
   gender: Gender;
   bodyFatPct?: number;
   activityLevel: ActivityLevel;
+  /** Movement outside workouts; with training days it sets the activity multiplier. */
+  dailyMovement: DailyMovement;
   avgStepsPerDay?: number;
   goalTargetDate: string;
   deficitSplit: DeficitSplit;
@@ -356,6 +370,7 @@ const DEFAULT_DRAFT: Draft = {
   gender: "other",
   bodyFatPct: undefined,
   activityLevel: "moderate",
+  dailyMovement: "seated",
   avgStepsPerDay: undefined,
   goalTargetDate: defaultTargetDate(),
   deficitSplit: "balanced",
@@ -420,8 +435,12 @@ function profileFromDraft(draft: Draft, personalizedName: string): Profile {
     .filter(Boolean)
     .join("\n");
 
+  const { dailyMovement, ...profileFields } = profileDraft;
   return {
-    ...profileDraft,
+    ...profileFields,
+    activityLevel: activityFromLifestyle(draft.daysPerWeek, dailyMovement ?? "seated"),
+    // The member never picks a date in onboarding; a restored draft's default may be stale.
+    goalTargetDate: defaultTargetDate(),
     name: personalizedName || "Athlete",
     goal: draft.goals[0] ?? draft.goal,
     goals: draft.goals.length ? draft.goals : [draft.goal],
@@ -431,23 +450,8 @@ function profileFromDraft(draft: Draft, personalizedName: string): Profile {
   };
 }
 
-function planInputFromProfile(profile: Profile): WorkoutPlanInput {
-  return {
-    goal: profile.goal,
-    goals: getProfileGoals(profile),
-    experience: profile.experience,
-    currentWorkoutsPerWeek: profile.currentWorkoutsPerWeek,
-    equipment: profile.equipment,
-    focusAreas: profile.focusAreas,
-    daysPerWeek: profile.daysPerWeek,
-    sessionMinutes: profile.sessionMinutes,
-    workoutSplit: profile.workoutSplit ?? "auto",
-    notes: profile.injuries ?? "",
-  };
-}
-
 const ONBOARDING_NAME_STORAGE_KEY = "ascendr_onboarding_name";
-const TOTAL = 6;
+const TOTAL = 7;
 
 interface StoredOnboardingProgress {
   draft: Partial<Draft>;
@@ -636,7 +640,9 @@ function Onboarding() {
         return true;
       case 1:
         return d.name.trim().length >= 2 && d.goals.length > 0;
-      case 3:
+      case 2:
+        return d.focusAreas.length > 0;
+      case 4:
         return (
           genderSelected &&
           d.currentWeightKg > 0 &&
@@ -648,6 +654,9 @@ function Onboarding() {
         return true;
     }
   }, [step, d, genderSelected]);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const goNext = () => {
     if (!canNext) return;
@@ -688,7 +697,7 @@ function Onboarding() {
             currentWorkoutsPerWeek: d.currentWorkoutsPerWeek,
             focusAreas: d.focusAreas,
             gender: d.gender,
-            activityLevel: d.activityLevel,
+            activityLevel: profile.activityLevel,
             nutritionPlan: d.nutritionPlan,
             units: d.units,
             motivation: d.motivation ?? null,
@@ -722,6 +731,12 @@ function Onboarding() {
     setPlanReady(true);
   };
 
+  // Onboarding resumes from answers saved on this device, which the server can't
+  // see. Rendering only after mount keeps the server and first client render equal.
+  if (!mounted) {
+    return <div className="min-h-dvh bg-background" />;
+  }
+
   if (profileRestore.restored || (profileRestore.pending && isAccountSession(session))) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
@@ -735,6 +750,7 @@ function Onboarding() {
       <CustomizingPlan
         ready={planReady}
         plan={generatedPlan}
+        focusAreas={d.focusAreas}
         onDone={() => {
           saveOnboardingPaywallCheckpoint(personalizedName, null);
           navigate({ to: "/paywall", search: { source: undefined } });
@@ -746,6 +762,7 @@ function Onboarding() {
   const stepLabels = [
     "",
     "Your direction",
+    "Your focus",
     "Your rhythm",
     "Your baseline",
     "Your reason",
@@ -769,7 +786,7 @@ function Onboarding() {
               <button
                 type="button"
                 onClick={() => setLanguageOpen((open) => !open)}
-                className="flex h-8 items-center gap-1 rounded-full border border-white/[0.08] bg-[#171a18]/90 px-2 text-[10px] font-semibold shadow-lg shadow-black/20 backdrop-blur-xl transition hover:bg-white/[0.075]"
+                className="flex h-8 items-center gap-1 rounded-full border border-hairline bg-[#171a18]/90 px-2 text-[12px] font-semibold shadow-lg shadow-black/20 backdrop-blur-xl transition hover:bg-white/[0.075]"
                 aria-label="Change language"
                 aria-expanded={languageOpen}
               >
@@ -799,7 +816,7 @@ function Onboarding() {
                       transition={{ duration: 0.16 }}
                       className="absolute right-0 top-12 z-50 w-60 overflow-hidden rounded-3xl border border-white/[0.1] bg-[#151617]/95 p-2 shadow-2xl shadow-black/60 backdrop-blur-2xl"
                     >
-                      <div className="flex items-center gap-2 px-3 pb-2 pt-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                      <div className="flex items-center gap-2 px-3 pb-2 pt-1.5 text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                         <Languages className="size-3.5" />
                         Choose language
                       </div>
@@ -835,27 +852,12 @@ function Onboarding() {
               <button
                 type="button"
                 onClick={goBack}
-                className="grid size-10 place-items-center rounded-full border border-white/[0.06] bg-white/[0.05]"
+                className="grid size-10 place-items-center rounded-full border border-hairline bg-white/[0.05]"
                 aria-label="Back"
               >
                 <ArrowLeft className="size-5" />
               </button>
-              <div className="min-w-0 flex-1">
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <motion.div
-                    className="h-full rounded-full bg-neon"
-                    initial={false}
-                    animate={{ width: `${(step / (TOTAL - 1)) * 100}%` }}
-                    transition={{ type: "spring", stiffness: 120, damping: 20 }}
-                  />
-                </div>
-                <div className="mt-1.5 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <span>{stepLabels[step]}</span>
-                  <span className="tabular-nums">
-                    {step} / {TOTAL - 1}
-                  </span>
-                </div>
-              </div>
+              <AscentProgress step={step} total={TOTAL - 1} label={stepLabels[step]} />
             </div>
           )}
         </div>
@@ -897,8 +899,15 @@ function Onboarding() {
                   }}
                 />
               )}
-              {step === 2 && <TrainingProfileStep name={personalizedName} d={d} update={update} />}
-              {step === 3 && (
+              {step === 2 && (
+                <FocusStep
+                  name={personalizedName}
+                  value={d.focusAreas}
+                  onChange={(areas) => update("focusAreas", areas)}
+                />
+              )}
+              {step === 3 && <TrainingProfileStep name={personalizedName} d={d} update={update} />}
+              {step === 4 && (
                 <BaselineProfileStep
                   d={d}
                   update={update}
@@ -909,7 +918,7 @@ function Onboarding() {
                   }}
                 />
               )}
-              {step === 4 && (
+              {step === 5 && (
                 <WhyNowStep
                   name={personalizedName}
                   motivation={d.motivation}
@@ -918,7 +927,7 @@ function Onboarding() {
                   onSourceChange={(source) => update("referralSource", source)}
                 />
               )}
-              {step === 5 && <PlanPreviewStep name={personalizedName} d={d} />}
+              {step === 6 && <PlanPreviewStep name={personalizedName} d={d} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -936,12 +945,10 @@ function Onboarding() {
             disabled={!canNext}
             onClick={goNext}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-full font-semibold transition",
-              step === 0
-                ? "h-14 text-base sm:h-16 sm:text-lg"
-                : "h-12 text-sm sm:h-14 sm:text-base",
+              "flex w-full items-center justify-center gap-2 rounded-[18px] font-bold transition",
+              step === 0 ? "h-14 text-[16px] sm:h-16 sm:text-lg" : "h-14 text-[15px]",
               canNext
-                ? "bg-neon text-neon-foreground glow-neon active:scale-[0.98]"
+                ? "bg-neon text-neon-foreground shadow-[0_14px_36px_-16px_var(--color-neon)] active:scale-[0.98]"
                 : "bg-white/[0.05] text-muted-foreground",
             )}
           >
@@ -949,7 +956,7 @@ function Onboarding() {
               ? "Create My Plan"
               : step === 0
                 ? welcomeCopy.getStarted
-                : step === 4
+                : step === 5
                   ? "See My Plan"
                   : "Continue"}
             <ArrowRight className="size-5" />
@@ -989,77 +996,10 @@ function Welcome({ copy }: { copy: WelcomeCopy }) {
     <div className="relative pt-[calc(env(safe-area-inset-top)+2.5rem)] text-center">
       <div className="pointer-events-none absolute left-1/2 top-24 -z-10 h-96 w-96 -translate-x-1/2 rounded-full bg-neon/10 blur-[110px]" />
 
-      <div
-        className="relative mx-auto aspect-[540/1169] rounded-[3rem] bg-[linear-gradient(145deg,#73737c_0%,#25262a_18%,#08090a_52%,#4c4d53_100%)] p-[3px] shadow-[0_30px_90px_-28px_rgba(0,0,0,0.95),0_0_70px_-28px_var(--neon)]"
-        style={{ width: "clamp(10.25rem, min(59vw, 27dvh), 16.75rem)" }}
-        aria-label="Ascendr shown on an iPhone 17 Pro"
-      >
-        <span className="absolute -left-[3px] top-[20%] h-10 w-[3px] rounded-l-full bg-zinc-500" />
-        <span className="absolute -left-[3px] top-[34%] h-14 w-[3px] rounded-l-full bg-zinc-600" />
-        <span className="absolute -right-[3px] top-[27%] h-16 w-[3px] rounded-r-full bg-zinc-600" />
+      <WelcomeShowcase />
 
-        <div className="relative h-full w-full overflow-hidden rounded-[2.8rem] border border-black/80 bg-black">
-          <video
-            className="h-full w-full object-cover"
-            src="/media/ascendr-onboarding.mp4"
-            poster="/media/ascendr-onboarding-poster.jpg"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            controls={false}
-            disablePictureInPicture
-            aria-label="Ascendr app preview"
-          />
-          <div className="hidden absolute inset-0 bg-[radial-gradient(circle_at_70%_12%,rgba(183,255,62,0.24),transparent_28%),linear-gradient(160deg,#161b18_0%,#090a0a_57%,#101313_100%)]" />
-          <div className="relative hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-[7px] font-black uppercase tracking-[0.18em] text-neon">
-                Ascendr
-              </span>
-              <span className="grid size-4 place-items-center rounded-full bg-white/[0.09] text-[7px] font-bold">
-                A
-              </span>
-            </div>
-            <p className="mt-5 text-[8px] text-white/60">Today’s brief</p>
-            <h3 className="mt-1 text-sm font-black leading-tight">Train with direction.</h3>
-            <div className="mt-4 rounded-xl border border-neon/20 bg-neon/[0.1] p-2.5">
-              <div className="flex items-center justify-between text-[7px] font-bold text-neon">
-                <span>READY TO TRAIN</span>
-                <span>82%</span>
-              </div>
-              <p className="mt-2 text-[9px] font-extrabold">Upper strength</p>
-              <p className="mt-1 text-[7px] text-white/55">45 min · Dumbbells</p>
-              <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-white/[0.1]">
-                <div className="h-full w-[82%] rounded-full bg-neon" />
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-1.5">
-              <div className="rounded-lg border border-white/[0.08] bg-black/20 p-2">
-                <p className="text-[6px] font-bold uppercase tracking-wide text-white/45">Fuel</p>
-                <p className="mt-1 text-[10px] font-black">
-                  87<span className="text-[6px] text-neon">/100</span>
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/[0.08] bg-black/20 p-2">
-                <p className="text-[6px] font-bold uppercase tracking-wide text-white/45">Streak</p>
-                <p className="mt-1 text-[10px] font-black">
-                  06<span className="text-[6px] text-neon"> days</span>
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="pointer-events-none absolute inset-0 rounded-[2.5rem] ring-1 ring-inset ring-white/10" />
-          <div className="pointer-events-none absolute left-1/2 top-2.5 h-5 w-[4.5rem] -translate-x-1/2 rounded-full bg-black shadow-[0_1px_0_rgba(255,255,255,0.08)]">
-            <span className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-[#111d28] ring-1 ring-blue-500/10" />
-          </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />
-        </div>
-      </div>
-
-      <div className="relative z-10 mx-auto mt-9 max-w-md">
-        <h1 className="mx-auto max-w-[24rem] text-[clamp(2rem,8.4vw,2.75rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-balance">
+      <div className="relative z-10 mx-auto mt-6 max-w-md">
+        <h1 className="mx-auto max-w-[24rem] text-[clamp(2rem,8.4vw,2.75rem)] font-bold leading-[0.98] tracking-[-0.04em] text-balance">
           {copy.title}
         </h1>
         <div className="relative mt-2 h-6 overflow-hidden">
@@ -1070,7 +1010,7 @@ function Welcome({ copy }: { copy: WelcomeCopy }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.24 }}
-              className="absolute inset-x-0 text-sm font-extrabold text-neon sm:text-base"
+              className="absolute inset-x-0 text-sm font-bold text-neon sm:text-base"
             >
               {copy.promises[promiseIndex]}
             </motion.p>
@@ -1084,7 +1024,7 @@ function Welcome({ copy }: { copy: WelcomeCopy }) {
 function StepHeader({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-[24px] font-extrabold leading-tight sm:text-[26px]">{title}</h2>
+      <h2 className="text-[24px] font-bold leading-tight sm:text-[26px]">{title}</h2>
       {sub && <p className="text-sm text-muted-foreground mt-1">{sub}</p>}
     </div>
   );
@@ -1108,9 +1048,7 @@ function ChoiceCard({
       onClick={onClick}
       className={cn(
         "w-full text-left rounded-2xl border p-4 flex items-center gap-4 transition",
-        active
-          ? "border-neon bg-neon/10"
-          : "border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.05]",
+        active ? "border-neon bg-neon/10" : "border-hairline bg-white/[0.03] hover:bg-white/[0.05]",
       )}
     >
       {Icon && (
@@ -1125,7 +1063,7 @@ function ChoiceCard({
       )}
       <div className="flex-1 min-w-0">
         <div className="font-semibold text-[15px]">{label}</div>
-        {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
+        {sub && <div className="text-[13px] text-muted-foreground mt-0.5">{sub}</div>}
       </div>
       <span
         className={cn(
@@ -1170,21 +1108,20 @@ function GoalIdentityStep({
 
   return (
     <div>
-      <div className="relative overflow-hidden rounded-[2rem] border border-neon/20 bg-[radial-gradient(circle_at_100%_0%,rgba(183,255,62,0.2),transparent_42%),linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.018))] p-5 shadow-[0_18px_50px_-32px_rgba(183,255,62,0.55)]">
-        <div className="absolute -right-8 -top-8 size-28 rounded-full bg-neon/20 blur-3xl" />
-        <p className="relative text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+      <HeroCard as="div" className="p-5">
+        <Kicker accent className="relative">
           This is your starting line
-        </p>
-        <h2 className="relative mt-3 text-[29px] font-black leading-[1.04] tracking-[-0.045em]">
+        </Kicker>
+        <h2 className="relative mt-3 text-[29px] font-bold leading-[1.04] tracking-[-0.045em]">
           You deserve a plan that feels made for your life.
         </h2>
         <p className="relative mt-3 max-w-[36ch] text-sm leading-relaxed text-muted-foreground">
           Tell us what matters most. We’ll turn it into a simple, personal next step.
         </p>
-      </div>
+      </HeroCard>
 
-      <label className="mt-5 block rounded-2xl border border-white/[0.08] bg-white/[0.035] px-4 py-3.5 transition focus-within:border-neon/50 focus-within:bg-neon/[0.035]">
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      <label className="mt-5 block rounded-2xl border border-hairline bg-white/[0.035] px-4 py-3.5 transition focus-within:border-neon/50 focus-within:bg-neon/[0.035]">
+        <span className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
           First name
         </span>
         <div className="mt-2 flex items-center gap-3">
@@ -1206,14 +1143,14 @@ function GoalIdentityStep({
 
       <div className="mt-6 flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+          <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
             Your direction
           </p>
-          <h3 className="mt-1 text-xl font-black tracking-[-0.03em]">
+          <h3 className="mt-1 text-xl font-bold tracking-[-0.03em]">
             {displayName ? `${displayName}, what changes first?` : "What changes first?"}
           </h3>
         </div>
-        <span className="mb-1 shrink-0 text-[10px] font-semibold text-muted-foreground">
+        <span className="mb-1 shrink-0 text-[12px] font-semibold text-muted-foreground">
           Choose up to 2
         </span>
       </div>
@@ -1230,7 +1167,7 @@ function GoalIdentityStep({
                 "relative min-h-32 overflow-hidden rounded-2xl border p-3.5 text-left transition active:scale-[0.98]",
                 active
                   ? "border-neon/70 bg-neon/[0.12] shadow-[0_12px_28px_-20px_rgba(183,255,62,0.9)]"
-                  : "border-white/[0.07] bg-white/[0.035] hover:border-white/[0.15] hover:bg-white/[0.055]",
+                  : "border-hairline bg-white/[0.035] hover:border-white/[0.15] hover:bg-white/[0.055]",
               )}
             >
               {active && (
@@ -1246,12 +1183,32 @@ function GoalIdentityStep({
               >
                 <Icon className="size-4" />
               </span>
-              <p className="mt-4 text-sm font-extrabold leading-tight">{GOAL_LABELS[id]}</p>
-              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">{sub}</p>
+              <p className="mt-4 text-sm font-bold leading-tight">{GOAL_LABELS[id]}</p>
+              <p className="mt-1 text-[12px] leading-snug text-muted-foreground">{sub}</p>
             </button>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function FocusStep({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: FocusArea[];
+  onChange: (areas: FocusArea[]) => void;
+}) {
+  return (
+    <div>
+      <StepHeader
+        title={name ? `${name}, what do you want to build?` : "What do you want to build?"}
+        sub="Tap the muscles to prioritize. Your plan leans into them."
+      />
+      <FocusPicker value={value} onChange={onChange} />
     </div>
   );
 }
@@ -1284,8 +1241,8 @@ function TrainingProfileStep({
         sub="The best plan is one that still works on a busy week."
       />
 
-      <section className="rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+      <section className="rounded-[1.6rem] border border-hairline bg-white/[0.025] p-4">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
           Training background
         </p>
         <div className="mt-3 grid gap-2">
@@ -1298,12 +1255,12 @@ function TrainingProfileStep({
                 onClick={() => update("experience", option.id)}
                 className={cn(
                   "flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-3 text-left transition",
-                  active ? "border-neon/65 bg-neon/[0.1]" : "border-white/[0.06] bg-black/15",
+                  active ? "border-neon/65 bg-neon/[0.1]" : "border-hairline bg-black/15",
                 )}
               >
                 <span>
                   <span className="block text-sm font-bold">{option.label}</span>
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">
                     {option.sub}
                   </span>
                 </span>
@@ -1321,15 +1278,15 @@ function TrainingProfileStep({
         </div>
       </section>
 
-      <section className="mt-3 rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+      <section className="mt-3 rounded-[1.6rem] border border-hairline bg-white/[0.025] p-4">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+            <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
               Your weekly rhythm
             </p>
             <p className="mt-1 text-sm font-bold">How often can you truly show up?</p>
           </div>
-          <span className="rounded-full bg-neon/10 px-2.5 py-1 text-[10px] font-bold text-neon">
+          <span className="rounded-full bg-neon/10 px-2.5 py-1 text-[12px] font-bold text-neon">
             {d.daysPerWeek} days
           </span>
         </div>
@@ -1343,24 +1300,24 @@ function TrainingProfileStep({
                 "flex h-12 flex-col items-center justify-center rounded-xl border transition",
                 d.daysPerWeek === days
                   ? "border-neon bg-neon text-neon-foreground"
-                  : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                  : "border-hairline bg-black/20 text-muted-foreground",
               )}
             >
-              <span className="text-lg font-black leading-none">{days}</span>
-              <span className="mt-1 text-[8px] font-bold uppercase tracking-wide">days</span>
+              <span className="text-lg font-bold leading-none">{days}</span>
+              <span className="mt-1 text-[11px] font-bold uppercase tracking-wide">days</span>
             </button>
           ))}
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-xs font-semibold">Time per workout</p>
-          <div className="flex rounded-full border border-white/[0.07] bg-black/20 p-1">
+          <div className="flex rounded-full border border-hairline bg-black/20 p-1">
             {([20, 30, 45, 60] as const).map((minutes) => (
               <button
                 key={minutes}
                 type="button"
                 onClick={() => update("sessionMinutes", minutes)}
                 className={cn(
-                  "rounded-full px-2.5 py-1.5 text-[10px] font-bold transition",
+                  "rounded-full px-2.5 py-1.5 text-[12px] font-bold transition",
                   d.sessionMinutes === minutes ? "bg-white text-black" : "text-muted-foreground",
                 )}
               >
@@ -1371,8 +1328,8 @@ function TrainingProfileStep({
         </div>
       </section>
 
-      <section className="mt-3 rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+      <section className="mt-3 rounded-[1.6rem] border border-hairline bg-white/[0.025] p-4">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
           Where you train
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1390,7 +1347,7 @@ function TrainingProfileStep({
                   "flex items-center gap-2.5 rounded-2xl border px-3 py-3 text-left text-xs font-bold transition",
                   active
                     ? "border-neon/65 bg-neon/[0.1] text-foreground"
-                    : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                    : "border-hairline bg-black/20 text-muted-foreground",
                 )}
               >
                 <Icon className={cn("size-4", active && "text-neon")} />
@@ -1404,6 +1361,19 @@ function TrainingProfileStep({
     </div>
   );
 }
+
+type DailyMovement = "seated" | "mixed" | "active";
+
+const DAILY_MOVEMENT_OPTIONS: {
+  id: DailyMovement;
+  label: string;
+  sub: string;
+  icon: typeof Flame;
+}[] = [
+  { id: "seated", label: "Mostly sitting", sub: "Desk or study", icon: Armchair },
+  { id: "mixed", label: "On my feet", sub: "Some walking", icon: Footprints },
+  { id: "active", label: "Physical", sub: "Active job", icon: HardHat },
+];
 
 function BaselineProfileStep({
   d,
@@ -1427,10 +1397,10 @@ function BaselineProfileStep({
         title="A few details, then you’re in."
         sub="These only calibrate your training and nutrition starting point."
       />
-      <section className="rounded-[1.6rem] border border-white/[0.07] bg-white/[0.025] p-4">
+      <section className="rounded-[1.6rem] border border-hairline bg-white/[0.025] p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-bold">Personalization</p>
-          <span className="text-[10px] text-muted-foreground">Optional to share</span>
+          <span className="text-[12px] text-muted-foreground">Optional to share</span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           {genders.map(({ id, label, icon: Icon }) => {
@@ -1441,10 +1411,10 @@ function BaselineProfileStep({
                 type="button"
                 onClick={() => onGenderChange(id)}
                 className={cn(
-                  "flex h-16 flex-col items-center justify-center rounded-2xl border text-[11px] font-bold transition",
+                  "flex h-16 flex-col items-center justify-center rounded-2xl border text-[13px] font-bold transition",
                   active
                     ? "border-neon bg-neon/10 text-neon"
-                    : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                    : "border-hairline bg-black/20 text-muted-foreground",
                 )}
               >
                 <Icon className="mb-1 size-4" />
@@ -1454,10 +1424,36 @@ function BaselineProfileStep({
           })}
         </div>
       </section>
+      <section className="mt-3 rounded-[1.6rem] border border-hairline bg-white/[0.025] p-4">
+        <p className="text-sm font-bold">Outside workouts, your day is…</p>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {DAILY_MOVEMENT_OPTIONS.map(({ id, label, sub, icon: Icon }) => {
+            const active = d.dailyMovement === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update("dailyMovement", id)}
+                aria-pressed={active}
+                className={cn(
+                  "flex min-h-[86px] flex-col items-center justify-center rounded-2xl border px-1.5 py-2 text-center transition",
+                  active
+                    ? "border-neon bg-neon/10 text-neon"
+                    : "border-hairline bg-black/20 text-muted-foreground",
+                )}
+              >
+                <Icon className="mb-1 size-4" />
+                <span className="text-[13px] font-bold leading-tight">{label}</span>
+                <span className="mt-0.5 text-[11px] leading-tight opacity-80">{sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
       <div className="mt-4">
         <BodyStep d={d} update={update} compact />
       </div>
-      <p className="mt-4 flex items-start gap-2.5 px-1 text-[10px] leading-relaxed text-muted-foreground">
+      <p className="mt-4 flex items-start gap-2.5 px-1 text-[12px] leading-relaxed text-muted-foreground">
         <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-neon" />
         We use this to calculate a sensible starting target—not to judge your body.
       </p>
@@ -1512,10 +1508,10 @@ function WhyNowStep({
   return (
     <div>
       <div className="rounded-[2rem] border border-neon/20 bg-[linear-gradient(145deg,rgba(183,255,62,0.14),rgba(255,255,255,0.035)_54%,rgba(255,255,255,0.01))] p-5">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
           One honest answer
         </p>
-        <h2 className="mt-3 text-[28px] font-black leading-[1.05] tracking-[-0.045em]">
+        <h2 className="mt-3 text-[28px] font-bold leading-[1.05] tracking-[-0.045em]">
           {name || "When you picture progress"}, what would feel different?
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -1533,7 +1529,7 @@ function WhyNowStep({
               onClick={() => onMotivationChange(id)}
               className={cn(
                 "flex items-center gap-3 rounded-2xl border p-3.5 text-left transition",
-                active ? "border-neon/70 bg-neon/[0.1]" : "border-white/[0.07] bg-white/[0.025]",
+                active ? "border-neon/70 bg-neon/[0.1]" : "border-hairline bg-white/[0.025]",
               )}
             >
               <span
@@ -1546,17 +1542,17 @@ function WhyNowStep({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-bold">{label}</span>
-                <span className="mt-0.5 block text-[10px] text-muted-foreground">{sub}</span>
+                <span className="mt-0.5 block text-[12px] text-muted-foreground">{sub}</span>
               </span>
               {active && <Check className="size-4 text-neon" strokeWidth={3} />}
             </button>
           );
         })}
       </div>
-      <div className="mt-5 border-t border-white/[0.07] pt-5">
+      <div className="mt-5 border-t border-hairline pt-5">
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold">How did you find Ascendr?</p>
-          <span className="text-[10px] text-muted-foreground">Optional</span>
+          <span className="text-[12px] text-muted-foreground">Optional</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {REFERRAL_SOURCES.map(({ id, label }) => (
@@ -1565,10 +1561,10 @@ function WhyNowStep({
               type="button"
               onClick={() => onSourceChange(id)}
               className={cn(
-                "rounded-full border px-3 py-2 text-[10px] font-bold transition",
+                "rounded-full border px-3 py-2 text-[12px] font-bold transition",
                 value === id
                   ? "border-neon/70 bg-neon/10 text-neon"
-                  : "border-white/[0.07] bg-white/[0.025] text-muted-foreground",
+                  : "border-hairline bg-white/[0.025] text-muted-foreground",
               )}
             >
               {label}
@@ -1590,21 +1586,20 @@ function PlanPreviewStep({ name, d }: { name: string; d: Draft }) {
   const goal = GOAL_LABELS[d.goals[0] ?? d.goal];
   return (
     <div>
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(255,255,255,0.07),rgba(255,255,255,0.018)_58%,rgba(183,255,62,0.075))] px-5 py-5 shadow-[0_22px_50px_-38px_rgba(0,0,0,0.95)]">
-        <div className="pointer-events-none absolute -right-12 -top-16 size-44 rounded-full bg-neon/15 blur-3xl" />
+      <section className="relative px-1 py-2">
         <div className="relative">
           <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-neon">
+            <span className="inline-flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
               <span className="grid size-4 place-items-center rounded-full bg-neon text-neon-foreground">
                 <Check className="size-2.5" strokeWidth={4} />
               </span>
               Plan ready
             </span>
-            <span className="text-[10px] font-medium text-muted-foreground">
+            <span className="text-[12px] font-medium text-muted-foreground">
               Made for {formatFirstName(name) || "you"}
             </span>
           </div>
-          <h2 className="mt-5 max-w-[10ch] text-[31px] font-black leading-[1.02] tracking-[-0.055em]">
+          <h2 className="mt-5 max-w-[10ch] text-[31px] font-bold leading-[1.02] tracking-[-0.055em]">
             Your first week is ready.
           </h2>
           <p className="mt-3 max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
@@ -1613,55 +1608,61 @@ function PlanPreviewStep({ name, d }: { name: string; d: Draft }) {
         </div>
       </section>
 
-      <section className="relative mt-4 overflow-hidden rounded-[1.75rem] border border-neon/25 bg-[linear-gradient(145deg,rgba(183,255,62,0.14),rgba(18,22,18,0.94)_48%,rgba(8,10,9,0.98))] p-5 shadow-[0_22px_50px_-32px_rgba(183,255,62,0.45)]">
-        <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-neon/70 to-transparent" />
-        <div className="relative flex items-start justify-between gap-3">
+      <HeroCard className="mt-4 p-5">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neon">
-              Ascendr plan
-            </p>
-            <h3 className="mt-1 text-[22px] font-black tracking-[-0.035em]">{goal}</h3>
+            <Kicker accent>Ascendr plan</Kicker>
+            <h3 className="mt-1.5 text-[22px] font-bold tracking-[-0.03em]">{goal}</h3>
           </div>
-          <span className="rounded-full border border-neon/25 bg-neon/[0.08] px-3 py-1.5 text-[10px] font-bold text-neon">
+          <span className="font-data mr-6 rounded-[8px] bg-neon/12 px-2 py-1 text-[11px] font-semibold uppercase text-neon">
             Adaptive
           </span>
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
-          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              Train
-            </p>
-            <p className="mt-2 text-xl font-black leading-none">{d.daysPerWeek}×</p>
-            <p className="mt-1.5 text-[10px] text-white/60">each week</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              Session
-            </p>
-            <p className="mt-2 text-xl font-black leading-none">{d.sessionMinutes}</p>
-            <p className="mt-1.5 text-[10px] text-white/60">minutes</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.075] bg-black/20 p-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              Fuel
-            </p>
-            <p className="mt-2 text-xl font-black leading-none">{nutrition.protein}g</p>
-            <p className="mt-1.5 text-[10px] text-white/60">protein</p>
-          </div>
+          {(
+            [
+              ["Train", `${d.daysPerWeek}×`, "per week"],
+              ["Session", `${d.sessionMinutes}`, "minutes"],
+              ["Protein", `${nutrition.protein}g`, "per day"],
+            ] as const
+          ).map(([label, value, unit]) => (
+            <div key={label} className="rounded-[16px] border border-hairline bg-black/25 p-3">
+              <p className="kicker">{label}</p>
+              <p className="mt-2 text-[22px] font-bold leading-none">{value}</p>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">{unit}</p>
+            </div>
+          ))}
         </div>
 
-        <div className="mt-4 flex items-center gap-2 text-[11px] text-white/65">
-          <span className="size-1.5 rounded-full bg-neon shadow-[0_0_10px_var(--neon)]" />
-          Your schedule will flex when real life does.
-        </div>
+        {d.focusAreas.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {d.focusAreas.map((area) => (
+              <span
+                key={area}
+                className="font-data rounded-[8px] bg-white/[0.06] px-2 py-1 text-[11px] font-semibold uppercase"
+              >
+                {FOCUS_LABELS[area]}
+              </span>
+            ))}
+          </div>
+        )}
+      </HeroCard>
+
+      <section className="mt-4 rounded-[24px] border border-hairline bg-surface p-5">
+        <AscentRoadmap
+          currentKg={d.currentWeightKg}
+          goalKg={d.goalWeightKg}
+          units={d.units}
+          weeklyChangeKg={nutritionPlanFor(profile).weeklyChangeKg}
+        />
       </section>
 
-      <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-white/[0.075] bg-white/[0.025]">
-        <div className="flex items-end justify-between border-b border-white/[0.07] px-4 pb-3 pt-4">
+      <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-hairline bg-white/[0.025]">
+        <div className="flex items-end justify-between border-b border-hairline px-4 pb-3 pt-4">
           <div>
-            <p className="text-xs font-black">Your opening week</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="text-xs font-bold">Your opening week</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Three sessions, one clear starting line.
             </p>
           </div>
@@ -1670,16 +1671,16 @@ function PlanPreviewStep({ name, d }: { name: string; d: Draft }) {
         <div className="divide-y divide-white/[0.065] px-4">
           {workouts.map((workout, index) => (
             <div key={workout.id} className="flex items-center gap-3 py-3.5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-neon/15 bg-neon/[0.08] text-[10px] font-black text-neon">
+              <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-neon/15 bg-neon/[0.08] text-[12px] font-bold text-neon">
                 0{index + 1}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-bold">{workout.workoutTitle}</span>
-                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
                   {workout.focus}
                 </span>
               </span>
-              <span className="shrink-0 text-[10px] font-semibold text-white/60">
+              <span className="shrink-0 text-[12px] font-semibold text-white/60">
                 {workout.duration} min
               </span>
             </div>
@@ -1762,8 +1763,8 @@ function NameStep({ value, onChange }: { value: string; onChange: (name: string)
         sub="We'll use your name to personalize your journey."
       />
 
-      <label className="block rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 transition focus-within:border-neon/45 focus-within:bg-neon/[0.035]">
-        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      <label className="block rounded-3xl border border-hairline bg-white/[0.035] p-5 transition focus-within:border-neon/45 focus-within:bg-neon/[0.035]">
+        <span className="text-[13px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
           First name
         </span>
         <div className="mt-3 flex items-center gap-3">
@@ -1891,17 +1892,17 @@ function ExperienceStep({
         ))}
       </div>
 
-      <div className="mt-6 rounded-3xl border border-white/[0.07] bg-white/[0.025] p-4">
+      <div className="mt-6 rounded-3xl border border-hairline bg-white/[0.025] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+            <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
               Your current rhythm
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
               How many workouts do you complete in a typical week?
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-neon/10 px-2.5 py-1 text-[9px] font-bold text-neon">
+          <span className="shrink-0 rounded-full bg-neon/10 px-2.5 py-1 text-[11px] font-bold text-neon">
             Builds safely
           </span>
         </div>
@@ -1922,7 +1923,7 @@ function ExperienceStep({
                   "flex h-11 items-center justify-center rounded-xl border text-sm font-bold tabular-nums transition",
                   active
                     ? "border-neon bg-neon text-neon-foreground"
-                    : "border-white/[0.06] bg-black/20 text-muted-foreground",
+                    : "border-hairline bg-black/20 text-muted-foreground",
                 )}
               >
                 {frequency === 5 ? "5+" : frequency}
@@ -1930,7 +1931,7 @@ function ExperienceStep({
             );
           })}
         </div>
-        <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
           Ascendr uses this baseline to increase volume gradually instead of overwhelming you.
         </p>
       </div>
@@ -1959,10 +1960,10 @@ function EquipmentStep({
       />
 
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
           Where do you train?
         </p>
-        <span className="text-[10px] text-muted-foreground">Choose one</span>
+        <span className="text-[12px] text-muted-foreground">Choose one</span>
       </div>
       <div className="space-y-2.5">
         {items.map(({ id, icon, sub }) => (
@@ -1994,7 +1995,7 @@ function DaysStep({
         title="Build your weekly rhythm"
         sub="Choose a realistic schedule. We'll design the training around you."
       />
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+      <p className="mb-2 text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
         Training days
       </p>
       <div className="grid grid-cols-5 gap-2">
@@ -2004,13 +2005,11 @@ function DaysStep({
             onClick={() => onChange(n)}
             className={cn(
               "aspect-square rounded-2xl border flex flex-col items-center justify-center transition",
-              value === n
-                ? "border-neon bg-neon/10 text-neon"
-                : "border-white/[0.06] bg-white/[0.03]",
+              value === n ? "border-neon bg-neon/10 text-neon" : "border-hairline bg-white/[0.03]",
             )}
           >
-            <span className="text-2xl font-extrabold tabular-nums">{n}</span>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
+            <span className="text-2xl font-bold tabular-nums">{n}</span>
+            <span className="text-[12px] text-muted-foreground uppercase tracking-wider mt-0.5">
               days
             </span>
           </button>
@@ -2023,10 +2022,10 @@ function DaysStep({
             <Sparkles className="size-4" />
           </span>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neon">
+            <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-neon">
               Personalized after onboarding
             </p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
               Ascendr AI will choose the best training structure for your goals, experience,
               equipment, recovery, and {value}-day schedule.
             </p>
@@ -2057,7 +2056,7 @@ function BodyStep({
       )}
 
       {/* Units toggle */}
-      <div className="mb-4 inline-flex rounded-full bg-white/[0.04] border border-white/[0.06] p-1">
+      <div className="mb-4 inline-flex rounded-full bg-white/[0.04] border border-hairline p-1">
         {(["metric", "imperial"] as const).map((u) => (
           <button
             key={u}
@@ -2133,8 +2132,8 @@ function BodyStep({
           )}
         </div>
 
-        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+        <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
+          <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
             Body fat % (optional)
           </label>
           <input
@@ -2145,7 +2144,7 @@ function BodyStep({
               const v = parseFloat(e.target.value);
               update("bodyFatPct", Number.isFinite(v) && v > 0 && v < 70 ? v : undefined);
             }}
-            className="mt-2 h-11 w-full rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tabular-nums outline-none focus:border-neon/40"
+            className="mt-2 h-11 w-full rounded-xl bg-white/[0.04] border border-hairline px-3 text-base tabular-nums outline-none focus:border-neon/40"
           />
         </div>
       </div>
@@ -2171,9 +2170,9 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+    <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
       <div className="flex items-center justify-between gap-3 mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{label}</span>
         <EditableSliderValue
           label={label}
           value={value}
@@ -2271,7 +2270,7 @@ function EditableSliderValue({
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
         }}
-        className="h-9 w-[4.6rem] rounded-xl border border-white/[0.09] bg-white/[0.05] px-2 text-right text-base font-extrabold tabular-nums text-foreground outline-none transition focus:border-neon/60 focus:bg-neon/[0.06]"
+        className="h-9 w-[4.6rem] rounded-xl border border-hairline bg-white/[0.05] px-2 text-right text-base font-bold tabular-nums text-foreground outline-none transition focus:border-neon/60 focus:bg-neon/[0.06]"
       />
       <span className="shrink-0 text-xs text-muted-foreground">{suffix}</span>
     </div>
@@ -2289,9 +2288,9 @@ function HeightImperialSlider({
   const ft = Math.floor(totalInches / 12);
   const inches = totalInches % 12;
   return (
-    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+    <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
       <div className="flex items-center justify-between gap-3 mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Height</span>
+        <span className="text-[13px] uppercase tracking-wider text-muted-foreground">Height</span>
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold tabular-nums text-muted-foreground">
             {ft}'{inches}"
@@ -2331,9 +2330,9 @@ function WeightImperialSlider({
 }) {
   const lb = Math.round(valueKg * 2.20462);
   return (
-    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+    <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{label}</span>
         <EditableSliderValue
           label={`${label} in pounds`}
           value={lb}
@@ -2389,8 +2388,8 @@ function ActivityStep({
           />
         ))}
       </div>
-      <div className="mt-5 rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-        <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+      <div className="mt-5 rounded-2xl bg-white/[0.03] border border-hairline p-4">
+        <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
           Average daily steps (optional)
         </label>
         <div className="mt-2 flex items-center gap-3">
@@ -2403,7 +2402,7 @@ function ActivityStep({
               const v = Number(e.target.value.replace(/[^0-9]/g, ""));
               update("avgStepsPerDay", v > 0 ? v : undefined);
             }}
-            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base tabular-nums outline-none focus:border-neon/40"
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-hairline px-3 text-base tabular-nums outline-none focus:border-neon/40"
           />
         </div>
       </div>
@@ -2424,7 +2423,7 @@ function ReviewStep({ d }: { d: Draft }) {
       />
 
       <div className="rounded-3xl border border-neon/30 bg-gradient-to-br from-neon/10 to-transparent p-5">
-        <div className="text-[10px] uppercase tracking-wider text-neon font-semibold">
+        <div className="text-[12px] uppercase tracking-wider text-neon font-semibold">
           Your goals
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -2451,7 +2450,7 @@ function ReviewStep({ d }: { d: Draft }) {
       </div>
 
       <div className="mt-5 rounded-3xl border border-neon/15 bg-neon/[0.045] p-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
           Synced across Ascendr
         </p>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -2461,8 +2460,8 @@ function ReviewStep({ d }: { d: Draft }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-3xl bg-white/[0.03] border border-white/[0.05] p-5">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+      <div className="mt-5 rounded-3xl bg-white/[0.03] border border-hairline p-5">
+        <div className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">
           Daily nutrition · {NUTRITION_LABELS[d.nutritionPlan]}
         </div>
         <div className="mt-2 grid grid-cols-4 gap-2 text-center">
@@ -2473,8 +2472,8 @@ function ReviewStep({ d }: { d: Draft }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-3xl bg-white/[0.03] border border-white/[0.05] p-5">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+      <div className="mt-5 rounded-3xl bg-white/[0.03] border border-hairline p-5">
+        <div className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">
           Weekly split
         </div>
         <ul className="mt-3 space-y-1.5">
@@ -2499,9 +2498,9 @@ function ReviewStep({ d }: { d: Draft }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-3 text-center">
-      <div className="text-lg font-extrabold tabular-nums">{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+    <div className="rounded-2xl bg-white/[0.03] border border-hairline p-3 text-center">
+      <div className="text-lg font-bold tabular-nums">{value}</div>
+      <div className="text-[12px] uppercase tracking-wider text-muted-foreground mt-0.5">
         {label}
       </div>
     </div>
@@ -2510,9 +2509,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function ConnectedFeature({ icon: Icon, label }: { icon: typeof Dumbbell; label: string }) {
   return (
-    <div className="rounded-2xl border border-white/[0.05] bg-black/15 px-2 py-3 text-center">
+    <div className="rounded-2xl border border-hairline bg-black/15 px-2 py-3 text-center">
       <Icon className="mx-auto size-4 text-neon" />
-      <p className="mt-2 text-[9px] font-semibold leading-tight text-white/70">{label}</p>
+      <p className="mt-2 text-[11px] font-semibold leading-tight text-white/70">{label}</p>
     </div>
   );
 }
@@ -2520,10 +2519,8 @@ function ConnectedFeature({ icon: Icon, label }: { icon: typeof Dumbbell; label:
 function Macro({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div>
-      <div className={cn("text-xl font-extrabold tabular-nums", highlight && "text-neon")}>
-        {value}
-      </div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn("text-xl font-bold tabular-nums", highlight && "text-neon")}>{value}</div>
+      <div className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -2573,13 +2570,13 @@ function CommitmentStep({ name, d }: { name: string; d: Draft }) {
 
   return (
     <div>
-      <div className="relative overflow-hidden rounded-[30px] border border-neon/25 bg-gradient-to-br from-neon/[0.14] via-white/[0.035] to-transparent p-6">
+      <div className="relative overflow-hidden rounded-[24px] border border-neon/25 bg-surface p-6">
         <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-neon/15 blur-3xl" />
         <div className="relative">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.2em] text-neon">
             <Heart className="size-4 fill-neon/20" /> A promise to your future self
           </div>
-          <h2 className="mt-5 text-[30px] font-black leading-[1.05] tracking-[-0.04em]">
+          <h2 className="mt-5 text-[30px] font-bold leading-[1.05] tracking-[-0.04em]">
             {name || "You"}, if we build the plan, will you show up for it?
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
@@ -2589,8 +2586,8 @@ function CommitmentStep({ name, d }: { name: string; d: Draft }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-[26px] border border-white/[0.07] bg-white/[0.025] p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="mt-4 rounded-[24px] border border-hairline bg-white/[0.025] p-5">
+        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
           Your commitment
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -2600,10 +2597,10 @@ function CommitmentStep({ name, d }: { name: string; d: Draft }) {
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-2xl border border-white/[0.06] bg-black/20 px-2 py-3 text-center"
+              className="rounded-2xl border border-hairline bg-black/20 px-2 py-3 text-center"
             >
-              <p className="text-xl font-black text-neon">{item.value}</p>
-              <p className="mt-0.5 text-[9px] font-medium text-muted-foreground">{item.label}</p>
+              <p className="text-xl font-bold text-neon">{item.value}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">{item.label}</p>
             </div>
           ))}
         </div>
@@ -2614,7 +2611,7 @@ function CommitmentStep({ name, d }: { name: string; d: Draft }) {
           </span>
           <div>
             <p className="text-sm font-bold">Your plan will be built around your life.</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
               We will tailor every week toward {mainGoal.toLowerCase()} and adapt as you record your
               progress.
             </p>
@@ -2704,22 +2701,22 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
     return (
       <div className="flex min-h-[calc(100dvh-7.5rem)] flex-col pb-safe">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neon">
+          <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
             Ascendr Vision
           </p>
-          <span className="rounded-full border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="rounded-full border border-hairline bg-white/[0.035] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
             Optional
           </span>
         </div>
 
-        <h2 className="mt-3 max-w-[12ch] text-[2rem] font-black leading-[1.02] tracking-[-0.05em]">
+        <h2 className="mt-3 max-w-[12ch] text-[2rem] font-bold leading-[1.02] tracking-[-0.05em]">
           Want to see your physique potential?
         </h2>
         <p className="mt-2.5 max-w-[38ch] text-[13px] leading-relaxed text-muted-foreground">
           One private photo reveals visible strengths and gives you a focused improvement plan.
         </p>
 
-        <div className="relative mt-4 h-[318px] overflow-hidden rounded-[30px] border border-white/[0.08] bg-[#0c0f0d] shadow-2xl shadow-black/40">
+        <div className="relative mt-4 h-[318px] overflow-hidden rounded-[24px] border border-hairline bg-[#0c0f0d] shadow-2xl shadow-black/40">
           <img
             src="/media/ascendr-sample-body-scan.png"
             alt="Sample athlete used to demonstrate an Ascendr analysis report"
@@ -2743,32 +2740,32 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
                 <ScanLine className="size-4" strokeWidth={2.5} />
               </span>
               <div>
-                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-neon">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">
                   Body Scan
                 </p>
-                <p className="text-[10px] font-bold text-white">Locked preview</p>
+                <p className="text-[12px] font-bold text-white">Locked preview</p>
               </div>
             </div>
-            <span className="flex items-center gap-1 rounded-full border border-neon/15 bg-neon/[0.07] px-2 py-1 text-[7px] font-black uppercase tracking-[0.16em] text-neon">
+            <span className="flex items-center gap-1 rounded-full border border-neon/15 bg-neon/[0.07] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
               <LockKeyhole className="size-2.5" /> Private
             </span>
           </div>
 
           <div className="absolute left-5 right-14 top-[62px] rotate-[-1.5deg] rounded-[24px] border border-neon/25 bg-gradient-to-br from-black/80 via-black/65 to-black/45 p-4 shadow-[0_22px_50px_rgba(0,0,0,.55)] backdrop-blur-[2px]">
-            <div className="flex items-end justify-between gap-4 border-b border-white/[0.07] pb-3">
+            <div className="flex items-end justify-between gap-4 border-b border-hairline pb-3">
               <div>
-                <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   Overall physique rating
                 </p>
                 <div className="mt-1 flex items-end gap-1.5">
-                  <span className="text-[2.65rem] font-black leading-none tracking-[-0.07em] text-white">
+                  <span className="text-[2.65rem] font-bold leading-none tracking-[-0.07em] text-white">
                     76
                   </span>
-                  <span className="mb-1 text-[8px] font-black text-neon">/100</span>
+                  <span className="mb-1 text-[11px] font-bold text-neon">/100</span>
                 </div>
               </div>
-              <div className="mb-0.5 rounded-xl border border-white/[0.07] bg-white/[0.035] px-2.5 py-2 text-right">
-                <p className="text-[7px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="mb-0.5 rounded-xl border border-hairline bg-white/[0.035] px-2.5 py-2 text-right">
+                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                   Body fat range
                 </p>
                 <span className="mt-1.5 block h-4 w-12 rounded bg-neon/15 blur-[3px]" />
@@ -2786,7 +2783,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
               ].map((metric) => (
                 <div key={metric.label}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[7px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                       {metric.label}
                     </span>
                     <LockKeyhole className="size-2.5 text-neon/75" />
@@ -2802,14 +2799,14 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
             </div>
           </div>
 
-          <div className="absolute bottom-4 right-4 w-[54%] rotate-[2deg] rounded-2xl border border-white/[0.09] bg-[#181c19]/95 p-3 shadow-xl shadow-black/50 backdrop-blur">
+          <div className="absolute bottom-4 right-4 w-[54%] rotate-[2deg] rounded-2xl border border-hairline bg-[#181c19]/95 p-3 shadow-xl shadow-black/50 backdrop-blur">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[7px] font-black uppercase tracking-[0.18em] text-neon">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
                 Your next move
               </p>
               <LockKeyhole className="size-3 text-neon" />
             </div>
-            <p className="mt-1.5 text-[11px] font-extrabold leading-tight text-white/65">
+            <p className="mt-1.5 text-[13px] font-bold leading-tight text-white/65">
               Unlock your personalized plan
             </p>
             <div className="mt-2 h-2 w-4/5 rounded bg-white/10 blur-[2px]" />
@@ -2836,7 +2833,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
           </button>
         </div>
 
-        <div className="mt-1 flex items-center justify-center gap-2 text-[9px] text-muted-foreground">
+        <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
           <LockKeyhole className="size-3 text-neon" />
           No photo or scan is required to continue.
         </div>
@@ -2865,7 +2862,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
         Back to the offer
       </button>
 
-      <div className="rounded-3xl border border-neon/20 bg-gradient-to-br from-neon/[0.08] via-transparent to-transparent p-1">
+      <div className="rounded-3xl border border-neon/20 bg-surface p-1">
         <PhotoSlot
           label="Your full-body photo"
           capture="environment"
@@ -2879,7 +2876,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
         />
       </div>
 
-      <div className="mt-4 rounded-[22px] border border-white/[0.06] bg-white/[0.025] p-4">
+      <div className="mt-4 rounded-[22px] border border-hairline bg-white/[0.025] p-4">
         <div className="flex items-center gap-2">
           <LockKeyhole className="size-4 text-neon" />
           <p className="text-xs font-semibold">Photo quality checklist</p>
@@ -2890,12 +2887,12 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
             "Level camera and even lighting",
             "Natural stance in fitted gymwear",
           ].map((item) => (
-            <div key={item} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div key={item} className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Check className="size-3.5 text-neon" /> {item}
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
           Ascendr uses a limited AI check to score this preview. Body-fat details, factor numbers,
           and your improvement plan stay locked until you subscribe.
         </p>
@@ -2909,7 +2906,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
             </span>
             <div>
               <p className="text-sm font-bold">Your photo is ready</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[13px] text-muted-foreground">
                 Prepare your photo-specific preview. No account or sign-in is required.
               </p>
             </div>
@@ -2941,7 +2938,7 @@ function BodyScanTeaserStep({ onUnlock, onSkip }: { onUnlock: () => void; onSkip
         Maybe later — continue setup
       </button>
 
-      <p className="mt-4 text-center text-[10px] leading-relaxed text-muted-foreground">
+      <p className="mt-4 text-center text-[12px] leading-relaxed text-muted-foreground">
         Results are a visual fitness opinion, not a medical assessment or body-composition
         measurement.
       </p>
@@ -2963,10 +2960,12 @@ const PLAN_STEPS = [
 function CustomizingPlan({
   ready,
   plan,
+  focusAreas,
   onDone,
 }: {
   ready: boolean;
   plan: SavedWorkoutPlan | null;
+  focusAreas: FocusArea[];
   onDone: () => void;
 }) {
   const [progress, setProgress] = useState(0);
@@ -2997,27 +2996,27 @@ function CustomizingPlan({
     <div className="relative min-h-dvh min-w-0 overflow-x-clip bg-background px-5 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)] sm:px-6">
       <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-80 w-[36rem] -translate-x-1/2 rounded-full bg-neon/[0.09] blur-[110px]" />
       <div className="mx-auto w-full max-w-md">
-        <header className="flex items-center justify-between border-b border-white/[0.07] pb-4">
+        <header className="flex items-center justify-between border-b border-hairline pb-4">
           <span className="flex items-center gap-2">
-            <AscendrLogo decorative className="size-6 rounded-lg border border-white/10" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+            <AscendrLogo decorative className="size-6 rounded-lg border border-hairline" />
+            <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-neon">
               Ascendr
             </span>
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Plan build · {currentStep} / {PLAN_STEPS.length}
           </span>
         </header>
 
         <main className="pt-7">
-          <section className="relative overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,0.075),rgba(255,255,255,0.018)_55%,rgba(183,255,62,0.075))] p-5 shadow-[0_24px_65px_-42px_rgba(0,0,0,0.95)]">
+          <section className="relative overflow-hidden rounded-[2rem] border border-hairline bg-[linear-gradient(145deg,rgba(255,255,255,0.075),rgba(255,255,255,0.018)_55%,rgba(183,255,62,0.075))] p-5 shadow-[0_24px_65px_-42px_rgba(0,0,0,0.95)]">
             <div className="pointer-events-none absolute -right-14 -top-14 size-44 rounded-full bg-neon/20 blur-3xl" />
             <div className="relative flex items-start gap-4">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neon">
+                <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-neon">
                   {complete ? "Complete" : "Crafting your routine"}
                 </p>
-                <h2 className="mt-3 max-w-[9ch] text-[31px] font-black leading-[1.02] tracking-[-0.055em]">
+                <h2 className="mt-3 max-w-[9ch] text-[31px] font-bold leading-[1.02] tracking-[-0.055em]">
                   {complete ? "Your plan is set." : "Your plan is taking shape."}
                 </h2>
                 <p className="mt-3 max-w-[24ch] text-sm leading-relaxed text-muted-foreground">
@@ -3034,10 +3033,10 @@ function CustomizingPlan({
                 aria-label={`${progressPercent}% complete`}
               >
                 <div className="grid size-full place-items-center rounded-full bg-[#101210] text-center">
-                  <span className="text-[22px] font-black leading-none tracking-[-0.06em]">
+                  <span className="text-[22px] font-bold leading-none tracking-[-0.06em]">
                     {progressPercent}
                   </span>
-                  <span className="-mt-1 text-[8px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <span className="-mt-1 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                     %
                   </span>
                 </div>
@@ -3054,6 +3053,12 @@ function CustomizingPlan({
             </div>
           </section>
 
+          {focusAreas.length > 0 && (
+            <div className="mt-4">
+              <PlanBuildScan focusAreas={focusAreas} progress={progress} />
+            </div>
+          )}
+
           <section className="mt-4 rounded-[1.6rem] border border-neon/20 bg-neon/[0.055] p-4">
             <div className="flex items-center gap-3">
               <span className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-neon/35 bg-neon/[0.08] text-neon">
@@ -3067,7 +3072,7 @@ function CustomizingPlan({
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-neon">
+                <span className="block text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
                   {complete ? "Ready to go" : "Fine-tuning now"}
                 </span>
                 <span className="mt-1 block truncate text-sm font-bold">{currentLabel}</span>
@@ -3075,15 +3080,15 @@ function CustomizingPlan({
             </div>
           </section>
 
-          <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-white/[0.075] bg-white/[0.025]">
-            <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-4">
+          <section className="mt-4 overflow-hidden rounded-[1.6rem] border border-hairline bg-white/[0.025]">
+            <div className="flex items-center justify-between border-b border-hairline px-4 py-4">
               <div>
-                <p className="text-xs font-black">Your training blueprint</p>
-                <p className="mt-1 text-[10px] text-muted-foreground">
+                <p className="text-xs font-bold">Your training blueprint</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
                   Built from the details you shared.
                 </p>
               </div>
-              <span className="rounded-full border border-white/[0.1] px-2.5 py-1 text-[9px] font-bold text-white/70">
+              <span className="rounded-full border border-white/[0.1] px-2.5 py-1 text-[11px] font-bold text-white/70">
                 Adaptive
               </span>
             </div>
@@ -3101,12 +3106,12 @@ function CustomizingPlan({
                   >
                     <span
                       className={cn(
-                        "grid size-6 shrink-0 place-items-center rounded-lg border text-[9px] font-black",
+                        "grid size-6 shrink-0 place-items-center rounded-lg border text-[11px] font-bold",
                         done
                           ? "border-neon bg-neon text-neon-foreground"
                           : active
                             ? "border-neon/60 bg-neon/[0.1] text-neon"
-                            : "border-white/10 text-muted-foreground",
+                            : "border-hairline text-muted-foreground",
                       )}
                     >
                       {done ? (
@@ -3123,7 +3128,7 @@ function CustomizingPlan({
                     </span>
                     <span
                       className={cn(
-                        "text-[10px] font-semibold leading-snug",
+                        "text-[12px] font-semibold leading-snug",
                         active && "text-neon",
                       )}
                     >
@@ -3142,18 +3147,18 @@ function CustomizingPlan({
               className="mt-4 rounded-[1.6rem] border border-neon/20 bg-neon/[0.055] p-4"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-sm font-extrabold">{plan.name}</p>
-                <span className="shrink-0 rounded-full bg-neon/10 px-2 py-1 text-[8px] font-bold uppercase text-neon">
+                <p className="truncate text-sm font-bold">{plan.name}</p>
+                <span className="shrink-0 rounded-full bg-neon/10 px-2 py-1 text-[11px] font-bold uppercase text-neon">
                   {plan.source === "ai" ? "AI built" : "Smart matched"}
                 </span>
               </div>
-              <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
                 {plan.summary}
               </p>
             </motion.section>
           )}
 
-          <p className="mx-auto mt-5 max-w-[34ch] text-center text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mx-auto mt-5 max-w-[34ch] text-center text-[13px] leading-relaxed text-muted-foreground">
             We’re using your goals, schedule, and setup to make the first week feel achievable.
           </p>
         </main>

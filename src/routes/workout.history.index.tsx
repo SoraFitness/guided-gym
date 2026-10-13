@@ -29,7 +29,7 @@ function HistoryPage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="min-w-0 text-[clamp(1.5rem,7vw,1.875rem)] font-extrabold leading-tight">
+        <h1 className="min-w-0 text-[clamp(1.5rem,7vw,1.875rem)] font-bold leading-tight">
           Workout history
         </h1>
       </div>
@@ -58,14 +58,14 @@ function HistoryPage() {
               key={w.id}
               to="/workout/history/$id"
               params={{ id: w.id }}
-              className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.05] bg-surface p-4 transition active:scale-[0.99]"
+              className="flex min-w-0 items-center gap-3 rounded-2xl border border-hairline bg-surface p-4 transition active:scale-[0.99]"
             >
               <div className="size-11 rounded-xl bg-neon/15 grid place-items-center">
                 <Trophy className="size-5 text-neon" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-bold truncate">{w.workoutTitle}</div>
-                <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                <div className="text-[13px] text-muted-foreground flex items-center gap-2 mt-0.5">
                   <span className="flex items-center gap-1">
                     <Calendar className="size-3" /> {fmtDate(w.completedAt)}
                   </span>
@@ -73,7 +73,7 @@ function HistoryPage() {
                     <Clock className="size-3" /> {w.durationMin}m
                   </span>
                 </div>
-                <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                <div className="text-[13px] text-muted-foreground mt-0.5 tabular-nums">
                   {w.totalSets} sets · {w.totalReps} reps · {w.totalVolume.toLocaleString()}{" "}
                   {w.unit}
                 </div>
@@ -89,9 +89,9 @@ function HistoryPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/[0.05] bg-surface p-2.5 text-center sm:p-3">
-      <div className="text-xl font-extrabold tabular-nums">{value}</div>
-      <div className="truncate text-[9px] uppercase tracking-wide text-muted-foreground sm:text-[10px] sm:tracking-wider">
+    <div className="min-w-0 rounded-2xl border border-hairline bg-surface p-2.5 text-center sm:p-3">
+      <div className="text-xl font-bold tabular-nums">{value}</div>
+      <div className="truncate text-[11px] uppercase tracking-wide text-muted-foreground sm:text-[12px] sm:tracking-wider">
         {label}
       </div>
     </div>

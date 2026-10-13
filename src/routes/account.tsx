@@ -314,17 +314,15 @@ function AccountScreen() {
       <main className="relative mx-auto flex w-full max-w-md flex-col py-5">
         <header className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2.5">
-            <AscendrLogo className="size-11 rounded-[15px] border border-white/10 shadow-[0_12px_30px_-14px_var(--color-neon)]" />
+            <AscendrLogo className="size-11 rounded-[15px] border border-hairline shadow-[0_12px_30px_-14px_var(--color-neon)]" />
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neon">
-                Ascendr
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">Ascendr</p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
                 Your private fitness system
               </p>
             </div>
           </div>
-          <span className="rounded-full border border-neon/20 bg-neon/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-neon">
+          <span className="rounded-full border border-neon/20 bg-neon/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-neon">
             Premium unlocked
           </span>
         </header>
@@ -339,9 +337,9 @@ function AccountScreen() {
             <span className="grid size-8 place-items-center rounded-xl bg-neon/15">
               <LockKeyhole className="size-4" />
             </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">One last step</span>
+            <span className="text-[12px] font-bold uppercase tracking-[0.2em]">One last step</span>
           </div>
-          <h1 className="mt-5 text-[clamp(2.2rem,10vw,3rem)] font-black leading-[0.94] tracking-[-0.06em]">
+          <h1 className="mt-5 text-[clamp(2.2rem,10vw,3rem)] font-bold leading-[0.94] tracking-[-0.06em]">
             Secure your <span className="text-neon">Ascendr account.</span>
           </h1>
           <p className="mt-4 max-w-[38ch] text-sm leading-relaxed text-muted-foreground">
@@ -368,7 +366,7 @@ function AccountScreen() {
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-2 rounded-2xl border border-white/[0.07] bg-black/20 p-1">
+          <div className="mt-6 grid grid-cols-2 rounded-2xl border border-hairline bg-black/20 p-1">
             {(["signup", "signin"] as const).map((option) => (
               <button
                 key={option}
@@ -442,7 +440,7 @@ function AccountScreen() {
             <div className="mt-5 space-y-3">
               {mode === "signup" && (
                 <label className="block">
-                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                     Display name <span className="normal-case tracking-normal">(optional)</span>
                   </span>
                   <Input
@@ -450,12 +448,12 @@ function AccountScreen() {
                     onChange={(event) => setName(event.target.value)}
                     placeholder="How should we call you?"
                     autoComplete="name"
-                    className="h-12 rounded-2xl border-white/10 bg-black/20"
+                    className="h-12 rounded-2xl border-hairline bg-black/20"
                   />
                 </label>
               )}
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   Email address
                 </span>
                 <Input
@@ -465,12 +463,12 @@ function AccountScreen() {
                   placeholder="you@example.com"
                   autoComplete="email"
                   inputMode="email"
-                  className="h-12 rounded-2xl border-white/10 bg-black/20"
+                  className="h-12 rounded-2xl border-hairline bg-black/20"
                 />
               </label>
               <div className="block">
                 <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                     Password
                   </span>
                   {mode === "signin" && (
@@ -495,7 +493,7 @@ function AccountScreen() {
                         : "Your password"
                     }
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 pr-12"
+                    className="h-12 rounded-2xl border-hairline bg-black/20 pr-12"
                   />
                   <button
                     type="button"
@@ -521,7 +519,7 @@ function AccountScreen() {
                 type="button"
                 onClick={continueWithEmail}
                 disabled={busy || !email.trim() || !password}
-                className="mt-2 h-13 w-full rounded-full bg-neon text-base font-extrabold text-neon-foreground shadow-[0_16px_34px_-16px_var(--neon)] hover:bg-neon/90"
+                className="mt-2 h-13 w-full rounded-full bg-neon text-base font-bold text-neon-foreground shadow-[0_16px_34px_-16px_var(--neon)] hover:bg-neon/90"
               >
                 {busy ? (
                   <Loader2 className="size-5 animate-spin" />
@@ -533,7 +531,7 @@ function AccountScreen() {
                 )}
               </Button>
 
-              <div className="flex items-center gap-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground before:h-px before:flex-1 before:bg-white/10 after:h-px after:flex-1 after:bg-white/10">
+              <div className="flex items-center gap-3 py-1 text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground before:h-px before:flex-1 before:bg-white/10 after:h-px after:flex-1 after:bg-white/10">
                 or
               </div>
               <Button
@@ -557,7 +555,7 @@ function AccountScreen() {
             </div>
           )}
 
-          <div className="mt-6 flex items-start gap-2 border-t border-white/[0.07] pt-4 text-[11px] leading-relaxed text-muted-foreground">
+          <div className="mt-6 flex items-start gap-2 border-t border-hairline pt-4 text-[13px] leading-relaxed text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
             <p>
               Your subscription remains linked to this private account. We never store your Apple

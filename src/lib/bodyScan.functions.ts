@@ -21,7 +21,7 @@ import {
   physiqueOverallScore,
 } from "@/lib/scanProgress";
 
-const OPENROUTER_BODY_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
+const OPENROUTER_BODY_SCAN_MODEL = "qwen/qwen3-vl-235b-a22b-instruct";
 const BODY_SCAN_ANALYSIS_VERSION = "body-progress-v2";
 
 const Input = z.object({
@@ -331,7 +331,11 @@ Hard rules:
 - Clearly distinguish shoulders, chest, back, arms, core, glutes, quads, hamstrings, and calves. Do not combine them into a generic upper-body or lower-body claim.
 - For each muscle group, report visibility as clear, partial, or not_visible. If a group cannot genuinely be assessed from this photo, set score to null and visibility to not_visible instead of guessing. Keep partial-visibility scores cautious and mention the limitation.
 - Overall Muscle Development should be broadly consistent with the visible muscle-group scores.
-- Body-fat estimate must be a broad visual range, never an exact percentage. Make highPercent at least 3 points greater than lowPercent. When the member context gives a sex, calibrate the range for that sex.
+- Body-fat estimate must be a broad visual range, never an exact percentage. Make highPercent at least 3 points greater than lowPercent.
+- Calibrate the range to the sex given in the member context, using these reference bands. Female and male scales differ by roughly 8-10 points for the same visible leanness, so using the wrong scale makes the estimate badly wrong.
+  - Female: essential 10-13, athletic 14-20, fit 21-24, average 25-31, above average 32+.
+  - Male: essential 3-5, athletic 6-13, fit 14-17, average 18-24, above average 25+.
+- If the member context gives no sex, say so in the body-fat insight, widen the range to at least 8 points, and never guess a sex from the photo.
 - Potential is an estimate of achievable physique upside through sustainable training, nutrition, recovery, and presentation. A higher score means stronger visible upside; it is an opinion, not a prediction, and is not simply the inverse of the current score.
 - Confidence must reflect how clearly this specific photo supports the assessment. Reduce it for loose clothing, uneven light, perspective distortion, dramatic posing, partial cropping, or obscured muscle groups even when the image remains usable.
 - If there is no single clearly visible full body, the person is substantially cropped or obscured, the photo is too dark or blurry, or the image is nude or not fitness-appropriate, set photoUsable to false and explain the retake needed in photoIssue.
@@ -1146,3 +1150,67 @@ export const analyzeBodyScan = createServerFn({ method: "POST" })
       throw new Error(userMessage);
     }
   });
+
+/**
+ * Runs the standard first-time Body Scan analysis on a single photo without
+ * touching the member's scan history, weekly quota, or photo storage.
+ *
+ * Used by the internal marketing tool, where scans are run on other people and
+ * must never be saved to the operator's account.
+ */
+export const analyzeBodyPhotoStandalone = createServerOnlyFn(
+  async ({
+    photo,
+    accessToken,
+    sex,
+  }: {
+    photo: string;
+    accessToken?: string;
+    /** Sex of the person in the photo, so the body-fat range is calibrated. */
+    sex?: "male" | "female";
+  }): Promise<BodyScanAiResult> => {
+    const response = await fetchAscendrAi(accessToken, "body-scan", {
+      model: OPENROUTER_BODY_SCAN_MODEL,
+      temperature: 0,
+      max_tokens: 2600,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "ascendr_body_scan",
+          strict: true,
+          schema: bodyScanJsonSchema,
+        },
+      },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: [
+                USER_PROMPT,
+                sex
+                  ? `MEMBER CONTEXT (supplied by the operator). Use it only to calibrate estimates; never infer anything else about the person.\n- Sex: ${sex}`
+                  : null,
+                BASELINE_COMPARISON_PROMPT,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
+            },
+            { type: "image_url", image_url: { url: photo } },
+          ],
+        },
+      ],
+    });
+
+    const payload = (await response.json()) as OpenRouterResponse;
+    if (!response.ok) throw new Error(payload.error?.message ?? `OpenRouter ${response.status}`);
+
+    const result = normalizeResult(parseModelJson(contentText(payload)));
+    if (!result.photoUsable) {
+      throw new Error(result.photoIssue || "Use a clear, uncropped full-body photo and try again.");
+    }
+    return result;
+  },
+);

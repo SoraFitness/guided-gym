@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { BodyPortal } from "@/components/app/BodyPortal";
 import {
   Search,
   RotateCcw,
@@ -10,6 +11,7 @@ import {
   Sparkles,
   Layers3,
   ChevronDown,
+  LayoutGrid,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
@@ -53,6 +55,26 @@ import {
   WorkoutCardTile,
 } from "@/components/WorkoutCard";
 import { cn } from "@/lib/utils";
+import { AnatomyPair, workoutFills } from "@/components/app/AnatomyFigure";
+import {
+  cardClass,
+  DifficultyBadge,
+  iconButtonClass,
+  Page,
+  PageHeader,
+  ProgressRing,
+  ScoreBar,
+  scoreColor,
+  SectionHeader,
+  secondaryButtonClass,
+} from "@/components/app/kit";
+import {
+  focusTitle,
+  TodayExerciseList,
+  TodayFocusCard,
+  TodayStartButton,
+  useTodayTraining,
+} from "@/components/workouts/TodayFocus";
 import { getWorkoutSplitOption, WORKOUT_SPLIT_OPTIONS } from "@/lib/workoutSplits";
 import { useCompletedWorkouts } from "@/lib/workoutSessionStore";
 import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
@@ -84,56 +106,53 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 function WorkoutsPage() {
-  const { profile } = useProfile();
   const [tab, setTab] = useState<Tab>("Recommended");
-  const savedPlans = useSavedWorkoutPlans();
-  const activePlan = useMemo(
-    () => getActiveWorkoutPlan(savedPlans, profile),
-    [savedPlans, profile],
-  );
-  const schedule = useMemo(
-    () => (profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : []),
-    [profile, activePlan],
-  );
-  const trainingDays = schedule.filter((day) => !day.isRestDay).length;
-  const completedDays = schedule.filter((day) => day.isCompleted && !day.isRestDay).length;
-  const splitName = profile ? getWorkoutSplitOption(profile.workoutSplit).name : "Smart training";
+  const training = useTodayTraining();
+  const { profile, completedDays, trainingDays } = training;
+  const dateLabel = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
 
   return (
-    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
-      <header className="flex items-start justify-between gap-4 px-1">
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Train</p>
-          <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
-            Find your next win.
-          </h1>
-          {profile && (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {splitName} · {GOAL_LABELS[profile.goal]} · {profile.daysPerWeek} days/week
-            </p>
-          )}
-        </div>
-        <Link
-          to="/workout/history"
-          aria-label="Workout history"
-          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface text-muted-foreground transition active:scale-95"
-        >
-          <History className="size-5" />
-        </Link>
-      </header>
+    <Page className="pb-32">
+      <PageHeader
+        kicker={
+          profile ? `${dateLabel} · ${completedDays} of ${trainingDays} this week` : dateLabel
+        }
+        title="Train"
+        actions={
+          <>
+            <Link to="/workout/history" aria-label="Workout history" className={iconButtonClass}>
+              <History />
+            </Link>
+            <button
+              type="button"
+              aria-label="Open workout library"
+              onClick={() => setTab("All Workouts")}
+              className={iconButtonClass}
+            >
+              <LayoutGrid />
+            </button>
+          </>
+        }
+      />
 
       {profile && (
-        <div className="mt-5 grid grid-cols-3 gap-2.5">
-          <TrainingMetric label="This week" value={`${completedDays}/${trainingDays}`} />
-          <TrainingMetric label="Session" value={`${profile.sessionMinutes}m`} />
-          <TrainingMetric label="Level" value={profile.experience} capitalize />
-        </div>
+        <>
+          <TodayFocusCard training={training} className="mt-5" />
+          <div className="mt-3">
+            <TodayStartButton training={training} />
+          </div>
+          <TodayExerciseList training={training} />
+        </>
       )}
 
       {/* Segmented tabs */}
       <div
         data-tour="tour-workouts-tabs"
-        className="mt-5 relative grid grid-cols-3 rounded-2xl border border-white/[0.06] bg-surface p-1"
+        className="relative mt-8 grid grid-cols-3 rounded-full border border-hairline bg-surface p-1"
       >
         {TABS.map((t) => {
           const active = tab === t;
@@ -141,20 +160,17 @@ function WorkoutsPage() {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="relative h-9 text-[11px] font-semibold rounded-full"
+              className="relative h-10 rounded-full text-[14px] font-semibold"
             >
               {active && (
                 <motion.span
                   layoutId="tab-pill"
-                  className="absolute inset-0 rounded-xl bg-neon"
+                  className="absolute inset-0 rounded-full bg-white/[0.1]"
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
               <span
-                className={cn(
-                  "relative",
-                  active ? "text-neon-foreground" : "text-muted-foreground",
-                )}
+                className={cn("relative", active ? "text-foreground" : "text-muted-foreground")}
               >
                 {TAB_LABELS[t]}
               </span>
@@ -177,28 +193,7 @@ function WorkoutsPage() {
           {tab === "All Workouts" && <AllWorkoutsView />}
         </motion.div>
       </AnimatePresence>
-    </div>
-  );
-}
-
-function TrainingMetric({
-  label,
-  value,
-  capitalize = false,
-}: {
-  label: string;
-  value: string;
-  capitalize?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/[0.055] bg-white/[0.025] px-3 py-2.5">
-      <p className="text-[8px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </p>
-      <p className={cn("mt-1 truncate text-[12px] font-extrabold", capitalize && "capitalize")}>
-        {value}
-      </p>
-    </div>
+    </Page>
   );
 }
 
@@ -230,58 +225,37 @@ function RecommendedView() {
 
   return (
     <div>
+      <button
+        type="button"
+        onClick={() => setShowPlanBuilder(true)}
+        className={cn(
+          cardClass,
+          "mb-4 flex w-full items-center gap-3.5 p-4 text-left transition active:scale-[0.99]",
+        )}
+      >
+        <div className="grid size-12 shrink-0 place-items-center rounded-[16px] bg-neon text-neon-foreground">
+          <WandSparkles className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-bold">Build an AI plan</p>
+          <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+            Your goal, schedule and equipment
+          </p>
+        </div>
+        <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+      </button>
+
       {activePlan && <SavedPlanSummary plan={activePlan} />}
 
       {topPick && <AdaptiveSessionBrief workout={topPick} insights={muscleInsights} />}
 
-      <div className="mb-3 flex items-end justify-between gap-3 px-1">
-        <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
-            {activePlan ? "Start your plan" : "Best match"}
-          </p>
-          <h2 className="mt-0.5 text-lg font-extrabold">
-            {activePlan ? "Your first session" : "Made for today"}
-          </h2>
-        </div>
-        <span className="text-[9px] text-muted-foreground">
-          Ranked from {workoutCatalogSize.toLocaleString()} plans
-        </span>
-      </div>
-
-      {topPick && <WorkoutCardSpotlight w={topPick} />}
-
-      <button
-        type="button"
-        onClick={() => setShowPlanBuilder(true)}
-        className="mb-4 mt-4 flex w-full items-center gap-3 overflow-hidden rounded-[22px] border border-neon/25 bg-gradient-to-r from-neon/[0.12] via-neon/[0.045] to-transparent p-3.5 text-left transition active:scale-[0.99]"
-      >
-        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground shadow-[0_0_24px_-8px_var(--color-neon)]">
-          <WandSparkles className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
-            Ascendr AI plan creator
-          </p>
-          <h2 className="mt-0.5 text-sm font-extrabold">Build a plan around your goal</h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            Choose your focus, schedule, equipment, and intensity.
-          </p>
-        </div>
-        <ChevronRight className="size-5 shrink-0 text-neon" />
-      </button>
-
       {quickPicks.length > 0 && (
-        <section className="mt-6">
-          <div className="mb-3 flex items-end justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
-                Your training mix
-              </p>
-              <h2 className="mt-0.5 text-lg font-bold">More picked for you</h2>
-            </div>
-            <span className="text-[10px] text-muted-foreground">Different focus each session</span>
-          </div>
-          <div className="space-y-2">
+        <section className="mt-7">
+          <SectionHeader
+            title="Picked for you"
+            meta={`From ${workoutCatalogSize.toLocaleString()} plans`}
+          />
+          <div className="space-y-2.5">
             {quickPicks.map((w) => (
               <WorkoutCardRow key={w.id} w={w} />
             ))}
@@ -291,13 +265,8 @@ function RecommendedView() {
 
       {freshPicks.length > 0 && (
         <section className="mt-7">
-          <div className="mb-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
-              Fresh alternatives
-            </p>
-            <h2 className="mt-0.5 text-lg font-bold">Switch up your routine</h2>
-          </div>
-          <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-3 scrollbar-none">
+          <SectionHeader title="Switch it up" />
+          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-3 scrollbar-none sm:-mx-5 sm:px-5">
             {freshPicks.map((w) => (
               <WorkoutCardHero key={w.id} w={w} className="w-[220px]" />
             ))}
@@ -305,11 +274,13 @@ function RecommendedView() {
         </section>
       )}
 
-      <AnimatePresence>
-        {showPlanBuilder && (
-          <WorkoutPlanBuilder profile={profile} onClose={() => setShowPlanBuilder(false)} />
-        )}
-      </AnimatePresence>
+      <BodyPortal>
+        <AnimatePresence>
+          {showPlanBuilder && (
+            <WorkoutPlanBuilder profile={profile} onClose={() => setShowPlanBuilder(false)} />
+          )}
+        </AnimatePresence>
+      </BodyPortal>
     </div>
   );
 }
@@ -343,65 +314,34 @@ function AdaptiveSessionBrief({
   ).length;
 
   return (
-    <section className="relative mb-5 overflow-hidden rounded-[27px] border border-analytics-teal/20 bg-gradient-to-br from-analytics-teal/[0.16] via-surface to-surface p-4 shadow-[0_24px_54px_-38px_oklch(0.72_0.11_190/0.75)]">
-      <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full border border-analytics-teal/15" />
-      <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-analytics-teal/10 blur-3xl" />
-      <div className="relative flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-analytics-teal/20 bg-analytics-teal/10 text-analytics-teal">
-          <Gauge className="size-5" />
-        </span>
+    <section className={cn(cardClass, "mb-4 p-5")}>
+      <div className="flex items-center gap-4">
+        <ProgressRing value={readiness / 100} size={76} stroke={7} color={scoreColor(readiness)}>
+          <span className="text-[20px] font-bold tabular-nums">{readiness}</span>
+        </ProgressRing>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-analytics-teal">
-              Adaptive session brief
-            </p>
-            <span className="rounded-full border border-white/10 bg-black/15 px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/65">
-              Estimate
-            </span>
-          </div>
-          <h2 className="mt-1 text-[17px] font-extrabold tracking-[-0.025em]">
-            {readiness >= 75 ? "Good fit for today." : "Adjust the pace, keep the plan."}
+          <p className="kicker">Readiness</p>
+          <h2 className="mt-1 text-[18px] font-bold leading-tight">
+            {readiness >= 75 ? "Good to go hard" : "Ease into it today"}
           </h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {readyCount} of {sessionMuscles.length} session regions are ready for productive work.
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {readyCount}/{sessionMuscles.length} muscles recovered
           </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <strong className="text-[28px] font-extrabold leading-none tabular-nums text-analytics-teal">
-            {readiness}
-          </strong>
-          <span className="mt-1 block text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
-            readiness
-          </span>
         </div>
       </div>
 
-      <div className="relative mt-4 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-        {sessionMuscles.slice(0, 4).map((insight) => (
-          <div
+      <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
+        {sessionMuscles.slice(0, 4).map((insight, index) => (
+          <ScoreBar
             key={insight.muscle}
-            className="min-w-[104px] flex-1 rounded-2xl border border-white/[0.065] bg-black/20 px-3 py-2.5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-[10px] font-bold">{insight.label}</span>
-              <span className="text-[11px] font-extrabold tabular-nums text-analytics-teal">
-                {insight.readiness}%
-              </span>
-            </div>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.08]">
-              <span
-                className="block h-full rounded-full bg-analytics-teal"
-                style={{ width: `${insight.readiness}%` }}
-              />
-            </div>
-            <p className="mt-1.5 truncate text-[8px] font-semibold text-muted-foreground">
-              {insight.status}
-            </p>
-          </div>
+            label={insight.label}
+            score={insight.readiness}
+            delay={index * 0.06}
+          />
         ))}
       </div>
-      <p className="relative mt-3 text-[8px] leading-relaxed text-muted-foreground">
-        Readiness is a training estimate from your logged work—not a medical recovery measurement.
+      <p className="mt-4 text-[11px] text-muted-foreground/80">
+        Estimated from your logged sets, not a medical measurement.
       </p>
     </section>
   );
@@ -410,39 +350,36 @@ function AdaptiveSessionBrief({
 function SavedPlanSummary({ plan }: { plan: SavedWorkoutPlan }) {
   const planWorkouts = plan.workoutIds.map(getWorkout).filter(Boolean);
   return (
-    <section className="mb-5 rounded-[22px] border border-white/[0.07] bg-white/[0.03] p-4">
+    <section className={cn(cardClass, "mb-4 p-5")}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
-            Your active plan
-          </p>
-          <h2 className="mt-1 font-extrabold">{plan.name}</h2>
+        <div className="min-w-0">
+          <p className="kicker">Your plan</p>
+          <h2 className="mt-1 truncate text-[18px] font-bold">{plan.name}</h2>
         </div>
-        <span className="rounded-full bg-neon/10 px-2 py-1 text-[9px] font-bold uppercase text-neon">
+        <span className="shrink-0 rounded-full bg-neon/12 px-2.5 py-1 text-[12px] font-bold text-neon">
           {plan.source === "ai" ? "AI built" : "Smart match"}
         </span>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{plan.summary}</p>
-      <div className="mt-3 grid gap-2">
+      <div className="mt-4 grid gap-2">
         {planWorkouts.slice(0, 3).map((workout, index) =>
           workout ? (
             <Link
               key={workout.id}
               to="/workout/$id"
               params={{ id: workout.id }}
-              className="flex items-center gap-3 rounded-2xl border border-white/[0.05] bg-black/15 px-3 py-2.5"
+              className="flex items-center gap-3 rounded-[16px] bg-white/[0.04] px-3 py-3"
             >
-              <span className="grid size-7 place-items-center rounded-full bg-neon/12 text-[10px] font-black text-neon">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-neon/12 text-[13px] font-bold text-neon">
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[12px] font-bold">{workout.title}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="truncate text-[15px] font-semibold">{workout.title}</p>
+                <p className="truncate text-[12px] text-muted-foreground">
                   {workout.duration} min ·{" "}
                   {workout.targetMuscles.map((m) => FOCUS_LABELS[m]).join(" + ")}
                 </p>
               </div>
-              <ChevronRight className="size-3.5 text-muted-foreground" />
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </Link>
           ) : null,
         )}
@@ -770,36 +707,35 @@ function AllWorkoutsView() {
 
   return (
     <div>
-      <label className="flex items-center gap-3 h-12 rounded-full bg-white/[0.04] border border-white/[0.06] px-4">
-        <Search className="size-4 text-muted-foreground" />
+      <label className="flex h-12 items-center gap-3 rounded-[16px] border border-hairline bg-surface px-4">
+        <Search className="size-[18px] text-muted-foreground" />
         <input
-          className="flex-1 bg-transparent outline-none text-sm"
+          className="flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
           placeholder="Search workouts"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           maxLength={60}
         />
       </label>
-      <div className="-mx-5 px-5 mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+      <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-2 scrollbar-none sm:-mx-5 sm:px-5">
         {categoryChips.map((c) => (
           <button
             key={c}
             onClick={() => setChip(c)}
             className={cn(
-              "shrink-0 h-9 px-4 rounded-full text-xs font-semibold border transition",
+              "h-10 shrink-0 rounded-full border px-4 text-[14px] font-semibold transition",
               chip === c
-                ? "bg-neon text-neon-foreground border-neon"
-                : "bg-white/[0.04] border-white/[0.06] text-foreground",
+                ? "border-neon bg-neon text-neon-foreground"
+                : "border-hairline bg-surface text-foreground/85",
             )}
           >
             {c}
           </button>
         ))}
       </div>
-      <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>{list.length.toLocaleString()} plans match your profile</span>
-        <span>Showing {Math.min(visible.length, list.length).toLocaleString()}</span>
-      </div>
+      <p className="mt-2 px-1 text-[13px] text-muted-foreground">
+        {list.length.toLocaleString()} workouts match your setup
+      </p>
       <div className="mt-5 grid grid-cols-2 gap-3">
         {visible.map((w) => (
           <WorkoutCardTile key={w.id} w={w} />
@@ -809,7 +745,7 @@ function AllWorkoutsView() {
         <button
           type="button"
           onClick={() => setVisibleCount((count) => count + 40)}
-          className="mt-5 h-12 w-full rounded-full border border-white/[0.08] bg-white/[0.04] text-sm font-semibold"
+          className={cn(secondaryButtonClass, "mt-5")}
         >
           Load 40 more
         </button>
@@ -880,22 +816,20 @@ function WeeklyScheduleView() {
 
   return (
     <div>
-      <section className="mb-4 overflow-hidden rounded-[24px] border border-white/[0.07] bg-white/[0.03]">
+      <section className={cn(cardClass, "mb-4 overflow-hidden")}>
         <button
           type="button"
           onClick={() => setShowSplits((open) => !open)}
           className="flex w-full items-center gap-3 p-4 text-left"
           aria-expanded={showSplits}
         >
-          <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-neon/15 text-neon">
+          <div className="grid size-12 shrink-0 place-items-center rounded-[16px] bg-neon/12 text-neon">
             <Layers3 className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neon">
-              Workout split
-            </p>
-            <p className="mt-0.5 font-bold">{selectedSplit.name}</p>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            <p className="kicker text-[11px]">Workout split</p>
+            <p className="mt-0.5 text-[16px] font-bold">{selectedSplit.name}</p>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
               {selectedSplit.bestFor}
             </p>
           </div>
@@ -955,22 +889,21 @@ function WeeklyScheduleView() {
         </AnimatePresence>
       </section>
 
-      <div
-        data-tour="tour-workouts-plan"
-        className="rounded-[24px] bg-gradient-to-br from-neon/15 to-transparent border border-white/[0.06] p-4 flex items-center gap-4"
-      >
-        <div className="size-12 rounded-2xl bg-neon/20 grid place-items-center">
-          <Sparkles className="size-5 text-neon" />
-        </div>
+      <div data-tour="tour-workouts-plan" className={cn(cardClass, "flex items-center gap-4 p-4")}>
+        <ProgressRing value={trainingDays ? completedDays / trainingDays : 0} size={52} stroke={5}>
+          <span className="text-[12px] font-bold tabular-nums">
+            {completedDays}/{trainingDays}
+          </span>
+        </ProgressRing>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold">Your weekly plan</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">
+          <div className="text-[16px] font-bold">This week</div>
+          <div className="mt-0.5 text-[13px] text-muted-foreground">
             {completedDays}/{trainingDays} sessions complete · {profile.daysPerWeek} days/wk
           </div>
         </div>
         <button
           onClick={rebuild}
-          className="h-10 px-3 rounded-full bg-white/[0.06] border border-white/[0.08] text-[11px] font-semibold flex items-center gap-1.5 active:scale-95 transition"
+          className="flex h-10 items-center gap-1.5 rounded-full border border-hairline bg-white/[0.05] px-3.5 text-[13px] font-semibold transition active:scale-95"
         >
           <RotateCcw className="size-3.5" /> Rebuild
         </button>
@@ -989,15 +922,15 @@ function WeeklyScheduleView() {
         )}
       </AnimatePresence>
 
-      <div className="mt-4 grid grid-cols-2 rounded-full border border-white/[0.06] bg-white/[0.035] p-1">
+      <div className="mt-4 grid grid-cols-2 rounded-full border border-hairline bg-surface p-1">
         {(["week", "month"] as const).map((mode) => (
           <button
             key={mode}
             type="button"
             onClick={() => setCalendarMode(mode)}
             className={cn(
-              "flex h-9 items-center justify-center gap-2 rounded-full text-[11px] font-semibold transition",
-              calendarMode === mode ? "bg-neon text-neon-foreground" : "text-muted-foreground",
+              "flex h-10 items-center justify-center gap-2 rounded-full text-[14px] font-semibold transition",
+              calendarMode === mode ? "bg-white/[0.1] text-foreground" : "text-muted-foreground",
             )}
           >
             {mode === "week" ? (
@@ -1108,7 +1041,7 @@ function MonthlyTrainingCalendar({
     : "";
 
   return (
-    <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-4">
+    <section className={cn(cardClass, "mt-4 p-4")}>
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -1166,7 +1099,7 @@ function MonthlyTrainingCalendar({
                 "relative flex aspect-square flex-col items-center justify-center rounded-xl border text-[11px] font-semibold tabular-nums transition",
                 outside && "cursor-default opacity-25",
                 selected
-                  ? "border-neon bg-neon/15 text-neon shadow-[0_0_18px_-10px_var(--neon)]"
+                  ? "border-neon bg-neon/15 text-neon"
                   : today
                     ? "border-neon/60 text-neon"
                     : "border-transparent",
@@ -1269,7 +1202,7 @@ function MonthlyTrainingCalendar({
                     <Link
                       to="/workout/$id/session"
                       params={{ id: selectedDay.workoutId }}
-                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-neon text-[12px] font-bold text-neon-foreground shadow-[0_0_20px_-10px_var(--neon)] transition active:scale-[0.98]"
+                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-neon text-[12px] font-bold text-neon-foreground transition active:scale-[0.98]"
                     >
                       <Play className="size-3.5 fill-current" /> Start this workout
                     </Link>
@@ -1353,18 +1286,16 @@ function DailyScheduleCarousel({
               aria-current={selected ? "date" : undefined}
               aria-label={`${day.dayName}, ${day.dateISO}${day.isToday ? ", today" : ""}`}
               className={cn(
-                "relative flex min-w-0 flex-col items-center rounded-2xl border py-2.5 transition",
+                "relative flex min-w-0 flex-col items-center rounded-[16px] border py-2.5 transition",
                 selected
-                  ? "border-neon bg-neon text-neon-foreground shadow-[0_0_18px_-8px_var(--neon)]"
+                  ? "border-neon bg-neon text-neon-foreground"
                   : day.isToday
-                    ? "border-neon/35 bg-neon/[0.08] text-neon"
-                    : "border-white/[0.06] bg-white/[0.025] text-muted-foreground",
+                    ? "border-neon/40 text-neon"
+                    : "border-hairline bg-surface text-muted-foreground",
               )}
             >
-              <span className="text-[8px] font-bold uppercase tracking-wide">
-                {day.dayName.slice(0, 3)}
-              </span>
-              <span className="mt-1 text-sm font-black leading-none tabular-nums">
+              <span className="text-[11px] font-semibold">{day.dayName.slice(0, 3)}</span>
+              <span className="mt-1 text-[16px] font-bold leading-none tabular-nums">
                 {dateNumber}
               </span>
               <span
@@ -1395,10 +1326,8 @@ function DailyScheduleCarousel({
           <ChevronLeft className="size-4" />
         </button>
         <div className="min-w-0 text-center" aria-live="polite">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">
-            {relativeLabel}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="kicker text-neon">{relativeLabel}</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             {selectedDay.dayName} · Swipe to change days
           </p>
         </div>
@@ -1463,22 +1392,22 @@ function DailyScheduleCarousel({
 function StatusBadge({ day }: { day: WeeklyScheduleDay }) {
   if (day.isCompleted) {
     return (
-      <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-emerald-400/15 text-emerald-300 flex items-center gap-1">
-        <Check className="size-3" /> Done
+      <span className="flex items-center gap-1 rounded-full bg-score-high/15 px-2.5 py-1 text-[12px] font-bold text-score-high">
+        <Check className="size-3.5" /> Done
       </span>
     );
   }
   if (day.isToday) {
     return (
-      <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-neon text-neon-foreground">
+      <span className="rounded-full bg-neon px-2.5 py-1 text-[12px] font-bold text-neon-foreground">
         Today
       </span>
     );
   }
   const isPast = new Date(`${day.dateISO}T23:59:59`).getTime() < Date.now();
   return (
-    <span className="text-[10px] font-semibold uppercase px-2 py-1 rounded-full bg-white/[0.05] text-muted-foreground">
-      {isPast ? "Previous" : "Upcoming"}
+    <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-muted-foreground">
+      {isPast ? "Missed" : "Upcoming"}
     </span>
   );
 }
@@ -1490,67 +1419,70 @@ function TrainingDayCard({
   day: WeeklyScheduleDay;
   onToggle: (id: string) => void;
 }) {
+  const workout = day.workoutId ? getWorkout(day.workoutId) : undefined;
   return (
-    <div
-      className={cn(
-        "rounded-[24px] border p-5 transition",
-        day.isToday
-          ? "bg-gradient-to-br from-neon/10 via-white/[0.03] to-white/[0.02] border-neon/40"
-          : "bg-white/[0.03] border-white/[0.06]",
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+    <div className={cn(cardClass, "p-5", day.isToday && "border-neon/35")}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="kicker text-[11px]">
             {day.dayName} · {day.splitLabel}
-          </div>
-          <h3 className="mt-0.5 text-xl font-extrabold leading-tight">{day.workoutTitle}</h3>
+          </p>
+          <h3 className="mt-1 text-[22px] font-bold leading-tight tracking-[-0.02em]">
+            {workout ? focusTitle(workout, day.workoutTitle) : day.workoutTitle}
+          </h3>
         </div>
         <StatusBadge day={day} />
       </div>
 
-      <p className="mt-1 text-[12px] text-muted-foreground">{day.focus}</p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Pill icon={Clock}>{day.duration} min</Pill>
-        <Pill icon={Dumbbell}>{day.difficulty}</Pill>
         <Pill icon={Flame}>{day.estimatedCalories} kcal</Pill>
-        <span className="px-2 py-1 rounded-full bg-white/[0.05] text-muted-foreground">
-          {day.equipment}
-        </span>
+        <DifficultyBadge level={day.difficulty} />
       </div>
 
+      {workout && (
+        <AnatomyPair
+          fills={workoutFills(
+            workout.targetMuscles,
+            workout.exercises.map((exercise) => exercise.muscleGroup),
+          )}
+          className="mx-auto mt-5 max-w-[220px]"
+          figureClassName="max-h-[150px]"
+          captions={false}
+        />
+      )}
+
       {day.exercises.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-4 flex flex-wrap gap-1.5">
           {day.exercises.slice(0, 4).map((ex) => (
             <span
               key={ex}
-              className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.05]"
+              className="max-w-[48%] truncate rounded-full bg-white/[0.07] px-3 py-1.5 text-[12px] font-semibold"
             >
               {ex}
             </span>
           ))}
           {day.exercises.length > 4 && (
-            <span className="text-[10px] px-2 py-1 rounded-md text-muted-foreground">
+            <span className="px-2 py-1.5 text-[12px] text-muted-foreground">
               +{day.exercises.length - 4} more
             </span>
           )}
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-5 flex items-center gap-2">
         {day.workoutId ? (
           <Link
             to="/workout/$id/session"
             params={{ id: day.workoutId }}
-            className="flex-1 h-11 rounded-full bg-neon text-neon-foreground font-semibold text-[13px] flex items-center justify-center gap-1.5 glow-neon active:scale-[0.98] transition"
+            className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-[16px] bg-neon text-[15px] font-bold text-neon-foreground transition active:scale-[0.98]"
           >
             <Play className="size-4 fill-current" /> Start
           </Link>
         ) : (
           <button
             disabled
-            className="flex-1 h-11 rounded-full bg-white/[0.05] text-muted-foreground font-semibold text-[13px]"
+            className="h-12 flex-1 rounded-[16px] bg-white/[0.05] text-[14px] font-semibold text-muted-foreground"
           >
             No match
           </button>
@@ -1559,22 +1491,22 @@ function TrainingDayCard({
           <Link
             to="/workout/$id"
             params={{ id: day.workoutId }}
-            className="h-11 px-4 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center"
+            className="flex h-12 items-center rounded-[16px] border border-hairline bg-white/[0.05] px-4 text-[14px] font-semibold"
           >
             Details
           </Link>
         )}
         <button
           onClick={() => onToggle(day.id)}
-          aria-label="Mark complete"
+          aria-label={day.isCompleted ? "Mark not done" : "Mark complete"}
           className={cn(
-            "size-11 rounded-full grid place-items-center border transition",
+            "grid size-12 place-items-center rounded-[16px] border transition",
             day.isCompleted
-              ? "bg-emerald-400/20 border-emerald-400/40 text-emerald-300"
-              : "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
+              ? "border-score-high/40 bg-score-high/15 text-score-high"
+              : "border-hairline bg-white/[0.05] text-muted-foreground",
           )}
         >
-          <Check className="size-4" />
+          <Check className="size-5" />
         </button>
       </div>
     </div>
@@ -1583,27 +1515,25 @@ function TrainingDayCard({
 
 function RestDayCard({ day }: { day: WeeklyScheduleDay }) {
   return (
-    <div className="rounded-[24px] border border-white/[0.04] bg-white/[0.015] p-5">
-      <div className="flex items-center justify-between">
+    <div className={cn(cardClass, "p-5")}>
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {day.dayName}
-          </div>
-          <h3 className="mt-0.5 text-lg font-bold text-muted-foreground">Rest & Recovery</h3>
+          <p className="kicker text-[11px]">{day.dayName}</p>
+          <h3 className="mt-1 text-[22px] font-bold leading-tight">Rest &amp; recover</h3>
         </div>
         {day.isToday && (
-          <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-neon text-neon-foreground">
+          <span className="rounded-full bg-neon px-2.5 py-1 text-[12px] font-bold text-neon-foreground">
             Today
           </span>
         )}
       </div>
-      <p className="mt-1 text-[12px] text-muted-foreground">Stretch, walk, hydrate, and recover.</p>
+      <p className="mt-1.5 text-[14px] text-muted-foreground">Stretch, walk, hydrate.</p>
       <Link
         to="/workout/$id"
         params={{ id: "mobility-recovery" }}
-        className="mt-3 inline-flex h-9 px-4 rounded-full bg-white/[0.04] border border-white/[0.06] text-[11px] font-semibold items-center"
+        className="mt-4 inline-flex h-11 items-center rounded-[14px] border border-hairline bg-white/[0.05] px-4 text-[14px] font-semibold"
       >
-        Mobility Session
+        Mobility session
       </Link>
     </div>
   );
@@ -1611,8 +1541,8 @@ function RestDayCard({ day }: { day: WeeklyScheduleDay }) {
 
 function Pill({ icon: Icon, children }: { icon: typeof Clock; children: React.ReactNode }) {
   return (
-    <span className="px-2 py-1 rounded-full bg-white/[0.05] flex items-center gap-1 tabular-nums">
-      <Icon className="size-3" />
+    <span className="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold tabular-nums">
+      <Icon className="size-3.5 text-muted-foreground" />
       {children}
     </span>
   );

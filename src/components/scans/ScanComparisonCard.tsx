@@ -84,46 +84,40 @@ export function ScanComparisonCard({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[28px] border p-5",
-        copy.accent ? "border-neon/20 bg-neon/[0.055]" : "border-white/[0.08] bg-white/[0.035]",
+        "rounded-[24px] border p-5",
+        copy.accent ? "border-neon/25 bg-neon/[0.06]" : "border-hairline bg-surface",
       )}
     >
-      {copy.accent && (
-        <div className="pointer-events-none absolute -right-16 -top-16 size-40 rounded-full bg-neon/10 blur-3xl" />
-      )}
-      <div className="relative flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-neon">
-          <GitCompareArrows className="size-4" />
-          <p className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.eyebrow}</p>
-        </div>
-        <span className="rounded-full border border-white/[0.06] bg-black/20 px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-white/45">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex items-center gap-2 text-[13px] font-semibold text-neon">
+          <GitCompareArrows className="size-4" /> {copy.eyebrow}
+        </p>
+        <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-muted-foreground">
           {copy.badge}
         </span>
       </div>
-      <h2 className="relative mt-4 text-xl font-bold tracking-[-0.025em]">{copy.title}</h2>
-      <p className="relative mt-2 text-[11px] leading-relaxed text-white/52">{copy.body}</p>
+      <h2 className="mt-3 text-[18px] font-bold tracking-[-0.02em]">{copy.title}</h2>
+      <p className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{copy.body}</p>
 
       {comparison?.status === "change_detected" && visibleDeltas.length > 0 && (
-        <div className="relative mt-4 grid grid-cols-4 gap-2">
+        <div className="mt-4 grid grid-cols-4 gap-2">
           {visibleDeltas.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-white/[0.06] bg-black/20 px-2 py-3 text-center"
-            >
+            <div key={item.label} className="rounded-[16px] bg-white/[0.04] px-2 py-3 text-center">
               <p
-                className={cn(
-                  "text-base font-black",
-                  item.value > 0
-                    ? "text-neon"
-                    : item.value < 0
-                      ? "text-destructive"
-                      : "text-white/50",
-                )}
+                className="text-[18px] font-bold tabular-nums"
+                style={{
+                  color:
+                    item.value > 0
+                      ? "var(--color-score-high)"
+                      : item.value < 0
+                        ? "var(--color-score-low)"
+                        : undefined,
+                }}
               >
                 {item.value > 0 ? "+" : ""}
                 {item.value}
               </p>
-              <p className="mt-1 text-[7px] font-bold uppercase tracking-wider text-white/35">
+              <p className="mt-1 truncate text-[11px] font-medium text-muted-foreground">
                 {item.label}
               </p>
             </div>

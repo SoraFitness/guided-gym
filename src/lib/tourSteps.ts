@@ -52,8 +52,8 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: "progress",
     targetId: "tour-progress-card",
-    title: "Activity & streaks",
-    body: "Minutes trained today, weekly count, and your current streak — your momentum, visualized.",
+    title: "Your scores",
+    body: "Your latest Body and Face Scan scores, and which way they're trending.",
     icon: BarChart3,
     route: "/home",
     placement: "bottom",

@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { iconButtonClass, Page, PageHeader } from "@/components/app/kit";
 import { ProgressPicturesCard } from "@/components/photos/ProgressPicturesCard";
 import {
   getWorkoutSplitOption,
@@ -256,20 +257,20 @@ function ProfilePage() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
                 Membership
               </p>
               <h3 className="mt-0.5 text-sm font-bold">Ascendr Pro · {subscriptionPlan}</h3>
             </div>
             {subscription.ready && subscription.active && (
-              <span className="rounded-full border border-neon/25 bg-neon/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-neon">
+              <span className="rounded-full border border-neon/25 bg-neon/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-neon">
                 Active
               </span>
             )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">{subscriptionStatus}</p>
           {subscriptionDateLabel && (
-            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
               <CalendarDays className="size-3.5 text-neon" />
               {subscription.willRenew === false ? "Access through" : "Next billing date"}{" "}
               {subscriptionDateLabel}
@@ -277,7 +278,7 @@ function ProfilePage() {
           )}
         </div>
       </div>
-      <div className="border-t border-white/[0.06] p-3">
+      <div className="border-t border-hairline p-3">
         <a
           href="https://apps.apple.com/account/subscriptions"
           target="_blank"
@@ -287,7 +288,7 @@ function ProfilePage() {
           Manage subscription
           <ExternalLink className="size-4" />
         </a>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+        <p className="mt-2 text-center text-[12px] text-muted-foreground">
           Cancel or change your plan in Apple App Store subscriptions.
         </p>
       </div>
@@ -298,18 +299,18 @@ function ProfilePage() {
     return (
       <div className="px-4 pb-32 pt-5 animate-slide-up sm:px-5">
         <header className="px-1">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Profile</p>
-          <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">Profile</p>
+          <h1 className="mt-1 text-[29px] font-bold leading-tight tracking-[-0.04em]">
             Make Ascendr yours.
           </h1>
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             A few details unlock personalized training and nutrition.
           </p>
         </header>
 
         {accountSection}
 
-        <section className="relative mt-5 overflow-hidden rounded-[28px] border border-neon/20 bg-gradient-to-br from-neon/[0.11] via-surface to-surface p-5">
+        <section className="relative mt-5 overflow-hidden rounded-[24px] border border-neon/20 bg-surface p-5">
           <div className="absolute -right-12 -top-12 size-36 rounded-full bg-neon/10 blur-3xl" />
           <div className="flex items-start gap-3">
             <div className="grid size-10 place-items-center rounded-2xl bg-white/[0.06] text-neon">
@@ -384,41 +385,35 @@ function ProfilePage() {
   };
 
   return (
-    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
-      <header className="flex items-start justify-between gap-4 px-1">
-        <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Profile</p>
-          <h1 className="mt-1 text-[29px] font-extrabold leading-tight tracking-[-0.04em]">
-            Built around you.
-          </h1>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Your goals, preferences, progress, and account.
-          </p>
-        </div>
-        <a
-          href="#profile-preferences"
-          aria-label="Profile preferences"
-          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface transition active:scale-95"
-        >
-          <Settings className="size-5" />
-        </a>
-      </header>
+    <Page className="pb-32">
+      <PageHeader
+        kicker="Account & goals"
+        title="Profile"
+        actions={
+          <a
+            href="#profile-preferences"
+            aria-label="Profile preferences"
+            className={iconButtonClass}
+          >
+            <Settings />
+          </a>
+        }
+      />
 
-      <section className="relative mt-5 overflow-hidden rounded-[28px] border border-neon/15 bg-gradient-to-br from-neon/[0.11] via-surface to-surface p-5">
-        <div className="absolute -right-12 -top-12 size-40 rounded-full bg-neon/10 blur-3xl" />
+      <section className="relative mt-5 overflow-hidden rounded-[24px] border border-hairline bg-surface p-5">
         <div className="relative flex items-center gap-4">
-          <div className="grid size-16 shrink-0 place-items-center rounded-[22px] bg-neon text-2xl font-extrabold text-neon-foreground shadow-[0_0_30px_-14px_var(--color-neon)]">
+          <div className="grid size-16 shrink-0 place-items-center rounded-[22px] bg-neon text-2xl font-bold text-neon-foreground">
             {profile.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="truncate text-xl font-extrabold">{profile.name}</h2>
+              <h2 className="truncate text-xl font-bold">{profile.name}</h2>
               {accountSession && <ShieldCheck className="size-4 text-neon" />}
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               {profile.age} years · {profile.heightCm} cm · {profile.currentWeightKg} kg
             </p>
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-black/15 px-2.5 py-1 text-[9px] font-semibold text-white/65">
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-black/15 px-2.5 py-1 text-[11px] font-semibold text-white/65">
               <Sparkles className="size-3 text-neon" /> Personalized by Ascendr
             </span>
           </div>
@@ -447,7 +442,7 @@ function ProfilePage() {
       {/* Nutrition Goals */}
       <section className="mt-7">
         <SectionTitle eyebrow="Targets" title="Nutrition goals" detail="Used in your daily log" />
-        <div className="rounded-[28px] border border-white/[0.05] bg-white/[0.03] p-5">
+        <div className="rounded-[24px] border border-hairline bg-white/[0.03] p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Flame className="size-4 text-neon" />
@@ -455,12 +450,12 @@ function ProfilePage() {
             </div>
             <button
               onClick={suggest}
-              className="text-[11px] font-semibold text-neon flex items-center gap-1"
+              className="text-[13px] font-semibold text-neon flex items-center gap-1"
             >
               <Sparkles className="size-3" /> Suggest
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-[13px] text-muted-foreground mt-1">
             Daily targets used across the Nutrition tab.
           </p>
 
@@ -512,7 +507,7 @@ function ProfilePage() {
           title="Training preferences"
           detail="Tune every recommendation"
         />
-        <div className="divide-y divide-border overflow-hidden rounded-[26px] border border-white/[0.05] bg-surface">
+        <div className="divide-y divide-border overflow-hidden rounded-[24px] border border-hairline bg-surface">
           <button
             type="button"
             onClick={() => setOpenSheet("goal")}
@@ -569,7 +564,7 @@ function ProfilePage() {
           title="Progress and app"
           detail="History, scans, and help"
         />
-        <div className="divide-y divide-border overflow-hidden rounded-[26px] border border-white/[0.05] bg-surface">
+        <div className="divide-y divide-border overflow-hidden rounded-[24px] border border-hairline bg-surface">
           <Link to="/progress" className="block active:bg-white/[0.03]">
             <RowContent
               icon={BarChart3}
@@ -677,7 +672,7 @@ function ProfilePage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold">{option.name}</span>
                         {option.badge && (
-                          <span className="rounded-full bg-neon/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-neon">
+                          <span className="rounded-full bg-neon/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-neon">
                             {option.badge}
                           </span>
                         )}
@@ -687,7 +682,7 @@ function ProfilePage() {
                       </p>
                       <p
                         className={cn(
-                          "mt-2 text-[10px] font-semibold",
+                          "mt-2 text-[12px] font-semibold",
                           idealForSchedule ? "text-neon" : "text-amber-300/80",
                         )}
                       >
@@ -767,7 +762,7 @@ function ProfilePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Page>
   );
 }
 
@@ -926,15 +921,15 @@ function GoalField({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{label}</span>
       <div className="mt-1 relative">
         <input
           inputMode="numeric"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-12 w-full rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 pr-12 text-base font-semibold tabular-nums outline-none focus:border-neon/40"
+          className="h-12 w-full rounded-xl bg-white/[0.04] border border-hairline px-3 pr-12 text-base font-semibold tabular-nums outline-none focus:border-neon/40"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">
           {suffix}
         </span>
       </div>
@@ -954,19 +949,19 @@ function SectionTitle({
   return (
     <div className="mb-3 flex items-end justify-between gap-3 px-1">
       <div>
-        <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">{eyebrow}</p>
-        <h2 className="mt-0.5 text-lg font-extrabold tracking-[-0.02em]">{title}</h2>
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">{eyebrow}</p>
+        <h2 className="mt-0.5 text-lg font-bold tracking-[-0.02em]">{title}</h2>
       </div>
-      {detail && <p className="mb-0.5 text-[9px] text-muted-foreground">{detail}</p>}
+      {detail && <p className="mb-0.5 text-[11px] text-muted-foreground">{detail}</p>}
     </div>
   );
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3 text-center">
-      <div className="truncate text-[12px] font-extrabold capitalize text-neon">{value}</div>
-      <div className="mt-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
+    <div className="rounded-2xl border border-hairline bg-white/[0.025] p-3 text-center">
+      <div className="truncate text-[12px] font-bold capitalize text-neon">{value}</div>
+      <div className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
     </div>
@@ -998,36 +993,36 @@ function RowContent({
 
 function ProfileLegalFooter() {
   return (
-    <footer className="mt-8 border-t border-white/[0.055] px-2 pb-2 pt-6 text-center">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">Ascendr</p>
-      <p className="mt-1.5 text-[10px] text-muted-foreground">Train with direction.</p>
+    <footer className="mt-8 border-t border-hairline px-2 pb-2 pt-6 text-center">
+      <p className="text-[12px] font-bold uppercase tracking-[0.2em] text-white/55">Ascendr</p>
+      <p className="mt-1.5 text-[12px] text-muted-foreground">Train with direction.</p>
       <nav
         aria-label="Legal and support"
         className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2"
       >
-        <Link to="/terms" className="text-[10px] font-medium text-white/60 hover:text-neon">
+        <Link to="/terms" className="text-[12px] font-medium text-white/60 hover:text-neon">
           Terms of Service
         </Link>
-        <Link to="/privacy" className="text-[10px] font-medium text-white/60 hover:text-neon">
+        <Link to="/privacy" className="text-[12px] font-medium text-white/60 hover:text-neon">
           Privacy Policy
         </Link>
         <Link
           to="/health-disclaimer"
-          className="text-[10px] font-medium text-white/60 hover:text-neon"
+          className="text-[12px] font-medium text-white/60 hover:text-neon"
         >
           Health & AI Disclaimer
         </Link>
-        <Link to="/contact" className="text-[10px] font-medium text-white/60 hover:text-neon">
+        <Link to="/contact" className="text-[12px] font-medium text-white/60 hover:text-neon">
           Contact
         </Link>
         <Link
           to="/delete-account"
-          className="text-[10px] font-medium text-white/60 hover:text-neon"
+          className="text-[12px] font-medium text-white/60 hover:text-neon"
         >
           Delete Account
         </Link>
       </nav>
-      <p className="mt-4 text-[9px] text-white/30">© 2026 Ascendr. All rights reserved.</p>
+      <p className="mt-4 text-[11px] text-white/30">© 2026 Ascendr. All rights reserved.</p>
     </footer>
   );
 }

@@ -1,0 +1,4 @@
+// Release base configuration.
+// Optional include: the build still succeeds when tiktok.xcconfig is absent
+// (a fresh clone), in which case the TikTok SDK simply stays disabled.
+#include? "tiktok.xcconfig"

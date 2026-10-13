@@ -94,10 +94,10 @@ function ResetPasswordScreen() {
       <div className="pointer-events-none absolute -top-28 left-1/2 size-[30rem] -translate-x-1/2 rounded-full bg-neon/15 blur-3xl" />
       <main className="relative mx-auto flex w-full max-w-md flex-col py-5">
         <header className="flex items-center gap-2.5 px-1">
-          <AscendrLogo className="size-11 rounded-[15px] border border-white/10 shadow-[0_12px_30px_-14px_var(--color-neon)]" />
+          <AscendrLogo className="size-11 rounded-[15px] border border-hairline shadow-[0_12px_30px_-14px_var(--color-neon)]" />
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neon">Ascendr</p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">Your private fitness system</p>
+            <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">Ascendr</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Your private fitness system</p>
           </div>
         </header>
 
@@ -106,9 +106,9 @@ function ResetPasswordScreen() {
             <span className="grid size-8 place-items-center rounded-xl bg-neon/15">
               <KeyRound className="size-4" />
             </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Secure reset</span>
+            <span className="text-[12px] font-bold uppercase tracking-[0.2em]">Secure reset</span>
           </div>
-          <h1 className="mt-5 text-[clamp(2.2rem,10vw,3rem)] font-black leading-[0.94] tracking-[-0.06em]">
+          <h1 className="mt-5 text-[clamp(2.2rem,10vw,3rem)] font-bold leading-[0.94] tracking-[-0.06em]">
             Choose a new <span className="text-neon">password.</span>
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
@@ -181,7 +181,7 @@ function ResetPasswordScreen() {
           ) : (
             <div className="mt-6 space-y-3">
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   New password
                 </span>
                 <div className="relative">
@@ -191,7 +191,7 @@ function ResetPasswordScreen() {
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="At least 8 characters"
                     autoComplete="new-password"
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 pr-12"
+                    className="h-12 rounded-2xl border-hairline bg-black/20 pr-12"
                   />
                   <button
                     type="button"
@@ -204,7 +204,7 @@ function ResetPasswordScreen() {
                 </div>
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+                <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   Confirm new password
                 </span>
                 <Input
@@ -213,7 +213,7 @@ function ResetPasswordScreen() {
                   onChange={(event) => setConfirmation(event.target.value)}
                   placeholder="Repeat your new password"
                   autoComplete="new-password"
-                  className="h-12 rounded-2xl border-white/10 bg-black/20"
+                  className="h-12 rounded-2xl border-hairline bg-black/20"
                 />
               </label>
               {error && (
@@ -228,7 +228,7 @@ function ResetPasswordScreen() {
                 type="button"
                 onClick={savePassword}
                 disabled={busy || !password || !confirmation}
-                className="mt-2 h-13 w-full rounded-full bg-neon text-base font-extrabold text-neon-foreground shadow-[0_16px_34px_-16px_var(--neon)] hover:bg-neon/90"
+                className="mt-2 h-13 w-full rounded-full bg-neon text-base font-bold text-neon-foreground shadow-[0_16px_34px_-16px_var(--neon)] hover:bg-neon/90"
               >
                 {busy ? <Loader2 className="size-5 animate-spin" /> : "Save password & sign in"}
               </Button>

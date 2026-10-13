@@ -188,3 +188,29 @@ describe("smart split program schedule", () => {
     expect(labelFor("sora-hiit-")).toBe("Full Body Conditioning");
   });
 });
+
+describe("schedule without a saved plan", () => {
+  it("follows the member's goal program and settings after they edit their profile", () => {
+    const edited: Profile = {
+      ...profile,
+      goal: "lose_weight",
+      goals: ["lose_weight"],
+      equipment: "gym",
+      sessionMinutes: 60,
+      workoutSplit: "auto",
+      // The program starts today, so today is always one of its sessions.
+      completedAt: new Date().toISOString(),
+    };
+    const sessions = weeklyScheduleService
+      .generateSchedule(edited)
+      .filter((day) => !day.isRestDay && day.workoutId)
+      .map((day) => getWorkout(day.workoutId!)!);
+
+    expect(sessions.length).toBeGreaterThan(0);
+    for (const workout of sessions) {
+      expect(workout.equipment[0]).toBe("gym");
+      expect(workout.duration).toBe(60);
+      expect(workout.recommendedForGoals).toContain("lose_weight");
+    }
+  });
+});

@@ -10,28 +10,43 @@ export type AiGatewayOperation =
   | "workout-plan"
   | "coach";
 
-const LOCAL_PREVIEW_AI_OPERATIONS = {
+// Keep in sync with supabase/functions/ai-gateway, which serves production.
+const SCAN_MODEL = "qwen/qwen3-vl-235b-a22b-instruct";
+const SCAN_PROVIDER = { order: ["parasail/fp8"], allow_fallbacks: true };
+
+const LOCAL_PREVIEW_AI_OPERATIONS: Record<
+  "body-scan-preview" | "body-scan" | "face-scan" | "coach",
+  {
+    model: string;
+    maxTokens: number;
+    title: string;
+    provider?: { order: string[]; allow_fallbacks: boolean };
+  }
+> = {
   "body-scan-preview": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 500,
     title: "Ascendr Body Scan Preview",
+    provider: SCAN_PROVIDER,
   },
   "body-scan": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 2600,
     title: "Ascendr Body Scan",
+    provider: SCAN_PROVIDER,
   },
   "face-scan": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 1800,
     title: "Ascendr Face Scan",
+    provider: SCAN_PROVIDER,
   },
   coach: {
     model: "qwen/qwen3.5-flash-02-23",
     maxTokens: 600,
     title: "Ascendr Fitness Coach",
   },
-} as const;
+};
 type LocalPreviewAiOperation = keyof typeof LOCAL_PREVIEW_AI_OPERATIONS;
 
 function edgeConfig() {
@@ -123,6 +138,7 @@ export async function fetchAscendrAi(
         ...requestPayload,
         model: previewConfig.model,
         max_tokens: previewConfig.maxTokens,
+        ...(previewConfig.provider ? { provider: previewConfig.provider } : {}),
       }),
     });
   }

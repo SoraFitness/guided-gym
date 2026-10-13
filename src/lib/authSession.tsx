@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { identifyTikTokUser, logoutTikTokUser, trackTikTokRegistration } from "@/lib/tiktokEvents";
 
 export interface AuthSession {
   userId: string;
@@ -144,10 +145,48 @@ let sessionState: AuthSessionState = "loading";
 const sessionListeners = new Set<() => void>();
 let watcherStarted = false;
 
+function sameSession(a: AuthSessionState, b: AuthSessionState) {
+  if (a === b) return true;
+  if (!a || !b || a === "loading" || b === "loading") return false;
+  return (
+    a.userId === b.userId &&
+    a.accessToken === b.accessToken &&
+    a.email === b.email &&
+    a.isAnonymous === b.isAnonymous
+  );
+}
+
 function publishSession(next: AuthSessionState) {
-  if (sessionState === next) return;
+  // Supabase re-emits SIGNED_IN on tab focus with an unchanged session; keeping the
+  // same object stops every screen keyed on the session from refetching.
+  if (sameSession(sessionState, next)) return;
   sessionState = next;
   for (const listener of sessionListeners) listener();
+}
+
+/** A Supabase account created this recently is treated as a sign-up, not a sign-in. */
+const NEW_ACCOUNT_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Hands sign-in and sign-up to the native TikTok SDK. `Registration` is deduplicated
+ * natively per account, so the window below only needs to be good enough to tell a fresh
+ * sign-up from a returning member; it can never cause a duplicate event.
+ */
+function reportAuthToTikTok(event: string, session: Session | null) {
+  if (event === "SIGNED_OUT") {
+    void logoutTikTokUser();
+    return;
+  }
+  if (!session || session.user.is_anonymous === true) return;
+
+  void identifyTikTokUser(session.user.id, session.user.email ?? null);
+
+  if (event !== "SIGNED_IN") return;
+  const createdAt = Date.parse(session.user.created_at ?? "");
+  if (Number.isNaN(createdAt) || Date.now() - createdAt > NEW_ACCOUNT_WINDOW_MS) return;
+
+  const method = session.user.app_metadata?.provider ?? "email";
+  void trackTikTokRegistration(session.user.id, method);
 }
 
 function startAuthSessionWatcher() {
@@ -170,6 +209,7 @@ function startAuthSessionWatcher() {
   try {
     supabase.auth.onAuthStateChange((event, nextSession) => {
       const next = toAuthSession(nextSession);
+      reportAuthToTikTok(event, nextSession);
       if (event === "PASSWORD_RECOVERY") {
         clearPasswordRecoveryRequest();
         openPasswordRecoveryScreen();

@@ -25,17 +25,22 @@ import {
 } from "@/lib/exerciseCoaching";
 import { useProfile } from "@/lib/profile";
 import { getWorkout, type Workout } from "@/lib/workouts";
+import { findFinisherExercise } from "@/lib/workoutPersonalization";
 
 export const Route = createFileRoute("/workout/$id/demo/$exerciseId")({
   head: ({ params }) => {
     const w = getWorkout(params.id);
-    const ex = w?.exercises.find((e) => e.id === params.exerciseId);
+    const ex =
+      w?.exercises.find((e) => e.id === params.exerciseId) ??
+      findFinisherExercise(params.exerciseId);
     return { meta: [{ title: `${ex?.name ?? "Exercise"} - 3D demo` }] };
   },
   loader: ({ params }) => {
     const w = getWorkout(params.id);
     if (!w) throw notFound();
-    const ex = w.exercises.find((e) => e.id === params.exerciseId);
+    const ex =
+      w.exercises.find((e) => e.id === params.exerciseId) ??
+      findFinisherExercise(params.exerciseId);
     if (!ex) throw notFound();
     return { w, ex };
   },
@@ -68,23 +73,23 @@ function DemoPage() {
           <Link
             to="/workout/$id"
             params={{ id: w.id }}
-            className="grid size-10 place-items-center rounded-full border border-white/[0.08] bg-white/[0.06] text-white shadow-lg shadow-black/20"
+            className="grid size-10 place-items-center rounded-full border border-hairline bg-white/[0.06] text-white shadow-lg shadow-black/20"
             aria-label="Back"
           >
             <ArrowLeft className="size-5" />
           </Link>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neon">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.12em] text-neon">
               3D demo
             </div>
-            <h1 className="truncate text-xl font-extrabold leading-tight">{ex.name}</h1>
+            <h1 className="truncate text-xl font-bold leading-tight">{ex.name}</h1>
           </div>
         </header>
 
         <main className="flex flex-1 flex-col gap-3 pb-5">
           <Suspense
             fallback={
-              <div className="h-[clamp(430px,58dvh,620px)] min-h-[430px] w-full animate-pulse rounded-[28px] border border-white/[0.08] bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]" />
+              <div className="h-[clamp(430px,58dvh,620px)] min-h-[430px] w-full animate-pulse rounded-[24px] border border-hairline bg-gradient-to-b from-[#171c24] via-[#090d13] to-[#030405]" />
             }
           >
             <Exercise3DViewer
@@ -135,23 +140,23 @@ function MetricTile({
   detail: string;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.045] p-3 shadow-lg shadow-black/20">
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/48">
+    <div className="min-w-0 rounded-2xl border border-hairline bg-white/[0.045] p-3 shadow-lg shadow-black/20">
+      <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-white/48">
         <Icon className="size-3.5 text-neon" />
         {label}
       </div>
-      <div className="mt-2 truncate text-sm font-extrabold capitalize text-white">{value}</div>
-      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/58">{detail}</p>
+      <div className="mt-2 truncate text-sm font-bold capitalize text-white">{value}</div>
+      <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-white/58">{detail}</p>
     </div>
   );
 }
 
 function MusclePanel({ primary, secondary }: { primary: MuscleKey[]; secondary: MuscleKey[] }) {
   return (
-    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.045] p-4 shadow-lg shadow-black/20">
+    <section className="rounded-2xl border border-hairline bg-white/[0.045] p-4 shadow-lg shadow-black/20">
       <div className="flex items-center gap-2">
         <Target className="size-4 text-neon" />
-        <h2 className="text-sm font-extrabold">Muscles trained</h2>
+        <h2 className="text-sm font-bold">Muscles trained</h2>
       </div>
       <div className="mt-3 flex flex-col gap-2">
         <MuscleRow label="Primary" muscles={primary} tone="primary" />
@@ -179,14 +184,14 @@ function MuscleRow({
     <div className="flex items-start gap-2">
       <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${dot}`} />
       <div className="min-w-0">
-        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+        <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-white/42">
           {label}
         </div>
         <div className="mt-1 flex flex-wrap gap-1.5">
           {muscles.map((muscle) => (
             <span
               key={muscle}
-              className="rounded-full border border-white/[0.07] bg-black/30 px-2.5 py-1 text-[11px] font-semibold text-white/78"
+              className="rounded-full border border-hairline bg-black/30 px-2.5 py-1 text-[13px] font-semibold text-white/78"
             >
               {MUSCLE_LABELS[muscle]}
             </span>
@@ -199,10 +204,10 @@ function MuscleRow({
 
 function CoachingPanel({ demo }: { demo: ExerciseDemoInfo }) {
   return (
-    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.045] p-4 shadow-lg shadow-black/20">
+    <section className="rounded-2xl border border-hairline bg-white/[0.045] p-4 shadow-lg shadow-black/20">
       <div className="flex items-center gap-2">
         <Dumbbell className="size-4 text-neon" />
-        <h2 className="text-sm font-extrabold">{demo.trainerCue}</h2>
+        <h2 className="text-sm font-bold">{demo.trainerCue}</h2>
       </div>
       <div className="mt-4 grid gap-4">
         <GuidanceList icon={Target} title="Form" items={demo.formInstructions} />
@@ -225,7 +230,7 @@ function GuidanceText({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+      <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-white/42">
         <Icon className="size-3.5 text-neon" />
         {title}
       </div>
@@ -245,7 +250,7 @@ function GuidanceList({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+      <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-white/42">
         <Icon className="size-3.5 text-neon" />
         {title}
       </div>

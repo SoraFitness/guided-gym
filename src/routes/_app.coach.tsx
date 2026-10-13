@@ -157,7 +157,9 @@ function CoachChat({ session }: { session: AuthSession }) {
         console.error(e);
         setLoaded(true);
       });
-  }, [session]);
+    // Load once per member (CoachChat is keyed by user id). Depending on the session
+    // object refetched the thread, and flashed the spinner, on every token refresh.
+  }, []);
 
   const transport = useMemo(() => {
     if (!threadId) return null;
@@ -226,39 +228,34 @@ function CoachChat({ session }: { session: AuthSession }) {
     <div
       className="flex min-h-0 flex-col"
       style={{
-        height: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5.25rem)",
+        height: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5rem)",
       }}
     >
-      <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-5">
+      <header className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="size-12 shrink-0 overflow-hidden rounded-2xl border border-neon/30 bg-surface shadow-[0_0_24px_-10px_var(--color-neon)]">
+          <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-hairline bg-surface">
             <AscendrLogo decorative className="size-full" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">
-                Personal training intelligence
-              </p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/10 px-2 py-0.5 text-[8px] font-bold text-emerald-300">
-                <span className="size-1.5 rounded-full bg-emerald-300" /> Online
+            <h1 className="flex items-center gap-2 text-[24px] font-bold leading-tight tracking-[-0.03em]">
+              Coach
+              <span className="inline-flex items-center gap-1 rounded-full bg-score-high/12 px-2 py-0.5 text-[11px] font-semibold text-score-high">
+                <span className="size-1.5 rounded-full bg-score-high" /> Online
               </span>
-            </div>
-            <h1 className="mt-1 text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
-              Ascendr Coach
             </h1>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
               {session.isAnonymous
-                ? "Guest mode · save an account to back up your coach memory"
+                ? "Guest mode · save an account to keep your chats"
                 : profile
-                  ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]} · profile connected`
-                  : "Ask about training, nutrition, recovery, or progress"}
+                  ? `${GOAL_LABELS[profile.goal]} · ${EQUIPMENT_LABELS[profile.equipment]}`
+                  : "Training, nutrition, recovery"}
             </p>
           </div>
         </div>
         {messages.length > 0 && (
           <button
             onClick={handleClear}
-            className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface transition active:scale-95"
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-hairline bg-surface transition active:scale-95"
             aria-label="Clear chat"
           >
             <Trash2 className="size-4 text-muted-foreground" />
@@ -274,21 +271,20 @@ function CoachChat({ session }: { session: AuthSession }) {
         )}
         {isEmpty && (
           <div className="pt-2">
-            <div className="relative overflow-hidden rounded-[28px] border border-neon/20 bg-gradient-to-br from-neon/[0.12] via-surface to-surface p-5">
-              <div className="absolute -right-10 -top-10 size-32 rounded-full bg-neon/10 blur-3xl" />
+            <div className="relative overflow-hidden rounded-[24px] border border-hairline bg-surface p-5">
               <div className="relative flex items-start gap-4">
-                <div className="size-12 shrink-0 overflow-hidden rounded-2xl border border-neon/30 bg-surface shadow-[0_0_28px_-12px_var(--color-neon)]">
+                <div className="size-12 shrink-0 overflow-hidden rounded-2xl border border-neon/30 bg-surface">
                   <AscendrLogo decorative className="size-full" />
                 </div>
                 <div>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
                     Your plan, understood
                   </p>
-                  <h2 className="mt-1 text-xl font-extrabold leading-tight">
+                  <h2 className="mt-1 text-xl font-bold leading-tight">
                     What are we solving today
                     {profile?.name ? `, ${profile.name.split(" ")[0]}` : ""}?
                   </h2>
-                  <p className="mt-2 text-[11px] leading-relaxed text-white/60">
+                  <p className="mt-2 text-[13px] leading-relaxed text-white/60">
                     I can use your goals, schedule, equipment, nutrition targets, and recent logs to
                     give you a specific next step.
                   </p>
@@ -304,7 +300,7 @@ function CoachChat({ session }: { session: AuthSession }) {
                     key={starter.label}
                     type="button"
                     onClick={() => submit(starter.prompt)}
-                    className="min-h-[118px] rounded-[22px] border border-white/[0.06] bg-white/[0.03] p-3.5 text-left transition active:scale-[0.98] active:border-neon/25"
+                    className="min-h-[118px] rounded-[22px] border border-hairline bg-white/[0.03] p-3.5 text-left transition active:scale-[0.98] active:border-neon/25"
                   >
                     <span className="grid size-9 place-items-center rounded-xl bg-neon/10 text-neon">
                       <Icon className="size-[17px]" />
@@ -312,7 +308,7 @@ function CoachChat({ session }: { session: AuthSession }) {
                     <span className="mt-3 block text-[12px] font-bold leading-tight">
                       {starter.label}
                     </span>
-                    <span className="mt-1 block text-[9px] leading-relaxed text-muted-foreground">
+                    <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
                       {starter.detail}
                     </span>
                   </button>
@@ -337,14 +333,14 @@ function CoachChat({ session }: { session: AuthSession }) {
       </div>
 
       {loaded && (
-        <div className="space-y-2 border-t border-white/[0.06] bg-background/95 px-3 pb-3 pt-3 backdrop-blur-xl">
+        <div className="space-y-2 border-t border-hairline bg-background/95 px-3 pb-3 pt-3 backdrop-blur-xl">
           {!isEmpty && (
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
               {COACH_STARTERS.slice(0, 3).map((starter) => (
                 <button
                   key={starter.label}
                   onClick={() => submit(starter.prompt)}
-                  className="shrink-0 rounded-full border border-white/[0.06] bg-surface px-3 py-2 text-[10px] font-semibold"
+                  className="shrink-0 rounded-full border border-hairline bg-surface px-3 py-2 text-[12px] font-semibold"
                 >
                   {starter.label}
                 </button>
@@ -365,14 +361,14 @@ function CoachChat({ session }: { session: AuthSession }) {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask Ascendr anything…"
-                className="h-12 rounded-full border-white/[0.07] bg-surface pl-11 pr-4"
+                className="h-12 rounded-full border-hairline bg-surface pl-11 pr-4"
                 disabled={isLoading}
               />
             </div>
             <Button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="size-12 shrink-0 rounded-full bg-neon p-0 text-neon-foreground shadow-[0_12px_28px_-14px_var(--color-neon)] hover:bg-neon/90"
+              className="size-12 shrink-0 rounded-full bg-neon p-0 text-neon-foreground hover:bg-neon/90"
               aria-label="Send"
             >
               <Send className="size-5" />
@@ -414,7 +410,7 @@ function MessageBubble({
           "max-w-[88%] space-y-3",
           isUser
             ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-3"
-            : "rounded-2xl rounded-tl-md border border-white/[0.055] bg-surface px-4 py-4 text-foreground",
+            : "rounded-2xl rounded-tl-md border border-hairline bg-surface px-4 py-4 text-foreground",
         )}
       >
         {parts.map((p, i) => {

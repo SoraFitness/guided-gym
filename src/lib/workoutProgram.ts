@@ -1,5 +1,6 @@
 import { getWorkout, workouts, type Workout } from "./workouts";
-import type { WorkoutPlanInput } from "./workoutPlanStore";
+import type { Profile } from "./profile";
+import { planInputFromProfile, type WorkoutPlanInput } from "./workoutPlanStore";
 import { getWorkoutSplitOption } from "./workoutSplits";
 import { isProgramWorkout, splitLabelForWorkout, type SplitLabel } from "./weeklySchedule";
 
@@ -102,7 +103,24 @@ function scoreCandidate(workout: Workout, input: WorkoutPlanInput) {
   if (workout.recommendedForLevels.includes(input.experience)) score += 16;
   score += workout.targetMuscles.filter((muscle) => input.focusAreas.includes(muscle)).length * 14;
   score += Math.max(0, 10 - Math.abs(workout.duration - input.sessionMinutes) / 2);
+  // A gym member should get gym workouts, not the bodyweight ones every setup can do.
+  if (builtForEquipment(workout, input.equipment)) score += 20;
   return score;
+}
+
+/** The setup a workout was designed around (its first listed equipment). */
+export function builtForEquipment(workout: Workout, setup: WorkoutPlanInput["equipment"]) {
+  return workout.equipment[0] === setup;
+}
+
+/** Built for the member's own equipment, session length, level, and one of their goals. */
+function fitsMember(workout: Workout, input: WorkoutPlanInput) {
+  return (
+    builtForEquipment(workout, input.equipment) &&
+    workout.duration === input.sessionMinutes &&
+    workout.recommendedForLevels.includes(input.experience) &&
+    requestedGoals(input).some((goal) => workout.recommendedForGoals.includes(goal))
+  );
 }
 
 /** The best few workouts of every session type that fit the member's equipment. */
@@ -115,13 +133,19 @@ export function buildProgramCandidates(input: WorkoutPlanInput): ProgramCandidat
     )
     .map((workout) => ({ workout, score: scoreCandidate(workout, input) }))
     .sort((a, b) => b.score - a.score);
-  const perType = new Map<SessionType, number>();
-  return ranked.filter(({ workout }) => {
-    const type = splitLabelForWorkout(workout);
-    const count = perType.get(type) ?? 0;
-    perType.set(type, count + 1);
-    return count < 3;
-  });
+  // Per session type, offer only workouts built for the member's own session length,
+  // level, and goal when any exist, so the AI planner can't pick a mismatched session.
+  const byType = new Map<SessionType, ProgramCandidate[]>();
+  for (const candidate of ranked) {
+    const type = splitLabelForWorkout(candidate.workout);
+    byType.set(type, [...(byType.get(type) ?? []), candidate]);
+  }
+  const chosen = new Set<ProgramCandidate>();
+  for (const list of byType.values()) {
+    const fitting = list.filter(({ workout }) => fitsMember(workout, input));
+    for (const candidate of (fitting.length ? fitting : list).slice(0, 3)) chosen.add(candidate);
+  }
+  return ranked.filter((candidate) => chosen.has(candidate));
 }
 
 function sessionType(workoutId: string) {
@@ -147,14 +171,21 @@ export function fallbackProgram(
   candidates: ProgramCandidate[] = buildProgramCandidates(input),
 ): ProgramDraft {
   const used = new Set<string>();
-  const byType = (type: SessionType, allowRepeat: boolean) =>
+  // A workout built for the member's own session length, level, and goal beats a
+  // fresh one that isn't: repeating it (an A/B/A week) beats a mismatched session.
+  const fits = (workout: Workout) => fitsMember(workout, input);
+  const byType = (type: SessionType, allowRepeat: boolean, mustFit = false) =>
     candidates.find(
       ({ workout }) =>
-        splitLabelForWorkout(workout) === type && (allowRepeat || !used.has(workout.id)),
+        splitLabelForWorkout(workout) === type &&
+        (allowRepeat || !used.has(workout.id)) &&
+        (!mustFit || fits(workout)),
     );
   const pick = (type: SessionType) => {
     const types = [type, ...(RELATED_SESSIONS[type] ?? [])];
     const choice =
+      byType(type, false, true) ??
+      byType(type, true, true) ??
       types.map((candidateType) => byType(candidateType, false)).find(Boolean) ??
       types.map((candidateType) => byType(candidateType, true)).find(Boolean) ??
       candidates.find(({ workout }) => !used.has(workout.id)) ??
@@ -178,4 +209,22 @@ export function fallbackProgram(
     summary: `A balanced ${input.daysPerWeek}-day ${split.shortName.toLowerCase()} plan combining ${goalSummary}, centered on ${focus.toLowerCase()}, and matched to your ${input.sessionMinutes}-minute sessions and available equipment.`,
     workoutIds: orderProgramSessions(workoutIds),
   };
+}
+
+const profilePrograms = new Map<string, string[]>();
+
+/**
+ * The program for a member with no saved plan matching their current profile, e.g.
+ * right after they change goal, equipment, or schedule. Built the same way as the
+ * onboarding plan, so the week keeps following their goal instead of a generic split.
+ */
+export function programForProfile(profile: Profile): string[] {
+  const input = planInputFromProfile(profile);
+  const key = JSON.stringify(input);
+  let workoutIds = profilePrograms.get(key);
+  if (!workoutIds) {
+    workoutIds = fallbackProgram(input).workoutIds;
+    profilePrograms.set(key, workoutIds);
+  }
+  return workoutIds;
 }

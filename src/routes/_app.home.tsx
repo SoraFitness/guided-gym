@@ -3,56 +3,61 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Apple,
   Bell,
-  Check,
   ChevronRight,
-  Clock3,
   Dumbbell,
   Flame,
   HeartPulse,
-  MessageCircle,
+  MessageSquare,
   Play,
   RefreshCw,
+  ScanFace,
   ScanLine,
-  Sparkles,
-  Target,
-  Trophy,
-  Utensils,
+  Timer,
   UserRound,
-  Zap,
+  Utensils,
 } from "lucide-react";
 import { FOCUS_LABELS, useProfile, type FocusArea } from "@/lib/profile";
-import { getWorkout, workoutRecommendationService, type Workout } from "@/lib/workouts";
-import { weeklyScheduleService, type WeeklyScheduleDay } from "@/lib/weeklySchedule";
+import { workoutRecommendationService, type Workout } from "@/lib/workouts";
 import { WorkoutCardHero } from "@/components/WorkoutCard";
-import { AscendrLogo } from "@/components/AscendrLogo";
 import { useNutrition } from "@/lib/nutritionStore";
-import { useProgress } from "@/lib/progressStore";
 import { WeeklyReportCard } from "@/components/weekly/WeeklyReportCard";
 import { QuickLogFab } from "@/components/weekly/QuickLogFab";
 import { listNotifications } from "@/lib/weeklyReport.functions";
 import { cn } from "@/lib/utils";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
-import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
 import { useCompletedWorkouts, type CompletedWorkout } from "@/lib/workoutSessionStore";
-import { computeMuscleInsights, type MuscleInsight } from "@/lib/muscleAnalytics";
-import { scoreLogEntries, type NutritionQuality } from "@/lib/nutritionQuality";
+import { AnatomyFigure, workoutFills } from "@/components/app/AnatomyFigure";
+import {
+  AscentSteps,
+  cardClass,
+  DayStrip,
+  HeroCard,
+  Kicker,
+  DeltaBadge,
+  iconButtonClass,
+  MACRO_COLORS,
+  Page,
+  PageHeader,
+  ProgressRing,
+  scoreColor,
+  SectionHeader,
+  StackedBar,
+} from "@/components/app/kit";
+import { TrendChart } from "@/components/app/charts";
+import {
+  focusTitle,
+  scheduleToStrip,
+  useTodayTraining,
+  type TodayTraining,
+} from "@/components/workouts/TodayFocus";
+import { scanTrendPoints, useScanHistory } from "@/components/scans/useScanHistory";
+import type { ScanSubmissionSummary } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/home")({
   head: () => ({ meta: [{ title: "Home — Ascendr" }] }),
   component: HomePage,
 });
-
-const GOAL_SUBTITLES: Record<string, string> = {
-  lose_weight: "Lean down without losing momentum",
-  build_muscle: "Build strength, size, and consistency",
-  recomp: "Build muscle while staying lean",
-  endurance: "Improve stamina and conditioning",
-  get_stronger: "Get stronger, one session at a time",
-  overall: "Move better and feel stronger",
-  maintain: "Stay sharp and keep moving forward",
-};
 
 function HomePage() {
   const { profile } = useProfile();
@@ -60,64 +65,26 @@ function HomePage() {
   const signedIn = isAccountSession(session);
   const displayName =
     profile?.name?.trim().toLowerCase() === "sahil" ? "Admin" : getDisplayName(profile?.name);
-  const { totals, goals, todayEntries } = useNutrition();
-  const progress = useProgress(profile?.sessionMinutes ?? 30);
+  const { totals, goals } = useNutrition();
+  const training = useTodayTraining();
   const completedWorkouts = useCompletedWorkouts();
   const [dismissedRecoveryCheck, setDismissedRecoveryCheck] = useState(false);
-  const savedPlans = useSavedWorkoutPlans();
-  const activePlan = useMemo(
-    () => getActiveWorkoutPlan(savedPlans, profile),
-    [savedPlans, profile],
-  );
-
-  const schedule = useMemo(
-    () => (profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : []),
-    [profile, activePlan],
-  );
-  const todayPlan = schedule.find((day) => day.isToday);
-  const scheduledWorkout = todayPlan?.workoutId ? getWorkout(todayPlan.workoutId) : null;
-  // On rest days the hero previews the member's next scheduled session.
-  const nextPlan = useMemo(() => {
-    if (!profile || !todayPlan) return undefined;
-    const upcoming = (days: WeeklyScheduleDay[]) =>
-      days.find((day) => day.dateISO > todayPlan.dateISO && !day.isRestDay && day.workoutId);
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    return (
-      upcoming(schedule) ??
-      upcoming(weeklyScheduleService.generateSchedule(profile, activePlan ?? [], nextWeek))
-    );
-  }, [activePlan, profile, schedule, todayPlan]);
-  const nextWorkout = nextPlan?.workoutId ? (getWorkout(nextPlan.workoutId) ?? null) : null;
-  const recoveryWorkout = getWorkout("mobility-recovery");
-  const heroWorkout = scheduledWorkout ?? recoveryWorkout ?? null;
+  const bodyScans = useScanHistory("body");
+  const faceScans = useScanHistory("face");
 
   const recommended = useMemo(
     () =>
       profile
         ? workoutRecommendationService
             .recommend(profile, 10)
-            .filter((workout) => workout.id !== scheduledWorkout?.id)
+            .filter((workout) => workout.id !== training.workout?.id)
             .slice(0, 5)
         : [],
-    [profile, scheduledWorkout?.id],
+    [profile, training.workout?.id],
   );
   const adaptiveInsight = useMemo(
-    () => getAdaptiveTrainingInsight(completedWorkouts, heroWorkout, recommended),
-    [completedWorkouts, heroWorkout, recommended],
-  );
-  const muscleInsights = useMemo(
-    () =>
-      computeMuscleInsights({
-        history: completedWorkouts,
-        experience: profile?.experience,
-        focusAreas: profile?.focusAreas,
-      }),
-    [completedWorkouts, profile?.experience, profile?.focusAreas],
-  );
-  const fuelQuality = useMemo(
-    () => scoreLogEntries(todayEntries, goals.protein).day,
-    [todayEntries, goals.protein],
+    () => getAdaptiveTrainingInsight(completedWorkouts, training.workout, recommended),
+    [completedWorkouts, training.workout, recommended],
   );
 
   const listNotif = useServerFn(listNotifications);
@@ -129,131 +96,137 @@ function HomePage() {
   });
   const unread = (notifs ?? []).filter((notification) => !notification.read_at).length;
 
-  const subtitle = profile
-    ? (GOAL_SUBTITLES[profile.goal] ?? "Keep building toward your goal")
-    : "Your training, nutrition, and progress in one place";
-
   return (
-    <div className="animate-slide-up px-4 pb-6 pt-4 sm:px-5 sm:pb-8 sm:pt-5">
-      <header data-tour="tour-home-header" className="flex items-center justify-between gap-4 px-1">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <AscendrLogo decorative className="size-[18px] rounded-md border border-white/10" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neon">
-              {formatToday()}
-            </p>
-          </div>
-          <h1 className="mt-1 truncate text-[clamp(21px,6.4vw,25px)] font-extrabold leading-tight tracking-[-0.03em]">
-            {getGreeting()}, {displayName}
-          </h1>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">{subtitle}</p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Link
-            to="/notifications"
-            className="relative grid h-[44px] w-[44px] place-items-center rounded-2xl border border-white/[0.06] bg-surface shadow-[0_14px_30px_-18px_oklch(0_0_0/0.9)] transition active:scale-95"
-            aria-label={unread ? `${unread} unread notifications` : "Notifications"}
-          >
-            <Bell className="size-5" />
-            {unread > 0 && (
-              <span className="absolute right-2 top-2 grid min-w-4 place-items-center rounded-full bg-neon px-1 text-[8px] font-extrabold leading-4 text-neon-foreground">
-                {unread > 9 ? "9+" : unread}
-              </span>
-            )}
-          </Link>
-          <Link
-            to="/profile"
-            aria-label="Open profile"
-            className="grid h-[44px] w-[44px] place-items-center overflow-hidden rounded-2xl border border-neon/20 bg-gradient-to-br from-neon/20 to-surface text-neon shadow-[0_14px_30px_-18px_var(--color-neon)] transition active:scale-95"
-          >
-            <UserRound className="size-5" />
-          </Link>
-        </div>
-      </header>
+    <Page className="pb-28">
+      <div data-tour="tour-home-header">
+        <PageHeader
+          className="[&_h1]:text-[26px]"
+          kicker={`${formatToday()} · ${getGreeting()}`}
+          title={`Hi, ${displayName}`}
+          actions={
+            <>
+              <Link
+                to="/notifications"
+                className={iconButtonClass}
+                aria-label={unread ? `${unread} unread notifications` : "Notifications"}
+              >
+                <Bell />
+                {unread > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-neon px-1 text-[10px] font-bold leading-5 text-neon-foreground">
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                )}
+              </Link>
+              <Link to="/profile" aria-label="Open profile" className={iconButtonClass}>
+                <UserRound />
+              </Link>
+            </>
+          }
+        />
+      </div>
 
       {adaptiveInsight && !dismissedRecoveryCheck && (
-        <section className="mt-4">
-          <AdaptivePlanCard
-            insight={adaptiveInsight}
-            onKeepPlan={() => setDismissedRecoveryCheck(true)}
-          />
-        </section>
+        <AdaptivePlanCard
+          insight={adaptiveInsight}
+          onKeepPlan={() => setDismissedRecoveryCheck(true)}
+        />
       )}
 
-      <section
-        data-tour="tour-today-workout"
-        className={cn(adaptiveInsight && !dismissedRecoveryCheck ? "mt-3" : "mt-4 sm:mt-5")}
-      >
-        <TodayHero
-          plan={todayPlan}
-          workout={heroWorkout}
-          nextPlan={nextPlan}
-          nextWorkout={nextWorkout}
-          completed={Boolean(todayPlan?.isCompleted || progress.workoutMinutesToday > 0)}
-          muscleInsights={muscleInsights}
-          fuelQuality={fuelQuality}
-        />
-      </section>
+      {profile && <TodayCard training={training} />}
 
-      <section className="mt-6">
+      <section className="mt-7">
         <SectionHeader
-          eyebrow="Today"
-          title="Your daily targets"
-          action="View progress"
-          linkTo="/progress"
+          title="Fuel"
+          meta={
+            <Link to="/nutrition" className="inline-flex items-center gap-0.5">
+              Log food <ChevronRight className="size-4" />
+            </Link>
+          }
         />
-        <div className="grid grid-cols-2 gap-3">
-          <NutritionSnapshot
-            consumed={totals.kcal}
-            remaining={totals.remaining}
-            calorieGoal={goals.kcal}
-            protein={totals.protein}
-            proteinGoal={goals.protein}
-            itemCount={totals.itemCount}
+        <Link
+          to="/nutrition"
+          data-tour="tour-nutrition-card"
+          className={cn(cardClass, "block p-5 transition active:scale-[0.99]")}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="kicker">Calories left</p>
+              <p className="mt-1.5 text-[44px] font-bold leading-none tracking-[-0.04em] tabular-nums">
+                {totals.remaining.toLocaleString()}
+              </p>
+              <p className="mt-2 truncate text-[14px] text-muted-foreground">
+                {totals.kcal.toLocaleString()} eaten of {goals.kcal.toLocaleString()} kcal
+              </p>
+            </div>
+            <ProgressRing value={goals.kcal ? totals.kcal / goals.kcal : 0} size={88} stroke={9}>
+              <span className="text-[17px] font-bold tabular-nums">
+                {percent(totals.kcal, goals.kcal)}%
+              </span>
+            </ProgressRing>
+          </div>
+          <StackedBar
+            className="mt-5"
+            max={goals.kcal}
+            segments={[
+              { label: "Protein", value: totals.protein * 4, color: MACRO_COLORS.protein },
+              { label: "Carbs", value: totals.carbs * 4, color: MACRO_COLORS.carbs },
+              { label: "Fat", value: totals.fat * 9, color: MACRO_COLORS.fat },
+            ]}
           />
-          <ActivitySnapshot
-            completed={progress.completedThisWeek}
-            target={profile?.daysPerWeek ?? 4}
-            minutes={progress.workoutMinutesToday}
-            minuteTarget={progress.workoutMinutesTarget}
-            streak={progress.streakDays}
-          />
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <MacroStat
+              label="Protein"
+              value={totals.protein}
+              goal={goals.protein}
+              color={MACRO_COLORS.protein}
+            />
+            <MacroStat
+              label="Carbs"
+              value={totals.carbs}
+              goal={goals.carbs}
+              color={MACRO_COLORS.carbs}
+            />
+            <MacroStat label="Fat" value={totals.fat} goal={goals.fat} color={MACRO_COLORS.fat} />
+          </div>
+        </Link>
+      </section>
+
+      <section className="mt-7">
+        <SectionHeader
+          title="Your scores"
+          meta={
+            <Link to="/scan" className="inline-flex items-center gap-0.5">
+              Scan <ChevronRight className="size-4" />
+            </Link>
+          }
+        />
+        <div data-tour="tour-progress-card">
+          <ScoresCard body={bodyScans.data} face={faceScans.data} />
         </div>
       </section>
 
-      <section className="mt-6">
-        <SectionHeader eyebrow="Shortcuts" title="Keep moving" />
+      <section className="mt-7">
         <div className="grid grid-cols-4 gap-2.5">
-          <QuickAction to="/nutrition" icon={<Utensils />} label="Log food" />
-          <QuickAction to="/coach" icon={<MessageCircle />} label="Ask coach" />
-          <QuickAction to="/scan" icon={<ScanLine />} label="Run scan" />
-          <QuickAction to="/workouts" icon={<Sparkles />} label="Build plan" />
+          <QuickAction to="/nutrition" icon={<Utensils />} label="Log meal" />
+          <QuickAction to="/scan/body" icon={<ScanLine />} label="Body scan" />
+          <QuickAction to="/scan/face" icon={<ScanFace />} label="Face scan" />
+          <QuickAction to="/coach" icon={<MessageSquare />} label="Coach" />
         </div>
       </section>
 
-      {schedule.length > 0 && (
-        <section className="mt-6">
-          <SectionHeader
-            eyebrow="Training plan"
-            title="Your week"
-            action="Full schedule"
-            linkTo="/workouts"
-          />
-          <WeekRail schedule={schedule} />
-        </section>
-      )}
-
-      <section className="mt-6">
+      <section className="mt-7">
         <WeeklyReportCard compact />
       </section>
 
       {recommended.length > 0 && (
         <section className="mt-7">
           <SectionHeader
-            eyebrow="Personalized"
-            title="More picked for you"
-            action="View all"
-            linkTo="/workouts"
+            title="Picked for you"
+            meta={
+              <Link to="/workouts" className="inline-flex items-center gap-0.5">
+                All <ChevronRight className="size-4" />
+              </Link>
+            }
           />
           <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 scrollbar-none sm:-mx-5 sm:px-5">
             {recommended.map((workout) => (
@@ -265,7 +238,221 @@ function HomePage() {
       )}
 
       <QuickLogFab />
+    </Page>
+  );
+}
+
+function TodayCard({ training }: { training: TodayTraining }) {
+  const { workout, isRestDay, nextWorkout, todayPlan, doneCount, total, streak, schedule } =
+    training;
+  const featured = workout ?? nextWorkout;
+  const fills = useMemo(
+    () =>
+      featured
+        ? workoutFills(
+            featured.targetMuscles,
+            featured.exercises.map((exercise) => exercise.muscleGroup),
+          )
+        : {},
+    [featured],
+  );
+  const title = isRestDay ? "Recovery day" : focusTitle(workout, todayPlan?.splitLabel);
+
+  return (
+    <HeroCard data-tour="tour-today-workout" className="mt-5 overflow-hidden p-5">
+      <div className="flex gap-3">
+        <div className="min-w-0 flex-1">
+          <Kicker accent>{isRestDay ? "Rest day" : "Today's focus"}</Kicker>
+          <h2 className="mt-2 text-[26px] font-bold leading-[1.08] tracking-[-0.03em]">{title}</h2>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="font-data inline-flex items-center gap-1.5 rounded-[8px] bg-white/[0.06] px-2 py-1 text-[11px] font-semibold uppercase">
+              {isRestDay ? (
+                <>
+                  <HeartPulse className="size-3.5" /> Recover
+                </>
+              ) : (
+                <>
+                  <Timer className="size-3.5" /> {todayPlan?.duration ?? workout?.duration} min
+                </>
+              )}
+            </span>
+            <span
+              className={cn(
+                "font-data inline-flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-[11px] font-semibold uppercase",
+                streak > 0 ? "bg-neon/12 text-neon" : "bg-white/[0.06]",
+              )}
+            >
+              <Flame className="size-3.5" />
+              {streak > 0 ? `${streak}d streak` : "Day 1"}
+            </span>
+          </div>
+          {!isRestDay && total > 0 && (
+            <div className="mt-5 flex items-end gap-3">
+              <AscentSteps done={doneCount} total={total} height={46} />
+              <span className="font-data pb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+                <span className="text-[15px] text-foreground">{doneCount}</span>/{total}
+                <br />
+                moves
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="w-[108px] shrink-0">
+          <AnatomyFigure side="front" fills={fills} className="max-h-[180px]" />
+        </div>
+      </div>
+
+      {schedule.length > 0 && (
+        <div className="mt-4 border-t border-dashed border-white/10 pt-4">
+          <DayStrip days={scheduleToStrip(schedule)} />
+        </div>
+      )}
+
+      <div className="mt-5 grid grid-cols-[1fr_auto] gap-2.5">
+        {isRestDay ? (
+          <Link
+            to="/workout/$id"
+            params={{ id: "mobility-recovery" }}
+            className="flex items-center justify-center gap-2 rounded-[16px] bg-neon py-3.5 text-[15px] font-bold text-neon-foreground active:scale-[0.98]"
+          >
+            <HeartPulse className="size-[18px]" /> Start recovery
+          </Link>
+        ) : workout ? (
+          <Link
+            to="/workout/$id/session"
+            params={{ id: workout.id }}
+            className="flex items-center justify-center gap-2 rounded-[16px] bg-neon py-3.5 text-[15px] font-bold text-neon-foreground active:scale-[0.98]"
+          >
+            <Play className="size-[18px] fill-current" />
+            {training.liveSession
+              ? "Continue"
+              : training.finishedToday
+                ? "Train again"
+                : "Start workout"}
+          </Link>
+        ) : (
+          <span />
+        )}
+        <Link
+          to="/workouts"
+          aria-label="Open training plan"
+          className="grid w-[52px] place-items-center rounded-[16px] border border-hairline bg-white/[0.05]"
+        >
+          <Dumbbell className="size-5" />
+        </Link>
+      </div>
+    </HeroCard>
+  );
+}
+
+function MacroStat({
+  label,
+  value,
+  goal,
+  color,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  color: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+        <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
+        {label}
+      </p>
+      <p className="mt-1 truncate text-[15px] font-bold tabular-nums">
+        {value}
+        <span className="text-[12px] font-medium text-muted-foreground">/{goal}g</span>
+      </p>
     </div>
+  );
+}
+
+function ScoresCard({
+  body,
+  face,
+}: {
+  body?: ScanSubmissionSummary[];
+  face?: ScanSubmissionSummary[];
+}) {
+  const bodyTrend = scanTrendPoints(body);
+  return (
+    <div className={cn(cardClass, "p-5")}>
+      <div className="grid grid-cols-2 gap-3">
+        <ScoreTile kind="body" items={body} />
+        <ScoreTile kind="face" items={face} />
+      </div>
+      {bodyTrend.length >= 2 && (
+        <div className="mt-5 border-t border-hairline pt-4">
+          <p className="kicker text-[11px]">Physique trend</p>
+          <TrendChart points={bodyTrend} height={120} className="mt-2" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoreTile({ kind, items }: { kind: "body" | "face"; items?: ScanSubmissionSummary[] }) {
+  const latest = items?.[0];
+  const previous = items?.[1];
+  const delta = latest && previous ? latest.overallScore - previous.overallScore : 0;
+  const label = kind === "body" ? "Physique" : "Face";
+  const content = (
+    <>
+      <ProgressRing
+        value={latest ? latest.overallScore / 100 : 0}
+        size={92}
+        stroke={8}
+        color={scoreColor(latest?.overallScore)}
+      >
+        <span className="flex flex-col items-center">
+          <span
+            className="text-[26px] font-bold leading-none tabular-nums"
+            style={{ color: latest ? scoreColor(latest.overallScore) : undefined }}
+          >
+            {latest?.overallScore ?? "—"}
+          </span>
+          <span className="mt-0.5 text-[10px] font-semibold text-muted-foreground">/100</span>
+        </span>
+      </ProgressRing>
+      <p className="mt-3 text-[15px] font-bold">{label}</p>
+      <div className="mt-1 h-6">
+        {latest ? (
+          delta ? (
+            <DeltaBadge value={delta} className="px-2 py-0.5" />
+          ) : (
+            <span className="text-[12px] text-muted-foreground">
+              {new Date(latest.analyzedAt ?? latest.createdAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+          )
+        ) : (
+          <span className="text-[12px] font-semibold text-neon">Get your score</span>
+        )}
+      </div>
+    </>
+  );
+  const className =
+    "flex flex-col items-center rounded-[20px] bg-white/[0.035] px-2 py-4 text-center transition active:scale-[0.98]";
+  if (latest) {
+    return kind === "body" ? (
+      <Link to="/scan/body/$id" params={{ id: latest.id }} className={className}>
+        {content}
+      </Link>
+    ) : (
+      <Link to="/scan/face/$id" params={{ id: latest.id }} className={className}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <Link to={kind === "body" ? "/scan/body" : "/scan/face"} className={className}>
+      {content}
+    </Link>
   );
 }
 
@@ -286,41 +473,34 @@ function AdaptivePlanCard({
   const timing = insight.hoursSince < 24 ? "within the last day" : "yesterday";
 
   return (
-    <div className="relative overflow-hidden rounded-[23px] border border-neon/20 bg-gradient-to-br from-neon/[0.11] via-surface to-surface p-4 shadow-[0_20px_42px_-30px_var(--color-neon)]">
-      <div className="pointer-events-none absolute -right-8 -top-12 size-32 rounded-full bg-neon/10 blur-3xl" />
-      <div className="relative flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-neon text-neon-foreground shadow-[0_0_24px_-10px_var(--color-neon)]">
-          <RefreshCw className="size-[18px]" />
+    <div className={cn(cardClass, "mt-5 border-neon/25 p-4")}>
+      <div className="flex items-start gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-neon/12 text-neon">
+          <RefreshCw className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-extrabold uppercase tracking-[0.19em] text-neon">
-            Smart recovery check
-          </p>
-          <h2 className="mt-1 text-[15px] font-extrabold leading-tight">
-            Give {muscleList} more recovery?
-          </h2>
-          <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-            You trained {muscleList} {timing}. Switching focus may keep today&apos;s work more
-            productive.
-          </p>
+          <h2 className="text-[16px] font-bold leading-tight">Rest your {muscleList}?</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">Trained {timing}.</p>
         </div>
       </div>
-      <div className="relative mt-3 grid grid-cols-[1fr_auto] gap-2">
+      <div className="mt-3.5 grid grid-cols-[1fr_auto] gap-2">
         <Link
           to="/workout/$id"
           params={{ id: insight.alternative.id }}
-          className="flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full bg-neon px-4 text-[11px] font-extrabold text-neon-foreground transition active:scale-[0.98]"
+          className="flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-[14px] bg-neon px-4 text-[14px] font-bold text-neon-foreground transition active:scale-[0.98]"
         >
-          Switch to{" "}
-          {insight.alternative.targetMuscles[0]
-            ? FOCUS_LABELS[insight.alternative.targetMuscles[0]]
-            : "another focus"}
-          <ChevronRight className="size-3.5 shrink-0" />
+          <span className="truncate">
+            Switch to{" "}
+            {insight.alternative.targetMuscles[0]
+              ? FOCUS_LABELS[insight.alternative.targetMuscles[0]]
+              : "another focus"}
+          </span>
+          <ChevronRight className="size-4 shrink-0" />
         </Link>
         <button
           type="button"
           onClick={onKeepPlan}
-          className="h-10 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 text-[10px] font-bold text-white/75"
+          className="h-11 rounded-[14px] border border-hairline bg-white/[0.05] px-4 text-[14px] font-semibold"
         >
           Keep plan
         </button>
@@ -329,465 +509,24 @@ function AdaptivePlanCard({
   );
 }
 
-function upcomingDayLabel(dateISO: string) {
-  const [year, month, day] = dateISO.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  const tomorrow = new Date();
-  tomorrow.setHours(0, 0, 0, 0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return date.getTime() === tomorrow.getTime()
-    ? "tomorrow"
-    : date.toLocaleDateString(undefined, { weekday: "long" });
-}
-
-function TodayHero({
-  plan,
-  workout,
-  nextPlan,
-  nextWorkout,
-  completed,
-  muscleInsights,
-  fuelQuality,
-}: {
-  plan?: WeeklyScheduleDay;
-  workout: Workout | null;
-  nextPlan?: WeeklyScheduleDay;
-  nextWorkout: Workout | null;
-  completed: boolean;
-  muscleInsights: MuscleInsight[];
-  fuelQuality: NutritionQuality;
-}) {
-  const isRecovery = !plan || plan.isRestDay || !plan.workoutId;
-  // Rest days point at the member's next session instead of a generic recovery card.
-  const upNext =
-    isRecovery && nextPlan && nextWorkout ? { plan: nextPlan, workout: nextWorkout } : null;
-  const upNextDay = upNext ? upcomingDayLabel(upNext.plan.dateISO) : "";
-  const featuredWorkout = upNext?.workout ?? workout;
-  const primaryPath = isRecovery ? "/workout/$id" : "/workout/$id/session";
-  const workoutId = featuredWorkout?.id ?? "mobility-recovery";
-  const duration = upNext
-    ? upNext.plan.duration
-    : isRecovery
-      ? (workout?.duration ?? 15)
-      : (plan?.duration ?? workout?.duration ?? 30);
-  const exerciseCount = upNext
-    ? upNext.workout.exercises.length
-    : isRecovery
-      ? (workout?.exercises.length ?? 0)
-      : (plan?.exercises.length ?? 0);
-  const calories = upNext
-    ? upNext.plan.estimatedCalories
-    : isRecovery
-      ? (workout?.calories ?? 0)
-      : (plan?.estimatedCalories ?? workout?.calories ?? 0);
-  const eyebrow = upNext
-    ? `Rest day · Next up ${upNextDay}`
-    : isRecovery
-      ? "Reset · Restore · Recover"
-      : plan?.splitLabel;
-  const title = upNext
-    ? upNext.workout.title
-    : isRecovery
-      ? "Recovery is part of the plan."
-      : (workout?.title ?? plan?.workoutTitle);
-  const description = upNext
-    ? `${upNext.plan.splitLabel} · ${upNext.plan.focus}. Recover today so you start it fresh.`
-    : isRecovery
-      ? "Loosen up, restore range of motion, and come back ready for your next session."
-      : plan?.focus || workout?.description;
-  const primaryLabel = upNext
-    ? `View ${upNextDay === "tomorrow" ? "tomorrow's" : `${upNextDay}'s`} workout`
-    : isRecovery
-      ? "Start recovery"
-      : completed
-        ? "Train again"
-        : "Start workout";
-
-  return (
-    <div className="relative min-h-[385px] overflow-hidden rounded-[28px] border border-white/[0.09] bg-surface-2 shadow-[0_32px_75px_-32px_oklch(0_0_0/0.95)] sm:min-h-[410px] sm:rounded-[32px]">
-      {featuredWorkout?.image && (
-        <img
-          src={featuredWorkout.image}
-          alt=""
-          fetchPriority="high"
-          className="absolute inset-0 size-full object-cover"
-          style={{ objectPosition: featuredWorkout.imagePosition }}
-        />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/25 to-black" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(0.92_0.21_130/0.16),transparent_38%)]" />
-
-      <div className="relative flex min-h-[385px] flex-col p-4 sm:min-h-[410px] sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] backdrop-blur-md">
-            {isRecovery ? (
-              <HeartPulse className="size-3 text-neon" />
-            ) : (
-              <Zap className="size-3 text-neon" />
-            )}
-            Today&apos;s brief
-          </span>
-          <span
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider backdrop-blur-md",
-              completed
-                ? "border-emerald-300/25 bg-emerald-300/15 text-emerald-300"
-                : "border-white/10 bg-black/45 text-white/75",
-            )}
-          >
-            {completed
-              ? "Completed"
-              : upNext
-                ? "Rest day"
-                : isRecovery
-                  ? "Recharge"
-                  : plan?.difficulty}
-          </span>
-        </div>
-
-        <div className="mt-auto max-w-[92%]">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon">{eyebrow}</p>
-          <h2 className="mt-2 text-[26px] font-extrabold leading-[1.02] tracking-[-0.04em] sm:text-[30px]">
-            {title}
-          </h2>
-          <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-white/65">
-            {description}
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Link
-              to="/progress"
-              className="rounded-[17px] border border-white/10 bg-black/45 p-3 backdrop-blur-md transition active:scale-[0.98]"
-            >
-              <p className="text-[8px] font-extrabold uppercase tracking-[0.16em] text-analytics-teal">
-                Train next
-              </p>
-              <p className="mt-1 truncate text-[12px] font-extrabold">
-                {muscleInsights
-                  .slice(0, 2)
-                  .map((item) => item.label)
-                  .join(" + ")}
-              </p>
-              <p className="mt-0.5 text-[9px] text-white/50">
-                {muscleInsights[0]?.priority ?? 0}% priority · estimated
-              </p>
-            </Link>
-            <Link
-              to="/nutrition"
-              className="rounded-[17px] border border-white/10 bg-black/45 p-3 backdrop-blur-md transition active:scale-[0.98]"
-            >
-              <p className="text-[8px] font-extrabold uppercase tracking-[0.16em] text-analytics-amber">
-                Fuel quality
-              </p>
-              <p className="mt-1 text-[12px] font-extrabold">
-                {fuelQuality.score == null
-                  ? "Not scored yet"
-                  : `${fuelQuality.score} · ${fuelQuality.band}`}
-              </p>
-              <p className="mt-0.5 text-[9px] text-white/50">
-                {fuelQuality.score == null
-                  ? "Log food to see quality"
-                  : `${fuelQuality.confidence} nutrition data`}
-              </p>
-            </Link>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-white/80">
-            <HeroStat icon={<Clock3 />} label={`${duration} min`} />
-            <HeroStat icon={<Dumbbell />} label={`${exerciseCount} exercises`} />
-            {calories > 0 && <HeroStat icon={<Flame />} label={`~${calories} kcal`} />}
-          </div>
-
-          <div className="mt-5 flex items-center gap-2.5">
-            <Link
-              to={primaryPath}
-              params={{ id: workoutId }}
-              className="flex h-12 min-h-[44px] flex-1 items-center justify-center gap-2 rounded-full bg-neon px-5 text-[13px] font-extrabold text-neon-foreground shadow-[0_14px_30px_-15px_var(--color-neon)] transition active:scale-[0.98]"
-            >
-              {upNext ? (
-                <Dumbbell className="size-4" />
-              ) : isRecovery ? (
-                <HeartPulse className="size-4" />
-              ) : (
-                <Play className="size-4 fill-current" />
-              )}
-              {primaryLabel}
-            </Link>
-            {upNext ? (
-              <Link
-                to="/workout/$id"
-                params={{ id: "mobility-recovery" }}
-                aria-label="Start a recovery session"
-                className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-neon backdrop-blur-md transition active:scale-95"
-              >
-                <HeartPulse className="size-5" />
-              </Link>
-            ) : (
-              <Link
-                to="/workouts"
-                aria-label="Choose another workout"
-                className="grid h-12 min-h-[44px] w-12 min-w-[44px] place-items-center rounded-full border border-white/15 bg-black/45 text-white backdrop-blur-md transition active:scale-95"
-              >
-                <ChevronRight className="size-5" />
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HeroStat({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 backdrop-blur-sm [&_svg]:size-3 [&_svg]:text-neon">
-      {icon}
-      {label}
-    </span>
-  );
-}
-
-function NutritionSnapshot({
-  consumed,
-  remaining,
-  calorieGoal,
-  protein,
-  proteinGoal,
-  itemCount,
-}: {
-  consumed: number;
-  remaining: number;
-  calorieGoal: number;
-  protein: number;
-  proteinGoal: number;
-  itemCount: number;
-}) {
-  const calorieProgress = percent(consumed, calorieGoal);
-  const proteinProgress = percent(protein, proteinGoal);
-
-  return (
-    <Link
-      data-tour="tour-nutrition-card"
-      to="/nutrition"
-      className="group relative min-h-[172px] overflow-hidden rounded-[22px] border border-white/[0.06] bg-surface p-3.5 transition active:scale-[0.99] sm:min-h-[190px] sm:rounded-[25px] sm:p-4"
-    >
-      <div className="absolute right-[-34px] top-[-36px] size-28 rounded-full bg-neon/[0.07] blur-2xl" />
-      <div className="relative flex items-center justify-between">
-        <span className="grid size-9 place-items-center rounded-xl bg-neon/10 text-neon">
-          <Apple className="size-[18px]" />
-        </span>
-        <ChevronRight className="size-4 text-muted-foreground transition group-active:translate-x-0.5" />
-      </div>
-      <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        Nutrition
-      </p>
-      <div className="mt-1 flex items-end gap-1">
-        <strong className="text-[24px] font-extrabold leading-none tabular-nums">
-          {remaining}
-        </strong>
-        <span className="pb-0.5 text-[10px] text-muted-foreground">kcal left</span>
-      </div>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-        <div
-          className="h-full rounded-full bg-neon transition-all"
-          style={{ width: `${calorieProgress}%` }}
-        />
-      </div>
-      <div className="mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
-        <span>{itemCount ? `${itemCount} logged` : "Log first meal"}</span>
-        <span className="tabular-nums">
-          {consumed}/{calorieGoal}
-        </span>
-      </div>
-      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 text-[10px]">
-        <span className="text-muted-foreground">Protein</span>
-        <span className="font-semibold tabular-nums">
-          {protein}/{proteinGoal}g <span className="text-neon">· {proteinProgress}%</span>
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-function ActivitySnapshot({
-  completed,
-  target,
-  minutes,
-  minuteTarget,
-  streak,
-}: {
-  completed: number;
-  target: number;
-  minutes: number;
-  minuteTarget: number;
-  streak: number;
-}) {
-  const targetDays = Math.max(1, target);
-
-  return (
-    <Link
-      data-tour="tour-progress-card"
-      to="/progress"
-      className="group relative min-h-[172px] overflow-hidden rounded-[22px] border border-white/[0.06] bg-surface p-3.5 transition active:scale-[0.99] sm:min-h-[190px] sm:rounded-[25px] sm:p-4"
-    >
-      <div className="absolute right-[-32px] top-[-34px] size-28 rounded-full bg-sky-400/[0.06] blur-2xl" />
-      <div className="relative flex items-center justify-between">
-        <span className="grid size-9 place-items-center rounded-xl bg-white/[0.05] text-neon">
-          <Dumbbell className="size-[18px]" />
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-neon/10 px-2 py-1 text-[9px] font-bold text-neon">
-          <Trophy className="size-3" /> {streak}d
-        </span>
-      </div>
-      <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        Training
-      </p>
-      <div className="mt-1 flex items-end gap-1">
-        <strong className="text-[24px] font-extrabold leading-none tabular-nums">
-          {completed}
-        </strong>
-        <span className="pb-0.5 text-[10px] text-muted-foreground">of {targetDays} this week</span>
-      </div>
-      <div className="mt-4 flex gap-1.5">
-        {Array.from({ length: targetDays }).map((_, index) => (
-          <span
-            key={index}
-            className={cn(
-              "h-1.5 flex-1 rounded-full",
-              index < completed ? "bg-neon" : "bg-white/[0.07]",
-            )}
-          />
-        ))}
-      </div>
-      <div className="mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
-        <span>
-          {completed >= targetDays ? "Weekly goal hit" : `${targetDays - completed} to go`}
-        </span>
-        <span>{streak ? `${streak} day streak` : "Start your streak"}</span>
-      </div>
-      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 text-[10px]">
-        <span className="text-muted-foreground">Today</span>
-        <span className="font-semibold tabular-nums">
-          {minutes}/{minuteTarget} min
-        </span>
-      </div>
-    </Link>
-  );
-}
-
 function QuickAction({
   to,
   icon,
   label,
 }: {
-  to: "/nutrition" | "/coach" | "/scan" | "/workouts";
+  to: "/nutrition" | "/coach" | "/scan/body" | "/scan/face";
   icon: ReactNode;
   label: string;
 }) {
   return (
     <Link to={to} className="group min-w-0 text-center active:scale-95">
-      <span className="mx-auto grid size-12 place-items-center rounded-2xl border border-white/[0.06] bg-surface text-white shadow-[0_12px_25px_-18px_oklch(0_0_0/0.9)] transition group-active:border-neon/30 group-active:text-neon [&_svg]:size-[19px]">
+      <span className="mx-auto grid size-[58px] place-items-center rounded-[18px] border border-hairline bg-surface text-foreground transition group-active:text-neon [&_svg]:size-[22px]">
         {icon}
       </span>
-      <span className="mt-2 block truncate text-[9px] font-semibold text-muted-foreground">
+      <span className="mt-2 block truncate text-[12px] font-semibold text-muted-foreground">
         {label}
       </span>
     </Link>
-  );
-}
-
-function WeekRail({ schedule }: { schedule: WeeklyScheduleDay[] }) {
-  return (
-    <div className="rounded-[25px] border border-white/[0.06] bg-surface p-3.5">
-      <ol className="grid grid-cols-7 gap-1.5">
-        {schedule.map((day) => {
-          const content = (
-            <>
-              <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
-                {day.dayName.slice(0, 1)}
-              </span>
-              <span className="mt-1 text-[12px] font-bold tabular-nums">
-                {new Date(`${day.dateISO}T12:00:00`).getDate()}
-              </span>
-              <span
-                className={cn(
-                  "mt-1.5 grid size-3 place-items-center rounded-full",
-                  day.isCompleted
-                    ? "bg-neon text-neon-foreground"
-                    : day.isRestDay
-                      ? "border border-white/15 bg-transparent"
-                      : day.isToday
-                        ? "bg-neon"
-                        : "bg-white/15",
-                )}
-              >
-                {day.isCompleted && <Check className="size-2.5" strokeWidth={3} />}
-              </span>
-            </>
-          );
-          const classes = cn(
-            "flex min-h-[69px] flex-col items-center justify-center rounded-2xl border transition",
-            day.isToday
-              ? "border-neon/40 bg-neon/[0.08] text-white"
-              : "border-transparent bg-white/[0.025] text-white/80",
-          );
-
-          return (
-            <li key={day.id}>
-              {day.workoutId ? (
-                <Link to="/workout/$id" params={{ id: day.workoutId }} className={classes}>
-                  {content}
-                </Link>
-              ) : (
-                <div className={classes}>{content}</div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-      <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] px-1 pt-3">
-        <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold">
-            {schedule.find((day) => day.isToday)?.splitLabel ?? "Today"}
-          </p>
-          <p className="mt-0.5 truncate text-[9px] text-muted-foreground">
-            {schedule.filter((day) => day.isCompleted).length} complete ·{" "}
-            {schedule.filter((day) => !day.isRestDay).length} planned
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-neon">
-          <Target className="size-3" /> Stay consistent
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({
-  eyebrow,
-  title,
-  action,
-  linkTo,
-}: {
-  eyebrow?: string;
-  title: string;
-  action?: string;
-  linkTo?: "/progress" | "/workouts";
-}) {
-  return (
-    <div className="mb-3 flex items-end justify-between gap-4 px-1">
-      <div>
-        {eyebrow && (
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">{eyebrow}</p>
-        )}
-        <h2 className="mt-0.5 text-[18px] font-extrabold tracking-[-0.02em]">{title}</h2>
-      </div>
-      {action && linkTo && (
-        <Link to={linkTo} className="mb-0.5 text-[10px] font-semibold text-muted-foreground">
-          {action}
-        </Link>
-      )}
-    </div>
   );
 }
 

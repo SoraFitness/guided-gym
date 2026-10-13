@@ -46,6 +46,25 @@ describe("nutrition quality", () => {
     );
   });
 
+  it("credits protein-dense foods even in a small portion", () => {
+    const yogurt = scoreNutritionQuality({
+      kcal: 53,
+      protein: 9.4,
+      proteinGoal: 158,
+      meal: "Dinner",
+    });
+    expect(yogurt.watchItems).not.toContain("Add a stronger protein source");
+    expect(yogurt.positives).toContain("Protein supports your target");
+
+    const banana = scoreNutritionQuality({
+      kcal: 105,
+      protein: 1.3,
+      proteinGoal: 158,
+      meal: "Breakfast",
+    });
+    expect(banana.watchItems).toContain("Add a stronger protein source");
+  });
+
   it("marks macro-only legacy food as partial instead of inventing nutrients", () => {
     const result = scoreNutritionQuality({
       kcal: 300,

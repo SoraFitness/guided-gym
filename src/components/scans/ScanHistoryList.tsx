@@ -11,6 +11,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ScanSubmissionSummary } from "@/lib/scanSubmissions.functions";
+import { scoreColor, scoreTier } from "@/components/app/kit";
+import { TrendChart } from "@/components/app/charts";
+import { scanTrendPoints } from "./useScanHistory";
 
 interface ScanHistoryListProps {
   items: ScanSubmissionSummary[];
@@ -37,66 +40,72 @@ export function ScanHistoryList({
 }: ScanHistoryListProps) {
   if (!items.length) return null;
 
+  const trend = scanTrendPoints(items);
+
   return (
     <section className="mt-8">
-      <div className="mb-3 flex items-end justify-between">
-        <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.22em] text-neon">
-            Private history
-          </p>
-          <h2 className="mt-1 text-xl font-bold">Previous {label} scans</h2>
-        </div>
-        <span className="text-[11px] text-muted-foreground">{items.length} saved</span>
+      <div className="mb-3 flex items-center justify-between gap-3 px-1">
+        <h2 className="text-[20px] font-bold tracking-[-0.02em]">Your {label} scans</h2>
+        <span className="text-[13px] font-medium text-muted-foreground">{items.length} saved</span>
       </div>
+
+      {trend.length >= 2 && (
+        <div className="mb-3 rounded-[24px] border border-hairline bg-surface px-3 pb-3 pt-4">
+          <TrendChart points={trend} height={130} />
+        </div>
+      )}
 
       <div className="space-y-2.5">
         {items.map((item, index) => (
           <div
             key={item.id}
-            className="group flex items-center gap-3 rounded-[22px] border border-white/[0.07] bg-surface/85 p-3"
+            className="group flex items-center gap-3 rounded-[20px] border border-hairline bg-surface p-3"
           >
             <button
               type="button"
               onClick={() => onOpen(item.id)}
-              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
             >
-              <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl bg-black">
+              <div className="relative size-16 shrink-0 overflow-hidden rounded-[16px] bg-black">
                 {item.photoUrl ? (
                   <img
                     src={item.photoUrl}
                     alt="Saved scan"
-                    className="h-full w-full object-cover object-top opacity-75"
+                    className="h-full w-full object-cover object-top opacity-80"
                   />
                 ) : (
                   <div className="grid h-full place-items-center text-neon">
                     <ScanLine className="size-5" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
-                <span className="absolute bottom-1.5 left-2 text-lg font-black text-white">
-                  {item.overallScore}
-                </span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
-                  {index === 0 ? "Latest report" : "Completed report"}
+                <p className="flex items-baseline gap-1.5">
+                  <span
+                    className="text-[24px] font-bold leading-none tabular-nums"
+                    style={{ color: scoreColor(item.overallScore) }}
+                  >
+                    {item.overallScore}
+                  </span>
+                  <span className="text-[13px] font-semibold text-muted-foreground">
+                    {scoreTier(item.overallScore).label}
+                  </span>
                 </p>
-                <p className="mt-1 line-clamp-1 text-sm font-semibold">{item.overallSummary}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <Clock3 className="size-3" /> {formatDate(item.analyzedAt ?? item.createdAt)}
+                <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                  <Clock3 className="size-3.5" /> {formatDate(item.analyzedAt ?? item.createdAt)}
                   {index < items.length - 1 && (
                     <ScoreChange delta={item.overallScore - items[index + 1].overallScore} />
                   )}
                 </p>
               </div>
-              <ChevronRight className="size-4 shrink-0 text-white/30 transition group-hover:text-neon" />
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
             </button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button
                   type="button"
                   disabled={deletingId === item.id}
-                  className="grid size-9 shrink-0 place-items-center rounded-full text-white/30 transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground/60 transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                   aria-label="Delete scan"
                 >
                   <Trash2 className="size-4" />
@@ -131,12 +140,12 @@ export function ScanHistoryList({
 function ScoreChange({ delta }: { delta: number }) {
   const tone =
     delta > 0
-      ? "bg-neon/10 text-neon"
+      ? "bg-score-high/12 text-score-high"
       : delta < 0
-        ? "bg-destructive/10 text-destructive"
-        : "bg-white/[0.06] text-white/45";
+        ? "bg-score-low/12 text-score-low"
+        : "bg-white/[0.06] text-muted-foreground";
   return (
-    <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${tone}`}>
+    <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>
       {delta > 0 ? `+${delta}` : delta < 0 ? delta : "No change"}
     </span>
   );

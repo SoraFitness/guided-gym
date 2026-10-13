@@ -38,13 +38,17 @@ import {
   type Meal,
   type LogEntry,
   type Food,
+  type NutritionGoals,
 } from "@/lib/foods";
 import {
   useNutrition,
   addEntry as storeAdd,
   updateEntry as storeUpdate,
   removeEntry as storeRemove,
+  setNutritionGoals,
 } from "@/lib/nutritionStore";
+import { suggestNutrition } from "@/lib/nutritionService";
+import { BodyPortal } from "@/components/app/BodyPortal";
 import { FoodThumbnail, MealThumbnail } from "@/components/FoodThumbnail";
 import { BrandLogo } from "@/components/BrandLogo";
 import { resultToCustom, type LookupResult } from "@/lib/foodLookup";
@@ -69,6 +73,7 @@ import {
   type StoredFood,
 } from "@/lib/foodHistoryStore";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -80,6 +85,22 @@ import {
 import { compressImage } from "@/lib/imageCompress";
 import { FoodCameraPanel } from "@/components/nutrition/FoodCameraPanel";
 import { readNutritionLabel } from "@/lib/nutritionLabel.functions";
+import { useProfile, type Goal, type Profile } from "@/lib/profile";
+import {
+  cardClass,
+  HeroCard,
+  iconButtonClass,
+  Kicker,
+  MACRO_COLORS,
+  Page,
+  PageHeader,
+  primaryButtonClass,
+  ProgressRing,
+  scoreColor,
+  SectionHeader,
+  StackedBar,
+  StatTile,
+} from "@/components/app/kit";
 
 const BarcodeScannerPanel = lazy(() =>
   import("@/components/BarcodeScannerPanel").then((module) => ({
@@ -95,6 +116,7 @@ export const Route = createFileRoute("/_app/nutrition")({
 function NutritionPage() {
   const [day, setDay] = useState<Date>(new Date());
   const { entries, goals } = useNutrition(day);
+  const { profile } = useProfile();
   const [addFor, setAddFor] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<LogEntry | null>(null);
 
@@ -115,70 +137,133 @@ function NutritionPage() {
   const remove = (id: string) => storeRemove(id);
 
   const isToday = day.toDateString() === new Date().toDateString();
-  const dayLabel = isToday
-    ? "Today"
-    : day.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-  const kcalRemaining = goals.kcal - Math.round(totals.kcal);
+  const kcalEaten = Math.round(totals.kcal);
+  const kcalRemaining = goals.kcal - kcalEaten;
+  const proteinToGo = Math.max(0, Math.round(goals.protein - totals.protein));
+  const loggedCount = today.length;
 
   return (
-    <div className="px-4 pt-5 pb-32 animate-slide-up sm:px-5">
-      <header className="flex items-start justify-between gap-3 px-1">
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Fuel</p>
-          <h1 className="mt-1 truncate text-[27px] font-extrabold leading-tight tracking-[-0.04em]">
-            {dayLabel}
-          </h1>
-        </div>
-        <span className="mt-2 shrink-0 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold text-muted-foreground">
-          {today.length} item{today.length === 1 ? "" : "s"}
-        </span>
-      </header>
+    <Page className="pb-40">
+      <PageHeader
+        kicker={
+          isToday
+            ? `Today · ${day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`
+            : day.toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })
+        }
+        title="Fuel"
+        actions={
+          <button
+            type="button"
+            onClick={() => setAddFor(currentMeal())}
+            aria-label="Add food"
+            className={iconButtonClass}
+          >
+            <Plus />
+          </button>
+        }
+      />
 
       <div className="mt-4">
         <DayTabs day={day} setDay={setDay} />
       </div>
 
       {/* Calories */}
-      <section className="relative mt-4 overflow-hidden rounded-[28px] border border-white/[0.06] bg-[linear-gradient(160deg,oklch(0.22_0_0)_0%,oklch(0.16_0_0)_100%)] p-5 shadow-[0_10px_40px_-20px_oklch(0_0_0/0.8)]">
-        <div className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-neon/10 blur-3xl" />
-        <div className="relative flex items-center justify-between gap-4">
+      <HeroCard className="mt-4 p-5">
+        <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[46px] font-extrabold leading-none tracking-[-0.045em] tabular-nums">
-              {Math.abs(kcalRemaining)}
-            </div>
-            <p className="mt-2 text-[12px] font-medium text-muted-foreground">
-              {kcalRemaining < 0 ? "Calories over" : "Calories left"}
+            <Kicker accent>{kcalRemaining < 0 ? "Calories over" : "Calories left"}</Kicker>
+            <p className="mt-1.5 text-[48px] font-bold leading-none tracking-[-0.045em] tabular-nums">
+              {Math.abs(kcalRemaining).toLocaleString()}
             </p>
-            <FuelScorePill quality={quality.day} />
+            <p className="mt-2 truncate text-[14px] text-muted-foreground">
+              {kcalEaten.toLocaleString()} eaten of {goals.kcal.toLocaleString()} kcal
+            </p>
           </div>
-          <CalorieRing consumed={Math.round(totals.kcal)} goal={goals.kcal} />
+          <ProgressRing
+            value={goals.kcal ? kcalEaten / goals.kcal : 0}
+            size={96}
+            stroke={10}
+            color={kcalRemaining < 0 ? "var(--color-score-mid)" : "var(--color-neon)"}
+          >
+            <span className="text-[18px] font-bold tabular-nums">
+              {goals.kcal ? Math.round((kcalEaten / goals.kcal) * 100) : 0}%
+            </span>
+          </ProgressRing>
         </div>
-      </section>
+        <StackedBar
+          className="mt-5"
+          max={goals.kcal}
+          segments={[
+            { label: "Protein", value: totals.protein * 4, color: MACRO_COLORS.protein },
+            { label: "Carbs", value: totals.carbs * 4, color: MACRO_COLORS.carbs },
+            { label: "Fat", value: totals.fat * 9, color: MACRO_COLORS.fat },
+          ]}
+        />
+        <div className="mt-3 flex items-center gap-4 text-[13px] text-muted-foreground">
+          {(
+            [
+              ["Protein", MACRO_COLORS.protein],
+              ["Carbs", MACRO_COLORS.carbs],
+              ["Fat", MACRO_COLORS.fat],
+            ] as const
+          ).map(([label, color]) => (
+            <span key={label} className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
+              {label}
+            </span>
+          ))}
+          <span className="ml-auto">
+            <FuelScorePill quality={quality.day} />
+          </span>
+        </div>
+      </HeroCard>
 
       {/* Macros */}
       <div className="mt-3 grid grid-cols-3 gap-2.5">
-        <MacroRingCard
+        <StatTile
           label="Protein"
           value={totals.protein}
           goal={goals.protein}
-          hue="oklch(0.92 0.21 130)"
-          Icon={Zap}
+          unit="g"
+          color={MACRO_COLORS.protein}
         />
-        <MacroRingCard
+        <StatTile
           label="Carbs"
           value={totals.carbs}
           goal={goals.carbs}
-          hue="oklch(0.82 0.15 80)"
-          Icon={Wheat}
+          unit="g"
+          color={MACRO_COLORS.carbs}
         />
-        <MacroRingCard
-          label="Fats"
+        <StatTile
+          label="Fat"
           value={totals.fat}
           goal={goals.fat}
-          hue="oklch(0.78 0.14 185)"
-          Icon={Droplet}
+          unit="g"
+          color={MACRO_COLORS.fat}
         />
       </div>
+
+      {proteinToGo > 0 ? (
+        <div className="mt-3 flex items-center gap-3 rounded-[18px] border border-neon/20 bg-neon/[0.06] px-4 py-3.5">
+          <Zap className="size-5 shrink-0 text-neon" />
+          <p className="text-[14px] font-medium leading-snug">
+            {proteinToGo}g protein to go. {proteinReason(profile?.goal)}
+          </p>
+        </div>
+      ) : (
+        loggedCount > 0 && (
+          <div className="mt-3 flex items-center gap-3 rounded-[18px] border border-score-high/25 bg-score-high/[0.08] px-4 py-3.5">
+            <Check className="size-5 shrink-0 text-score-high" />
+            <p className="text-[14px] font-medium">Protein goal hit. Nice work.</p>
+          </div>
+        )
+      )}
+
+      {isToday && profile && <TargetRefreshCard goals={goals} profile={profile} />}
 
       {quality.day.score != null && (
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -194,38 +279,25 @@ function NutritionPage() {
         </div>
       )}
 
-      {/* Scan CTA */}
-      <button
-        onClick={() => setAddFor(currentMeal())}
-        data-tour="tour-nutrition-log"
-        className="group relative mt-4 w-full overflow-hidden rounded-[24px] text-left transition active:scale-[0.99]"
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,oklch(0.92_0.21_130)_0%,oklch(0.85_0.2_150)_55%,oklch(0.78_0.16_180)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,oklch(1_0_0/0.25),transparent_60%)]" />
-        <div className="relative p-4 flex items-center gap-4 text-neon-foreground">
-          <div className="size-12 rounded-2xl bg-black/15 backdrop-blur grid place-items-center">
-            <ScanLine className="size-6" />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-1.5 text-[15px] font-bold">
-              Log food your way <Sparkles className="size-4" />
-            </div>
-            <div className="text-[11px] leading-snug opacity-80">
-              Search, scan a barcode, take a photo, or enter it manually
-            </div>
-          </div>
-          <Camera className="size-5 opacity-80" />
-        </div>
-      </button>
+      <SectionHeader
+        className="mt-7"
+        title={isToday ? "Today's meals" : "Meals"}
+        meta={`${loggedCount} logged`}
+      />
 
-      <div className="mb-3 mt-6 flex items-end justify-between px-1">
-        <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neon">Daily log</p>
-          <h2 className="mt-0.5 text-lg font-extrabold">Meals</h2>
-        </div>
-        <span className="text-[9px] text-muted-foreground">
-          {Math.round(totals.kcal)} of {goals.kcal} kcal
-        </span>
+      {/* Sticky log button, above the tab bar */}
+      <div
+        className="pointer-events-none fixed inset-x-0 z-40 mx-auto max-w-md px-4 sm:px-5"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.4rem)" }}
+      >
+        <button
+          type="button"
+          onClick={() => setAddFor(currentMeal())}
+          data-tour="tour-nutrition-log"
+          className={cn(primaryButtonClass, "pointer-events-auto")}
+        >
+          <Camera /> Log a meal
+        </button>
       </div>
 
       {/* Meal sections */}
@@ -275,21 +347,28 @@ function NutritionPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   );
 }
 
+function proteinReason(goal?: Goal) {
+  if (goal === "lose_weight" || goal === "recomp") return "It keeps muscle while you cut.";
+  if (goal === "build_muscle" || goal === "get_stronger") return "It's what builds new muscle.";
+  return "It keeps you full and recovering.";
+}
+
 function FuelScorePill({ quality }: { quality: NutritionQuality }) {
-  if (quality.score == null) {
-    return (
-      <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-white/45">
-        <Sparkles className="size-3" /> Log a meal for your fuel score
-      </span>
-    );
-  }
+  if (quality.score == null) return null;
   return (
-    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-analytics-teal/25 bg-analytics-teal/10 px-2.5 py-1 text-[10px] font-bold text-analytics-teal">
-      <Sparkles className="size-3" /> Fuel score {quality.score} · {quality.band}
+    <span
+      title={`Fuel score ${quality.score} · ${quality.band}`}
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-bold"
+      style={{
+        color: scoreColor(quality.score),
+        backgroundColor: `color-mix(in oklch, ${scoreColor(quality.score)} 14%, transparent)`,
+      }}
+    >
+      <Sparkles className="size-3.5" /> {quality.score}
     </span>
   );
 }
@@ -304,16 +383,16 @@ function QualitySignal({
   positive?: boolean;
 }) {
   return (
-    <div className="rounded-[17px] border border-white/[0.06] bg-black/20 p-3">
+    <div className="rounded-[18px] border border-hairline bg-surface p-3.5">
       <p
         className={cn(
-          "text-[8px] font-extrabold uppercase tracking-[0.16em]",
-          positive ? "text-analytics-teal" : "text-analytics-amber",
+          "text-[11px] font-bold uppercase tracking-[0.1em]",
+          positive ? "text-score-high" : "text-score-mid",
         )}
       >
         {label}
       </p>
-      <p className="mt-1 text-[9px] leading-snug text-white/65">{value}</p>
+      <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-foreground/80">{value}</p>
     </div>
   );
 }
@@ -383,34 +462,30 @@ function DayTabs({ day, setDay }: { day: Date; setDay: (d: Date) => void }) {
   };
 
   const tab = (label: string, active: boolean, onClick: () => void) => (
-    <button onClick={onClick} className="relative h-9 px-0.5 text-left">
-      <span
-        className={cn(
-          "text-[17px] font-extrabold tracking-[-0.02em] transition",
-          active ? "text-foreground" : "text-white/35",
-        )}
-      >
-        {label}
-      </span>
-      {active && (
-        <span className="absolute -bottom-0.5 left-1/2 size-1 -translate-x-1/2 rounded-full bg-neon" />
+    <button
+      onClick={onClick}
+      className={cn(
+        "h-10 rounded-full px-4 text-[14px] font-semibold transition",
+        active ? "bg-white/[0.1] text-foreground" : "text-muted-foreground",
       )}
+    >
+      {label}
     </button>
   );
 
   return (
-    <div className="flex items-center gap-5 px-1">
+    <div className="flex items-center gap-1 rounded-full border border-hairline bg-surface p-1">
       {tab("Today", onToday, () => setDay(new Date()))}
       {tab("Yesterday", onYesterday, () => setDay(yesterday))}
       {!onToday && !onYesterday && (
-        <span className="text-[17px] font-extrabold tracking-[-0.02em] text-foreground">
+        <span className="rounded-full bg-white/[0.1] px-4 py-2 text-[14px] font-semibold">
           {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </span>
       )}
       <div className="ml-auto flex items-center gap-1">
         <button
           onClick={() => shift(-1)}
-          className="grid size-9 place-items-center rounded-full border border-white/[0.06] bg-white/[0.03] active:bg-surface-2"
+          className="grid size-10 place-items-center rounded-full active:bg-surface-2"
           aria-label="Previous day"
         >
           <ChevronLeft className="size-4" />
@@ -418,7 +493,7 @@ function DayTabs({ day, setDay }: { day: Date; setDay: (d: Date) => void }) {
         <button
           onClick={() => shift(1)}
           disabled={onToday}
-          className="grid size-9 place-items-center rounded-full border border-white/[0.06] bg-white/[0.03] active:bg-surface-2 disabled:opacity-25"
+          className="grid size-10 place-items-center rounded-full active:bg-surface-2 disabled:opacity-25"
           aria-label="Next day"
         >
           <ChevronRight className="size-4" />
@@ -522,6 +597,17 @@ function MacroRingCard({
   );
 }
 
+function MacroLetter({ letter, color, value }: { letter: string; color: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <span className="font-bold" style={{ color }}>
+        {letter}
+      </span>
+      {value}g
+    </span>
+  );
+}
+
 function MacroTag({ Icon, hue, value }: { Icon: LucideIcon; hue: string; value: number }) {
   return (
     <span className="inline-flex items-center gap-1">
@@ -562,12 +648,12 @@ function MealSection({
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
-    <section className="rounded-[22px] bg-white/[0.03] border border-white/[0.05] overflow-hidden">
+    <section className="overflow-hidden rounded-[22px] border border-hairline bg-surface">
       <div className="flex items-center gap-3 p-4">
         <MealThumbnail meal={meal} size="md" />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-[15px] leading-tight">{meal}</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h3 className="text-[16px] font-bold leading-tight">{meal}</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
             {items.length === 0
               ? "No items yet"
               : `${items.length} item${items.length === 1 ? "" : "s"} · ${Math.round(totals.kcal)} kcal`}
@@ -576,7 +662,7 @@ function MealSection({
         {quality && <QualityBadge quality={quality} />}
         <button
           onClick={onAdd}
-          className="grid h-[44px] w-[44px] place-items-center rounded-full bg-neon text-neon-foreground transition active:scale-95 glow-neon"
+          className="grid size-11 place-items-center rounded-full border border-hairline bg-white/[0.06] text-foreground transition active:scale-95"
           aria-label={`Add to ${meal}`}
         >
           <Plus className="size-5" />
@@ -631,7 +717,7 @@ function MealSection({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight">
+                      <div className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-tight">
                         {f.name}
                         {f.brand ? (
                           <span className="font-normal text-muted-foreground"> · {f.brand}</span>
@@ -640,28 +726,25 @@ function MealSection({
                       <QualityDot quality={itemQuality} />
                     </div>
                     <div className="mt-1.5 flex items-center gap-2 tabular-nums">
-                      <span className="flex items-center gap-1.5 text-[13px] font-bold">
-                        <Flame className="size-3.5 text-neon" />
-                        {kcal} kcal
-                      </span>
-                      <span className="text-[10px] font-medium text-muted-foreground">
+                      <span className="text-[15px] font-bold">{kcal} kcal</span>
+                      <span className="text-[12px] font-medium text-muted-foreground">
                         {loggedTime(e.loggedAt)}
                       </span>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold tabular-nums text-white/70">
-                      <MacroTag
-                        Icon={Zap}
-                        hue="oklch(0.92 0.21 130)"
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-semibold tabular-nums text-foreground/75">
+                      <MacroLetter
+                        letter="P"
+                        color={MACRO_COLORS.protein}
                         value={Math.round(f.protein * e.servings)}
                       />
-                      <MacroTag
-                        Icon={Wheat}
-                        hue="oklch(0.82 0.15 80)"
+                      <MacroLetter
+                        letter="C"
+                        color={MACRO_COLORS.carbs}
                         value={Math.round(f.carbs * e.servings)}
                       />
-                      <MacroTag
-                        Icon={Droplet}
-                        hue="oklch(0.78 0.14 185)"
+                      <MacroLetter
+                        letter="F"
+                        color={MACRO_COLORS.fat}
                         value={Math.round(f.fat * e.servings)}
                       />
                       {e.servings !== 1 && <span className="text-white/40">{e.servings}×</span>}
@@ -806,7 +889,7 @@ function AddFoodModal({
   return (
     <Sheet onClose={onClose} title={editEntry ? `Edit · ${meal}` : `Add to ${meal}`}>
       {!editEntry && (
-        <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-white/[0.05]">
+        <div className="mt-1 flex gap-1 p-1 rounded-full bg-white/[0.04] border border-hairline">
           {(
             [
               { id: "search", label: "Search", Icon: Search },
@@ -819,7 +902,7 @@ function AddFoodModal({
               key={id}
               onClick={() => setTab(id)}
               className={cn(
-                "flex-1 h-9 rounded-full text-[11px] font-semibold flex items-center justify-center gap-1 transition",
+                "flex-1 h-9 rounded-full text-[13px] font-semibold flex items-center justify-center gap-1 transition",
                 tab === id ? "bg-neon text-neon-foreground" : "text-muted-foreground",
               )}
             >
@@ -834,10 +917,10 @@ function AddFoodModal({
         {tab === "barcode" && (
           <Suspense
             fallback={
-              <div className="grid min-h-64 place-items-center rounded-3xl border border-white/[0.06] bg-white/[0.02]">
+              <div className="grid min-h-64 place-items-center rounded-3xl border border-hairline bg-white/[0.02]">
                 <div className="text-center">
                   <Loader2 className="mx-auto size-6 animate-spin text-neon" />
-                  <p className="mt-2 text-[11px] text-muted-foreground">Opening scanner…</p>
+                  <p className="mt-2 text-[13px] text-muted-foreground">Opening scanner…</p>
                 </div>
               </div>
             }
@@ -998,7 +1081,7 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
 
   return (
     <>
-      <label className="flex items-center gap-3 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.05] px-4">
+      <label className="flex items-center gap-3 h-12 rounded-2xl bg-white/[0.04] border border-hairline px-4">
         <Search className="size-4 text-muted-foreground" />
         <input
           autoFocus
@@ -1036,10 +1119,10 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
             key={id}
             onClick={() => setTab(id)}
             className={cn(
-              "shrink-0 h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1 transition border",
+              "shrink-0 h-8 px-3 rounded-full text-[13px] font-semibold flex items-center gap-1 transition border",
               tab === id
                 ? "bg-neon text-neon-foreground border-transparent"
-                : "bg-white/[0.04] text-muted-foreground border-white/[0.05]",
+                : "bg-white/[0.04] text-muted-foreground border-hairline",
             )}
           >
             <Icon className="size-3" /> {label}
@@ -1056,7 +1139,7 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
       {/* Popular brands carousel (only when no query and on "all" / category tabs) */}
       {!q && tab !== "recent" && tab !== "favorites" && (
         <>
-          <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <h3 className="mt-5 mb-2 text-[12px] uppercase tracking-wider text-muted-foreground">
             Popular brands
           </h3>
           <div className="-mx-1 px-1 flex gap-2 overflow-x-auto scrollbar-none pb-1">
@@ -1066,7 +1149,7 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
                 <button
                   key={b.name}
                   onClick={() => setQ(b.name)}
-                  className="shrink-0 h-10 px-3 rounded-full bg-white/[0.04] border border-white/[0.05] text-xs flex items-center gap-1.5 active:scale-95"
+                  className="shrink-0 h-10 px-3 rounded-full bg-white/[0.04] border border-hairline text-xs flex items-center gap-1.5 active:scale-95"
                 >
                   <BrandLogo brand={b.name} />
                   <span className="font-medium">{b.name}</span>
@@ -1078,13 +1161,13 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
 
       {/* Server error notice (graceful — local presets still work) */}
       {serverErr && q.trim().length >= 2 && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
+        <div className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/20 text-[13px] text-amber-200">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
           <span>Branded database is unavailable right now — showing curated matches only.</span>
         </div>
       )}
 
-      <h3 className="mt-5 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+      <h3 className="mt-5 mb-2 text-[12px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
         <span>
           {tab === "recent"
             ? "Recently logged"
@@ -1095,7 +1178,7 @@ function SearchPanel({ meal, onPick }: { meal: Meal; onPick: (food: StoredFood) 
                 : "Suggested"}
         </span>
         {visible.length > 0 && (
-          <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">
+          <span className="normal-case tracking-normal text-[12px] text-muted-foreground/70">
             {visible.length} items
           </span>
         )}
@@ -1129,7 +1212,7 @@ function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void 
   const [fav, setFav] = useState(() => isFavorite(food.id));
   const macroLine = `P${Math.round(food.protein)} · C${Math.round(food.carbs)} · F${Math.round(food.fat)}`;
   return (
-    <div className="relative w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.05]">
+    <div className="relative w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-hairline">
       <button
         onClick={onPick}
         className="flex items-center gap-3 flex-1 min-w-0 text-left active:scale-[0.99]"
@@ -1139,20 +1222,20 @@ function FoodResultRow({ food, onPick }: { food: StoredFood; onPick: () => void 
           <div className="flex items-center gap-1.5 min-w-0">
             <BrandLogo brand={food.brand} className="size-4 p-0.5" />
             {food.brand && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">
+              <span className="text-[12px] font-bold uppercase tracking-wider text-neon truncate max-w-[40%]">
                 {food.brand}
               </span>
             )}
             {food.verified && <BadgeCheck className="size-3 text-neon shrink-0" />}
           </div>
           <div className="font-medium text-sm truncate">{food.name}</div>
-          <div className="text-[11px] text-muted-foreground truncate">
+          <div className="text-[13px] text-muted-foreground truncate">
             {food.serving} · {macroLine}
           </div>
         </div>
         <div className="text-right shrink-0">
           <div className="font-bold text-neon tabular-nums text-sm">{Math.round(food.kcal)}</div>
-          <div className="text-[10px] text-muted-foreground">kcal</div>
+          <div className="text-[12px] text-muted-foreground">kcal</div>
         </div>
       </button>
       <button
@@ -1331,7 +1414,7 @@ function PhotoPanel({
       {!preview ? (
         <FoodCameraPanel onFile={pick} onGalleryClick={() => inputRef.current?.click()} />
       ) : (
-        <div className="aspect-[3/4] rounded-[28px] overflow-hidden relative border border-white/[0.06]">
+        <div className="aspect-[3/4] rounded-[24px] overflow-hidden relative border border-hairline">
           <img src={preview} alt="meal" className="size-full object-cover" />
           <button
             onClick={reset}
@@ -1388,12 +1471,12 @@ function PhotoPanel({
       {preview && !loading && !error && (
         <button
           onClick={reset}
-          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] text-sm font-semibold active:scale-[0.98]"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full border border-hairline bg-white/[0.04] text-sm font-semibold active:scale-[0.98]"
         >
           <RotateCcw className="size-4" /> Retake photo
         </button>
       )}
-      <p className="mt-3 text-[10px] text-muted-foreground text-center">
+      <p className="mt-3 text-[12px] text-muted-foreground text-center">
         AI estimates — confirm before saving.
       </p>
     </div>
@@ -1482,32 +1565,32 @@ function PhotoConfirm({
   return (
     <div className="space-y-3">
       {preview ? (
-        <div className="relative overflow-hidden rounded-[24px] border border-white/[0.08]">
+        <div className="relative overflow-hidden rounded-[24px] border border-hairline">
           <img src={preview} alt="meal" className="aspect-[4/3] w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
           <div className="absolute inset-x-3 top-3 flex flex-wrap gap-1.5">
             {items.slice(0, 4).map((it, idx) => (
               <span
                 key={idx}
-                className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[10px] font-semibold backdrop-blur"
+                className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[12px] font-semibold backdrop-blur"
               >
                 {it.name.trim() || "Item"}
               </span>
             ))}
             {items.length > 4 && (
-              <span className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[10px] font-semibold backdrop-blur">
+              <span className="rounded-full border border-white/15 bg-black/60 px-2 py-1 text-[12px] font-semibold backdrop-blur">
                 +{items.length - 4}
               </span>
             )}
           </div>
           <div className="absolute inset-x-3 bottom-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-neon">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
               Confirm your meal
             </p>
-            <h3 className="mt-0.5 truncate text-lg font-extrabold">{result.meal_name}</h3>
+            <h3 className="mt-0.5 truncate text-lg font-bold">{result.meal_name}</h3>
             <span
               className={cn(
-                "mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                "mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold",
                 confColor,
               )}
             >
@@ -1517,7 +1600,7 @@ function PhotoConfirm({
         </div>
       ) : (
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
             Confirm your meal
           </p>
           <h3 className="truncate text-base font-bold">{result.meal_name}</h3>
@@ -1525,14 +1608,14 @@ function PhotoConfirm({
       )}
 
       {lowConfidence && (
-        <div className="flex items-start gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-[11px] text-amber-200">
+        <div className="flex items-start gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-[13px] text-amber-200">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
           <span>We're not fully sure. Please confirm the foods and portions below.</span>
         </div>
       )}
 
       {items.some((item) => item.packaged) && (
-        <div className="flex items-start gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-[11px] text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-2xl border border-hairline bg-white/[0.03] p-3 text-[13px] text-muted-foreground">
           <ScanLine className="size-3.5 shrink-0 mt-0.5 text-neon" />
           <span>
             Packaged product detected. For the exact values on your package, use Barcode or scan the
@@ -1545,14 +1628,14 @@ function PhotoConfirm({
         {items.map((it, idx) => (
           <div
             key={idx}
-            className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2"
+            className="rounded-2xl border border-hairline bg-white/[0.02] p-3 space-y-2"
           >
             <div className="flex items-start gap-2">
               <input
                 value={it.name}
                 onChange={(e) => updateItem(idx, { name: e.target.value })}
                 placeholder="Food name"
-                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] px-2.5 text-sm outline-none focus:border-neon/40"
+                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-hairline px-2.5 text-sm outline-none focus:border-neon/40"
                 maxLength={60}
               />
               <button
@@ -1568,11 +1651,11 @@ function PhotoConfirm({
                 value={it.estimated_amount}
                 onChange={(e) => updateItem(idx, { estimated_amount: e.target.value })}
                 placeholder="Portion (e.g. 150g)"
-                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] px-2.5 text-xs outline-none focus:border-neon/40"
+                className="flex-1 h-9 rounded-lg bg-white/[0.04] border border-hairline px-2.5 text-xs outline-none focus:border-neon/40"
                 maxLength={30}
               />
               {it.confidence < 0.7 && (
-                <span className="text-[10px] text-amber-300 font-medium whitespace-nowrap">
+                <span className="text-[12px] text-amber-300 font-medium whitespace-nowrap">
                   {Math.round(it.confidence * 100)}%
                 </span>
               )}
@@ -1589,7 +1672,7 @@ function PhotoConfirm({
                 />
               ))}
             </div>
-            <p className="text-[9px] leading-relaxed text-muted-foreground">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
               Fibre {Math.round(it.fiber * 10) / 10}g · Sugars {Math.round(it.sugars * 10) / 10}g ·
               Sat. fat {Math.round(it.saturated_fat * 10) / 10}g · Sodium {Math.round(it.sodium)}mg
             </p>
@@ -1598,7 +1681,7 @@ function PhotoConfirm({
 
         <button
           onClick={addItem}
-          className="w-full h-10 rounded-2xl border border-dashed border-white/15 text-[11px] text-muted-foreground flex items-center justify-center gap-1.5"
+          className="w-full h-10 rounded-2xl border border-dashed border-white/15 text-[13px] text-muted-foreground flex items-center justify-center gap-1.5"
         >
           <Plus className="size-3.5" /> Add another item
         </button>
@@ -1608,9 +1691,9 @@ function PhotoConfirm({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="data-kicker text-analytics-teal">Estimated fuel quality</p>
-            <p className="mt-1 text-sm font-extrabold">{quality.band}</p>
+            <p className="mt-1 text-sm font-bold">{quality.band}</p>
           </div>
-          <strong className="text-2xl font-extrabold text-analytics-teal tabular-nums">
+          <strong className="text-2xl font-bold text-analytics-teal tabular-nums">
             {quality.score ?? "—"}
           </strong>
         </div>
@@ -1625,18 +1708,18 @@ function PhotoConfirm({
             value={quality.watchItems[0] ?? "No major watch item detected"}
           />
         </div>
-        <p className="mt-2 text-[9px] leading-relaxed text-white/40">
+        <p className="mt-2 text-[11px] leading-relaxed text-white/40">
           Based on the ingredients and portions above · {Math.round(result.confidence * 100)}% image
           confidence. Confirm before logging.
         </p>
       </div>
 
-      <div className="rounded-2xl bg-white/[0.035] border border-white/[0.06] p-3">
+      <div className="rounded-2xl bg-white/[0.035] border border-hairline p-3">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-neon">Total</span>
+          <span className="text-[12px] uppercase tracking-wider text-neon">Total</span>
           <span className="text-base font-bold tabular-nums">{total.calories} kcal</span>
         </div>
-        <div className="mt-1 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+        <div className="mt-1 grid grid-cols-3 gap-2 text-[13px] text-muted-foreground">
           <span>
             P <span className="text-foreground font-semibold tabular-nums">{total.protein}g</span>
           </span>
@@ -1689,7 +1772,7 @@ function MacroInput({
   const [text, setText] = useState(String(value));
   return (
     <label className="block">
-      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
       <input
         inputMode={decimals ? "decimal" : "numeric"}
         value={text}
@@ -1700,7 +1783,7 @@ function MacroInput({
           setText(next);
           onChange(Number(next) || 0);
         }}
-        className="mt-0.5 h-9 w-full rounded-lg bg-white/[0.04] border border-white/[0.06] px-2 text-xs outline-none focus:border-neon/40 tabular-nums"
+        className="mt-0.5 h-9 w-full rounded-lg bg-white/[0.04] border border-hairline px-2 text-xs outline-none focus:border-neon/40 tabular-nums"
       />
     </label>
   );
@@ -1828,7 +1911,7 @@ function ManualPanel({
   return (
     <div className="space-y-3">
       {prefill && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neon/10 border border-neon/20 text-[11px] text-neon">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neon/10 border border-neon/20 text-[13px] text-neon">
           {prefill.imageUrl ? (
             <FoodThumbnail
               food={{
@@ -1860,7 +1943,7 @@ function ManualPanel({
             "rounded-2xl border px-3 py-3",
             labelCheckSuggested
               ? "border-amber-400/25 bg-amber-400/[0.06]"
-              : "border-white/[0.06] bg-white/[0.03]",
+              : "border-hairline bg-white/[0.03]",
           )}
         >
           <input
@@ -1873,7 +1956,7 @@ function ManualPanel({
           />
           <p
             className={cn(
-              "flex items-start gap-2 text-[11px] leading-relaxed",
+              "flex items-start gap-2 text-[13px] leading-relaxed",
               labelStatus === "error"
                 ? "text-destructive"
                 : labelCheckSuggested
@@ -1988,14 +2071,76 @@ function ManualPanel({
 }
 
 const inp =
-  "h-11 w-full rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-sm outline-none focus:border-neon/40";
+  "h-11 w-full rounded-xl bg-white/[0.04] border border-hairline px-3 text-sm outline-none focus:border-neon/40";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+const TARGET_REFRESH_DISMISSED_KEY = "fitness:target-refresh-dismissed";
+
+/**
+ * Offers the current recommendation when the saved targets have drifted from it,
+ * e.g. targets set before a formula fix or before the member changed their goal.
+ * "Keep mine" hides it until the recommendation itself changes.
+ */
+function TargetRefreshCard({ goals, profile }: { goals: NutritionGoals; profile: Profile }) {
+  const recommended = useMemo(() => suggestNutrition(profile), [profile]);
+  const signature = `${recommended.kcal}-${recommended.protein}-${recommended.carbs}-${recommended.fat}`;
+  const [dismissed, setDismissed] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(TARGET_REFRESH_DISMISSED_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const drifted =
+    Math.abs(recommended.kcal - goals.kcal) >= 150 ||
+    Math.abs(recommended.protein - goals.protein) >= 15;
+  if (!drifted || dismissed === signature) return null;
+
+  const keepMine = () => {
+    setDismissed(signature);
+    try {
+      localStorage.setItem(TARGET_REFRESH_DISMISSED_KEY, signature);
+    } catch {
+      /* the card simply shows again next visit */
+    }
+  };
+
+  return (
+    <section className="mt-3 rounded-[18px] border border-hairline bg-surface px-4 py-3.5">
+      <p className="text-[14px] font-semibold">Updated targets for your goal</p>
+      <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
+        Based on your profile: {recommended.kcal.toLocaleString()} kcal · {recommended.protein}g
+        protein · {recommended.carbs}g carbs · {recommended.fat}g fat. You're on{" "}
+        {goals.kcal.toLocaleString()} kcal now.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setNutritionGoals(recommended);
+            toast.success("Targets updated");
+          }}
+          className="h-9 rounded-full bg-neon px-4 text-[13px] font-semibold text-neon-foreground active:scale-95"
+        >
+          Use these
+        </button>
+        <button
+          type="button"
+          onClick={keepMine}
+          className="h-9 rounded-full border border-hairline px-4 text-[13px] font-semibold text-muted-foreground active:scale-95"
+        >
+          Keep mine
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -2011,31 +2156,33 @@ function Sheet({
   // ensure resultToCustom isn't tree-shaken (used elsewhere via panels)
   void resultToCustom;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fade_0.2s_ease-out]"
-      />
-      <div className="relative max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border-t border-white/[0.08] bg-[oklch(0.16_0_0)] page-pb-safe animate-[slideup_0.25s_ease-out]">
-        <div className="sticky top-0 bg-[oklch(0.16_0_0)]/95 backdrop-blur z-10 px-5 pt-3 pb-3 flex items-center justify-between border-b border-white/[0.05]">
-          <div className="absolute left-1/2 -translate-x-1/2 top-1.5 h-1 w-10 rounded-full bg-white/15" />
-          <h2 className="font-bold text-base mt-2">{title}</h2>
-          <button
-            onClick={onClose}
-            className="size-9 rounded-full bg-white/[0.05] grid place-items-center mt-1"
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </button>
+    <BodyPortal>
+      <div className="fixed inset-0 z-50 flex items-end justify-center">
+        <button
+          aria-label="Close"
+          onClick={onClose}
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-[fade_0.2s_ease-out]"
+        />
+        <div className="relative max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border-t border-hairline bg-[oklch(0.16_0_0)] page-pb-safe animate-[slideup_0.25s_ease-out]">
+          <div className="sticky top-0 bg-[oklch(0.16_0_0)]/95 backdrop-blur z-10 px-5 pt-3 pb-3 flex items-center justify-between border-b border-hairline">
+            <div className="absolute left-1/2 -translate-x-1/2 top-1.5 h-1 w-10 rounded-full bg-white/15" />
+            <h2 className="font-bold text-base mt-2">{title}</h2>
+            <button
+              onClick={onClose}
+              className="size-9 rounded-full bg-white/[0.05] grid place-items-center mt-1"
+              aria-label="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="px-5">{children}</div>
         </div>
-        <div className="px-5">{children}</div>
-      </div>
-      <style>{`
+        <style>{`
         @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideup { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
-    </div>
+      </div>
+    </BodyPortal>
   );
 }
 
@@ -2148,25 +2295,25 @@ function FoodConfirmSheet({
       </button>
 
       {/* Food header card */}
-      <div className="mt-3 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
+      <div className="mt-3 p-4 rounded-2xl bg-white/[0.04] border border-hairline">
         <div className="flex items-start gap-3">
           <FoodThumbnail food={food} size="lg" />
           <div className="flex-1 min-w-0">
             {food.brand && (
               <div className="flex items-center gap-1.5">
                 <BrandLogo brand={food.brand} className="size-4 p-0.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-neon truncate">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-neon truncate">
                   {food.brand}
                 </span>
                 {food.verified && (
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon/15 border border-neon/30 text-[9px] font-bold text-neon">
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-neon/15 border border-neon/30 text-[11px] font-bold text-neon">
                     <BadgeCheck className="size-2.5" /> VERIFIED
                   </span>
                 )}
               </div>
             )}
             <h3 className="font-bold text-base leading-tight mt-0.5">{food.name}</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+            <p className="text-[13px] text-muted-foreground mt-0.5 capitalize">
               Source:{" "}
               {food.source === "preset"
                 ? "curated database"
@@ -2189,10 +2336,10 @@ function FoodConfirmSheet({
           ].map((m) => (
             <div
               key={m.label}
-              className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2"
+              className="rounded-xl bg-white/[0.03] border border-hairline px-2 py-2"
             >
               <div className="text-base font-bold tabular-nums">{m.value}</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
                 {m.label}
               </div>
             </div>
@@ -2200,11 +2347,11 @@ function FoodConfirmSheet({
         </div>
       </div>
 
-      <div className="mt-3 rounded-[20px] border border-white/[0.07] bg-black/20 p-3.5">
+      <div className="mt-3 rounded-[20px] border border-hairline bg-black/20 p-3.5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="data-kicker text-analytics-teal">Fuel quality</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="mt-1 text-[12px] text-muted-foreground">
               {quality.confidence === "partial"
                 ? "Partial score—missing nutrients stay excluded"
                 : `${quality.confidence} nutrition details`}
@@ -2233,7 +2380,7 @@ function FoodConfirmSheet({
           <button
             onClick={() => bumpServings(-0.25)}
             disabled={servings <= 0.25}
-            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center disabled:opacity-40"
+            className="size-11 rounded-xl bg-white/[0.05] border border-hairline grid place-items-center disabled:opacity-40"
             aria-label="Decrease"
           >
             <Minus className="size-4" />
@@ -2246,11 +2393,11 @@ function FoodConfirmSheet({
               if (Number.isFinite(v) && v > 0) setServings(Math.round(v * 4) / 4);
               else if (e.target.value === "") setServings(0.25);
             }}
-            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-center text-base font-semibold tabular-nums outline-none focus:border-neon/40"
+            className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-hairline px-3 text-center text-base font-semibold tabular-nums outline-none focus:border-neon/40"
           />
           <button
             onClick={() => bumpServings(0.25)}
-            className="size-11 rounded-xl bg-white/[0.05] border border-white/[0.06] grid place-items-center"
+            className="size-11 rounded-xl bg-white/[0.05] border border-hairline grid place-items-center"
             aria-label="Increase"
           >
             <Plus className="size-4" />
@@ -2262,10 +2409,10 @@ function FoodConfirmSheet({
               key={n}
               onClick={() => setServings(n)}
               className={cn(
-                "flex-1 h-8 rounded-full text-[11px] font-semibold border",
+                "flex-1 h-8 rounded-full text-[13px] font-semibold border",
                 servings === n
                   ? "bg-neon text-neon-foreground border-transparent"
-                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
+                  : "bg-white/[0.04] border-hairline text-muted-foreground",
               )}
             >
               ×{n}
@@ -2290,10 +2437,10 @@ function FoodConfirmSheet({
               key={m}
               onClick={() => setMeal(m)}
               className={cn(
-                "h-10 rounded-xl text-[11px] font-semibold border",
+                "h-10 rounded-xl text-[13px] font-semibold border",
                 meal === m
                   ? "bg-neon text-neon-foreground border-transparent"
-                  : "bg-white/[0.04] border-white/[0.06] text-muted-foreground",
+                  : "bg-white/[0.04] border-hairline text-muted-foreground",
               )}
             >
               {m}

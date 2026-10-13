@@ -128,21 +128,21 @@ export function GoalPanel() {
             <Target className="size-4 text-neon" />
             <h2 className="font-bold">Goal & calories</h2>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-[13px] text-muted-foreground mt-0.5">
             {GOAL_LABELS[profile.goal]} · target {targetDate.toLocaleDateString()}
           </p>
         </div>
         <button
           onClick={() => setEditOpen(true)}
-          className="h-8 px-3 rounded-full bg-white/[0.05] border border-white/[0.06] text-[11px] font-semibold flex items-center gap-1.5"
+          className="h-8 px-3 rounded-full bg-white/[0.05] border border-hairline text-[13px] font-semibold flex items-center gap-1.5"
         >
           <Pencil className="size-3" /> Edit
         </button>
       </div>
 
       {/* Current vs goal */}
-      <div className="mt-4 rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-        <div className="flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+      <div className="mt-4 rounded-2xl bg-white/[0.03] border border-hairline p-4">
+        <div className="flex justify-between text-[13px] uppercase tracking-wider text-muted-foreground">
           <span>Start {fmtWeight(startKg)}</span>
           <span>Goal {fmtWeight(goalKg)}</span>
         </div>
@@ -183,21 +183,21 @@ export function GoalPanel() {
       </div>
 
       {/* Forecast */}
-      <div className="mt-3 rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4 flex items-center justify-between">
+      <div className="mt-3 rounded-2xl bg-white/[0.03] border border-hairline p-4 flex items-center justify-between">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
             Projected
           </div>
           <div className="text-sm font-bold mt-0.5 tabular-nums">
             {fmtWeeklyChange(plan.weeklyChangeKg)}
           </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">
+          <div className="text-[13px] text-muted-foreground mt-0.5">
             Reaches goal {plan.estimatedGoalDate.toLocaleDateString()}
           </div>
         </div>
         <div
           className={cn(
-            "text-[10px] font-semibold px-2.5 h-7 rounded-full flex items-center gap-1",
+            "text-[12px] font-semibold px-2.5 h-7 rounded-full flex items-center gap-1",
             plan.isUnsafe
               ? "bg-destructive/15 text-destructive"
               : plan.isAggressive
@@ -234,7 +234,7 @@ export function GoalPanel() {
       {/* Split selector (only when there's a deficit/surplus) */}
       {plan.effectiveGoal === "lose" && (
         <div className="mt-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">
             Deficit split
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -247,13 +247,13 @@ export function GoalPanel() {
                   onClick={() => switchSplit(s)}
                   className={cn(
                     "rounded-2xl border p-3 text-left transition",
-                    active ? "border-neon bg-neon/10" : "border-white/[0.06] bg-white/[0.03]",
+                    active ? "border-neon bg-neon/10" : "border-hairline bg-white/[0.03]",
                   )}
                 >
                   <Icon
                     className={cn("size-4 mb-1.5", active ? "text-neon" : "text-muted-foreground")}
                   />
-                  <div className="text-[11px] font-bold leading-tight">{SPLIT_LABELS[s]}</div>
+                  <div className="text-[13px] font-bold leading-tight">{SPLIT_LABELS[s]}</div>
                 </button>
               );
             })}
@@ -262,7 +262,7 @@ export function GoalPanel() {
       )}
 
       {/* Recalibration */}
-      <div className="mt-4 rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
+      <div className="mt-4 rounded-2xl bg-white/[0.03] border border-hairline p-4">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-neon" />
           <div className="text-sm font-bold">Smart adjustment</div>
@@ -271,13 +271,13 @@ export function GoalPanel() {
           <>
             <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   Observed maintenance
                 </div>
                 <div className="font-bold tabular-nums">{recal.blendedMaintenanceKcal} kcal</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-[12px] uppercase tracking-wider text-muted-foreground">
                   Avg intake
                 </div>
                 <div className="font-bold tabular-nums">{recal.avgDailyIntake} kcal</div>
@@ -309,7 +309,7 @@ export function GoalPanel() {
         <ChevronDown className={cn("size-4 transition-transform", explainOpen && "rotate-180")} />
       </button>
       {explainOpen && (
-        <div className="mt-2 rounded-2xl bg-white/[0.02] border border-white/[0.04] p-4 text-[12px] text-muted-foreground space-y-2 leading-relaxed">
+        <div className="mt-2 rounded-2xl bg-white/[0.02] border border-hairline p-4 text-[12px] text-muted-foreground space-y-2 leading-relaxed">
           <p>
             <span className="text-foreground font-semibold">BMR (Mifflin–St Jeor):</span> 10 ×{" "}
             {profile.currentWeightKg.toFixed(1)}kg + 6.25 × {profile.heightCm}cm − 5 × {profile.age}
@@ -355,7 +355,7 @@ export function GoalPanel() {
           {plan.notes.map((n, i) => (
             <p key={i}>{n}</p>
           ))}
-          <p className="text-[11px] opacity-70 pt-1 border-t border-white/[0.05] mt-2">
+          <p className="text-[13px] opacity-70 pt-1 border-t border-hairline mt-2">
             These are estimates. Track your weight weekly and we'll fine-tune the numbers.
           </p>
         </div>
@@ -412,14 +412,14 @@ function Tile({
     <div
       className={cn(
         "rounded-2xl p-4 border",
-        highlight ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-white/[0.05]",
+        highlight ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-hairline",
       )}
     >
       <Icon className={cn("size-4", highlight ? "text-neon" : "text-muted-foreground")} />
-      <div className="mt-3 text-xl font-extrabold tabular-nums leading-none">
+      <div className="mt-3 text-xl font-bold tabular-nums leading-none">
         {value.toLocaleString()}
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
+      <div className="text-[12px] uppercase tracking-wider text-muted-foreground mt-1">
         {label} · {unit}
       </div>
     </div>
@@ -494,8 +494,8 @@ function EditGoalSheet({
             />
           </div>
 
-          <div className="rounded-2xl bg-white/[0.03] border border-white/[0.05] p-4">
-            <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+          <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
+            <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
               Target date
             </label>
             <div className="mt-2 flex items-center gap-2">
@@ -504,13 +504,13 @@ function EditGoalSheet({
                 type="date"
                 value={dateStr}
                 onChange={(e) => setDateStr(e.target.value)}
-                className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 text-base outline-none focus:border-neon/40 [color-scheme:dark]"
+                className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-hairline px-3 text-base outline-none focus:border-neon/40 [color-scheme:dark]"
               />
             </div>
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+            <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">
               Activity level
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -523,7 +523,7 @@ function EditGoalSheet({
                       "h-11 rounded-xl border text-xs font-semibold",
                       act === a
                         ? "border-neon bg-neon/10 text-neon"
-                        : "border-white/[0.06] bg-white/[0.03]",
+                        : "border-hairline bg-white/[0.03]",
                     )}
                   >
                     {ACTIVITY_LABELS[a]}
@@ -544,7 +544,7 @@ function EditGoalSheet({
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+            <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">
               Bulk pace
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -556,7 +556,7 @@ function EditGoalSheet({
                     "h-11 rounded-xl border text-xs font-semibold capitalize",
                     bp === b
                       ? "border-neon bg-neon/10 text-neon"
-                      : "border-white/[0.06] bg-white/[0.03]",
+                      : "border-hairline bg-white/[0.03]",
                   )}
                 >
                   {b} bulk
@@ -619,14 +619,14 @@ function LogWeightSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="mt-4">
-          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+          <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
             Weight ({imperial ? "lb" : "kg"})
           </label>
           <input
             inputMode="decimal"
             value={val}
             onChange={(e) => setVal(e.target.value.replace(/[^0-9.]/g, ""))}
-            className="mt-2 h-14 w-full rounded-2xl bg-white/[0.04] border border-white/[0.06] px-4 text-2xl font-extrabold tabular-nums outline-none focus:border-neon/40"
+            className="mt-2 h-14 w-full rounded-2xl bg-white/[0.04] border border-hairline px-4 text-2xl font-bold tabular-nums outline-none focus:border-neon/40"
           />
         </div>
         <SheetFooter className="mt-5">
@@ -658,8 +658,8 @@ function NumField({
   placeholder?: string;
 }) {
   return (
-    <label className="block rounded-2xl bg-white/[0.03] border border-white/[0.05] p-3">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <label className="block rounded-2xl bg-white/[0.03] border border-hairline p-3">
+      <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{label}</span>
       <input
         inputMode="decimal"
         value={value}

@@ -19,24 +19,43 @@ type Operation =
   | "workout-plan"
   | "coach";
 
-const operations: Record<Operation, { model: string; maxTokens: number; paid: boolean; title: string }> = {
+// Qwen3 VL 32B was retired by OpenRouter on 2026-10-09. Scans moved to its larger
+// sibling, which kept the scan prompts' JSON output valid in live tests. Parasail is
+// preferred: in those tests it returned identical scores on repeat runs at
+// temperature 0 and answered in 10–20s (DeepInfra took 40–90s). The other hosts
+// remain as fallbacks so a provider outage never blocks a scan.
+const SCAN_MODEL = "qwen/qwen3-vl-235b-a22b-instruct";
+const SCAN_PROVIDER = { order: ["parasail/fp8"], allow_fallbacks: true };
+
+type OperationDefinition = {
+  model: string;
+  maxTokens: number;
+  paid: boolean;
+  title: string;
+  provider?: { order: string[]; allow_fallbacks: boolean };
+};
+
+const operations: Record<Operation, OperationDefinition> = {
   "body-scan-preview": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 500,
     paid: false,
     title: "Ascendr Body Scan Preview",
+    provider: SCAN_PROVIDER,
   },
   "body-scan": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 2600,
     paid: true,
     title: "Ascendr Body Scan",
+    provider: SCAN_PROVIDER,
   },
   "face-scan": {
-    model: "qwen/qwen3-vl-32b-instruct",
+    model: SCAN_MODEL,
     maxTokens: 1800,
     paid: true,
     title: "Ascendr Face Scan",
+    provider: SCAN_PROVIDER,
   },
   "food-scan": {
     model: "google/gemini-2.5-flash",
@@ -72,7 +91,15 @@ const operations: Record<Operation, { model: string; maxTokens: number; paid: bo
 
 const MAX_REQUEST_BYTES = 15 * 1024 * 1024;
 // Fields that could route to other (pricier) models or add paid tools are never forwarded.
-const STRIPPED_FIELDS = new Set(["model", "models", "plugins", "route", "web_search_options", "maxTokens"]);
+const STRIPPED_FIELDS = new Set([
+  "model",
+  "models",
+  "plugins",
+  "provider",
+  "route",
+  "web_search_options",
+  "maxTokens",
+]);
 
 function operationFor(request: Request): Operation | null {
   const value = request.headers.get("x-ascendr-operation");
@@ -142,7 +169,12 @@ Deno.serve(withCors(async (request) => {
         Authorization: `Bearer ${openRouterKey}`,
         "X-Title": definition.title,
       },
-      body: JSON.stringify({ ...forwarded, model: definition.model, max_tokens: maxTokens }),
+      body: JSON.stringify({
+        ...forwarded,
+        model: definition.model,
+        max_tokens: maxTokens,
+        ...(definition.provider ? { provider: definition.provider } : {}),
+      }),
     });
     return new Response(upstream.body, { status: upstream.status, headers: responseHeaders(upstream) });
   } catch (error) {

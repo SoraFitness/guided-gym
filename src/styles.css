@@ -38,29 +38,36 @@
   --color-analytics-teal: var(--analytics-teal);
   --color-analytics-violet: var(--analytics-violet);
   --color-analytics-amber: var(--analytics-amber);
+  --color-score-high: var(--score-high);
+  --color-score-mid: var(--score-mid);
+  --color-score-low: var(--score-low);
+  --color-hairline: var(--hairline);
   --font-display: "Sora", sans-serif;
   --font-body: "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root {
   --radius: 1.25rem;
-  --background: oklch(0.125 0.01 255);
+  /* Near-black neutrals with flat, quiet cards: the data carries the color. */
+  --background: oklch(0.115 0.004 286);
   --foreground: oklch(0.985 0 0);
-  --surface: oklch(0.19 0.012 255);
-  --surface-2: oklch(0.245 0.014 255);
-  --surface-glass: oklch(0.18 0.012 255 / 92%);
-  --card: oklch(0.185 0.01 255);
+  --surface: oklch(0.185 0.005 286);
+  --surface-2: oklch(0.235 0.006 286);
+  --surface-glass: oklch(0.155 0.005 286 / 94%);
+  --hairline: oklch(1 0 0 / 7%);
+  --card: oklch(0.185 0.005 286);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.2 0 0);
+  --popover: oklch(0.2 0.005 286);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.92 0.21 130);
   --primary-foreground: oklch(0.14 0 0);
   --neon: oklch(0.92 0.21 130);
   --neon-foreground: oklch(0.14 0 0);
-  --secondary: oklch(0.26 0 0);
+  --secondary: oklch(0.25 0.005 286);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.26 0 0);
-  --muted-foreground: oklch(0.72 0 0);
+  --muted: oklch(0.25 0.005 286);
+  --muted-foreground: oklch(0.7 0.008 286);
   --accent: oklch(0.92 0.21 130);
   --accent-foreground: oklch(0.14 0 0);
   --destructive: oklch(0.6 0.22 25);
@@ -71,6 +78,10 @@
   --analytics-teal: oklch(0.78 0.14 185);
   --analytics-violet: oklch(0.72 0.16 300);
   --analytics-amber: oklch(0.82 0.15 80);
+  /* Score bands: emerald reads as "strong" without competing with the lime accent. */
+  --score-high: oklch(0.78 0.16 158);
+  --score-mid: oklch(0.83 0.15 78);
+  --score-low: oklch(0.69 0.19 28);
 }
 
 .dark {
@@ -202,11 +213,69 @@
 }
 
 @utility premium-panel {
-  border: 1px solid oklch(1 0 0 / 9%);
-  background:
-    linear-gradient(145deg, oklch(1 0 0 / 5%), transparent 42%),
-    var(--color-surface);
-  box-shadow: 0 24px 70px -42px oklch(0 0 0 / 90%);
+  border: 1px solid var(--hairline);
+  background: var(--color-surface);
+}
+
+/* The standard card: flat surface, hairline edge, generous radius. */
+@utility card-surface {
+  border: 1px solid var(--hairline);
+  background: var(--color-surface);
+  border-radius: 24px;
+}
+
+/* Ascendr's data voice: monospace, uppercase, tight. */
+@utility kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1rem;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+@utility font-data {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 0;
+}
+
+/* Signature hero card: top-right corner cut at 45deg, the "ascent" bevel. */
+@utility chamfer {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chamfer, 26px)) 0,
+    100% var(--chamfer, 26px),
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Faint topographic contour texture used behind hero surfaces. */
+@utility contour-texture {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.035' stroke-width='1'%3E%3Cpath d='M-20 260 C 40 220, 80 250, 140 210 S 240 150, 340 170'/%3E%3Cpath d='M-20 230 C 50 190, 90 220, 150 180 S 250 120, 340 140'/%3E%3Cpath d='M-20 200 C 60 160, 100 190, 160 150 S 260 90, 340 110'/%3E%3Cpath d='M-20 170 C 70 130, 110 160, 170 120 S 270 60, 340 80'/%3E%3Cpath d='M-20 140 C 80 100, 120 130, 180 90 S 280 30, 340 50'/%3E%3Cpath d='M-20 110 C 90 70, 130 100, 190 60 S 290 0, 340 20'/%3E%3Cpath d='M-20 290 C 30 250, 70 280, 130 240 S 230 180, 340 200'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 320px 320px;
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(1000%);
+    opacity: 0;
+  }
+}
+
+@utility animate-scan-sweep {
+  animation: scan-sweep 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
 @utility data-kicker {
@@ -280,7 +349,8 @@
   animation: pulse-glow 2s ease-out infinite;
 }
 @utility animate-slide-up {
-  animation: slide-up 0.4s ease-out both;
+  /* backwards, not both: a lingering transform would trap position:fixed children. */
+  animation: slide-up 0.4s ease-out backwards;
 }
 @utility animate-spin-slow {
   animation: spin-slow 8s linear infinite;
@@ -298,7 +368,7 @@
 }
 
 @utility glow-neon {
-  box-shadow: 0 10px 40px -10px oklch(0.92 0.21 130 / 0.5);
+  box-shadow: 0 8px 24px -14px oklch(0.92 0.21 130 / 0.35);
 }
 @utility text-balance {
   text-wrap: balance;

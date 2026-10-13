@@ -17,7 +17,9 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutIdRouteImport } from './routes/workout.$id'
 import { Route as ApiCoachRouteImport } from './routes/api/coach'
+import { Route as AdminScanRouteImport } from './routes/admin.scan'
 import { Route as AdminOnboardingRouteImport } from './routes/admin.onboarding'
+import { Route as AdminFaceScanRouteImport } from './routes/admin.face-scan'
 import { Route as AppWorkoutsRouteImport } from './routes/_app.workouts'
 import { Route as AppTermsRouteImport } from './routes/_app.terms'
 import { Route as AppProgressRouteImport } from './routes/_app.progress'
@@ -89,9 +91,19 @@ const ApiCoachRoute = ApiCoachRouteImport.update({
   path: '/api/coach',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminScanRoute = AdminScanRouteImport.update({
+  id: '/admin/scan',
+  path: '/admin/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
   id: '/admin/onboarding',
   path: '/admin/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminFaceScanRoute = AdminFaceScanRouteImport.update({
+  id: '/admin/face-scan',
+  path: '/admin/face-scan',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppWorkoutsRoute = AppWorkoutsRouteImport.update({
@@ -270,7 +282,9 @@ export interface FileRoutesByFullPath {
   '/progress': typeof AppProgressRoute
   '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/admin/face-scan': typeof AdminFaceScanRoute
   '/admin/onboarding': typeof AdminOnboardingRoute
+  '/admin/scan': typeof AdminScanRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -310,7 +324,9 @@ export interface FileRoutesByTo {
   '/progress': typeof AppProgressRoute
   '/terms': typeof AppTermsRoute
   '/workouts': typeof AppWorkoutsRoute
+  '/admin/face-scan': typeof AdminFaceScanRoute
   '/admin/onboarding': typeof AdminOnboardingRoute
+  '/admin/scan': typeof AdminScanRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -353,7 +369,9 @@ export interface FileRoutesById {
   '/_app/progress': typeof AppProgressRoute
   '/_app/terms': typeof AppTermsRoute
   '/_app/workouts': typeof AppWorkoutsRoute
+  '/admin/face-scan': typeof AdminFaceScanRoute
   '/admin/onboarding': typeof AdminOnboardingRoute
+  '/admin/scan': typeof AdminScanRoute
   '/api/coach': typeof ApiCoachRoute
   '/workout/$id': typeof WorkoutIdRouteWithChildren
   '/_app/photos/$photoId': typeof AppPhotosPhotoIdRoute
@@ -396,7 +414,9 @@ export interface FileRouteTypes {
     | '/progress'
     | '/terms'
     | '/workouts'
+    | '/admin/face-scan'
     | '/admin/onboarding'
+    | '/admin/scan'
     | '/api/coach'
     | '/workout/$id'
     | '/photos/$photoId'
@@ -436,7 +456,9 @@ export interface FileRouteTypes {
     | '/progress'
     | '/terms'
     | '/workouts'
+    | '/admin/face-scan'
     | '/admin/onboarding'
+    | '/admin/scan'
     | '/api/coach'
     | '/workout/$id'
     | '/photos/$photoId'
@@ -478,7 +500,9 @@ export interface FileRouteTypes {
     | '/_app/progress'
     | '/_app/terms'
     | '/_app/workouts'
+    | '/admin/face-scan'
     | '/admin/onboarding'
+    | '/admin/scan'
     | '/api/coach'
     | '/workout/$id'
     | '/_app/photos/$photoId'
@@ -508,7 +532,9 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PaywallRoute: typeof PaywallRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  AdminFaceScanRoute: typeof AdminFaceScanRoute
   AdminOnboardingRoute: typeof AdminOnboardingRoute
+  AdminScanRoute: typeof AdminScanRoute
   ApiCoachRoute: typeof ApiCoachRoute
   WorkoutIdRoute: typeof WorkoutIdRouteWithChildren
   WorkoutHistoryIdRoute: typeof WorkoutHistoryIdRoute
@@ -574,11 +600,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCoachRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/scan': {
+      id: '/admin/scan'
+      path: '/admin/scan'
+      fullPath: '/admin/scan'
+      preLoaderRoute: typeof AdminScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/onboarding': {
       id: '/admin/onboarding'
       path: '/admin/onboarding'
       fullPath: '/admin/onboarding'
       preLoaderRoute: typeof AdminOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/face-scan': {
+      id: '/admin/face-scan'
+      path: '/admin/face-scan'
+      fullPath: '/admin/face-scan'
+      preLoaderRoute: typeof AdminFaceScanRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/workouts': {
@@ -892,7 +932,9 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PaywallRoute: PaywallRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  AdminFaceScanRoute: AdminFaceScanRoute,
   AdminOnboardingRoute: AdminOnboardingRoute,
+  AdminScanRoute: AdminScanRoute,
   ApiCoachRoute: ApiCoachRoute,
   WorkoutIdRoute: WorkoutIdRouteWithChildren,
   WorkoutHistoryIdRoute: WorkoutHistoryIdRoute,

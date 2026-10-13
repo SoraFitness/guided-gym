@@ -20,23 +20,20 @@ export function WeeklyReportCard({ compact = false }: { compact?: boolean }) {
     return (
       <Link
         to="/report"
-        className="group flex min-h-[92px] items-center gap-3.5 rounded-[25px] border border-neon/20 bg-gradient-to-r from-neon/[0.09] via-surface to-surface p-4 transition active:scale-[0.99]"
+        className="group flex min-h-[92px] items-center gap-4 rounded-[24px] border border-hairline bg-surface p-4 transition active:scale-[0.99]"
       >
         {isLoading ? (
           <div className="size-14 shrink-0 animate-pulse rounded-2xl bg-white/[0.05]" />
         ) : hasData ? (
-          <ScoreRing score={data!.overallScore} size={56} label="Score" />
+          <ScoreRing score={data!.overallScore} size={60} label="Score" />
         ) : (
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl border border-neon/15 bg-neon/10 text-neon">
+          <span className="grid size-14 shrink-0 place-items-center rounded-[16px] bg-neon/12 text-neon">
             <Sparkles className="size-5" />
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-neon">
-            Weekly insight
-          </p>
-          <h2 className="mt-1 text-sm font-bold">Your Weekly Report</h2>
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          <h2 className="text-[16px] font-bold">Weekly report</h2>
+          <p className="mt-1 truncate text-[13px] text-muted-foreground">
             {isLoading
               ? "Building your latest snapshot…"
               : hasData
@@ -68,12 +65,12 @@ export function WeeklyReportCard({ compact = false }: { compact?: boolean }) {
           <ScoreRing score={data!.overallScore} size={84} label="Score" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">View this week's report</div>
-            <div className="text-[11px] text-muted-foreground mt-1">
+            <div className="text-[13px] text-muted-foreground mt-1">
               {data!.workoutsCompleted}/{data!.plannedWorkouts} workouts · {data!.proteinHitDays}/7
               protein days
             </div>
             <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon/10 border border-neon/20">
-              <span className="text-[11px] font-semibold text-neon">Tap to open</span>
+              <span className="text-[13px] font-semibold text-neon">Tap to open</span>
             </div>
           </div>
         </div>

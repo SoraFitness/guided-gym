@@ -3,7 +3,7 @@
 import type { Profile } from "./profile";
 import { loadLog, loadGoals, macrosFor, entriesOn } from "./foods";
 import { getCompletedWorkouts } from "./workoutSessionStore";
-import { computePlan } from "./calorieEngine";
+import { nutritionPlanFor } from "./nutritionService";
 import { getActiveWorkoutPlan, getSavedWorkoutPlans } from "./workoutPlanStore";
 
 export interface CoachUserContext {
@@ -48,36 +48,26 @@ function readWeightLog(): WeightEntry[] {
 }
 
 export function buildCoachContext(profile: Profile | null): CoachUserContext {
+  const goals = loadGoals();
   let plan: Record<string, unknown> | null = null;
   try {
     if (profile) {
-      const nutritionGoal: Profile["goal"] =
-        profile.nutritionPlan === "fat_loss"
-          ? "lose_weight"
-          : profile.nutritionPlan === "muscle_gain"
-            ? "build_muscle"
-            : profile.nutritionPlan === "maintenance"
-              ? "maintain"
-              : profile.goal;
-      const p = computePlan({
-        gender: profile.gender,
-        age: profile.age,
-        heightCm: profile.heightCm,
-        currentWeightKg: profile.currentWeightKg,
-        goalWeightKg: profile.goalWeightKg,
-        goalType: nutritionGoal,
-        activity: profile.activityLevel,
-        targetDate: new Date(profile.goalTargetDate),
-        splitPreset: profile.deficitSplit,
-        bulkPace: profile.bulkPace,
-      });
+      const p = nutritionPlanFor(profile);
+      // Describe the plan from the target the member actually sees in the app, which
+      // can differ from today's recommendation if they set it themselves or earlier.
+      const targetVsMaintenanceKcal = Math.round(goals.kcal - p.maintenanceKcal);
       plan = {
         maintenanceKcal: Math.round(p.maintenanceKcal),
+        savedTargetKcal: goals.kcal,
+        targetVsMaintenanceKcal,
+        targetStance:
+          targetVsMaintenanceKcal <= -100
+            ? "deficit"
+            : targetVsMaintenanceKcal >= 100
+              ? "surplus"
+              : "maintenance",
         recommendedIntakeKcal: Math.round(p.recommendedIntakeKcal),
-        dailyDeficitKcal: Math.round(p.dailyDeficitKcal),
-        foodDeficitKcal: Math.round(p.foodDeficitKcal),
-        exerciseBurnTargetKcal: Math.round(p.exerciseBurnTargetKcal),
-        weeklyChangeLb: Number((p.weeklyChangeLb ?? 0).toFixed(2)),
+        recommendedWeeklyChangeKg: Number(p.weeklyChangeKg.toFixed(2)),
         isAggressive: p.isAggressive,
       };
     }
@@ -85,7 +75,6 @@ export function buildCoachContext(profile: Profile | null): CoachUserContext {
     /* ignore */
   }
 
-  const goals = loadGoals();
   const log = loadLog();
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);

@@ -139,7 +139,7 @@ function HistoryDetail() {
           <ArrowLeft className="size-5" />
         </Link>
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+          <div className="text-[13px] text-muted-foreground flex items-center gap-2">
             <Calendar className="size-3" />
             {new Date(draft.completedAt).toLocaleString(undefined, {
               dateStyle: "medium",
@@ -163,20 +163,20 @@ function HistoryDetail() {
 
       <div className="mt-5 flex min-w-0 flex-col gap-4 px-4 sm:px-5">
         {draft.exercises.map((e) => (
-          <div key={e.id} className="rounded-3xl bg-surface border border-white/[0.05] p-4">
+          <div key={e.id} className="rounded-3xl bg-surface border border-hairline p-4">
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-bold">{e.exerciseName}</div>
-                <div className="text-[11px] text-muted-foreground">{e.muscleGroup}</div>
+                <div className="text-[13px] text-muted-foreground">{e.muscleGroup}</div>
               </div>
               {e.isBodyweight && (
-                <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-neon/15 text-neon">
+                <span className="text-[12px] font-bold uppercase px-2 py-1 rounded-full bg-neon/15 text-neon">
                   Bodyweight
                 </span>
               )}
             </div>
 
-            <div className="mt-3 grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 text-[9px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[10px] min-[380px]:tracking-wider">
+            <div className="mt-3 grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] gap-1.5 px-1 text-[11px] uppercase tracking-wide text-muted-foreground min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:px-2 min-[380px]:text-[12px] min-[380px]:tracking-wider">
               <span>#</span>
               <span>Reps</span>
               <span>Weight ({draft.unit})</span>
@@ -190,14 +190,12 @@ function HistoryDetail() {
                   key={s.setNumber}
                   className={
                     "grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_32px_32px] items-center gap-1.5 rounded-2xl border p-1.5 min-[380px]:grid-cols-[28px_1fr_1fr_36px_36px] min-[380px]:gap-2 min-[380px]:p-2 " +
-                    (s.completed
-                      ? "bg-neon/10 border-neon/30"
-                      : "bg-white/[0.03] border-white/[0.05]")
+                    (s.completed ? "bg-neon/10 border-neon/30" : "bg-white/[0.03] border-hairline")
                   }
                 >
-                  <div className="text-center text-[11px] font-bold tabular-nums">
+                  <div className="text-center text-[13px] font-bold tabular-nums">
                     {s.setNumber}
-                    {s.isExtraSet && <div className="text-[8px] text-neon">+1</div>}
+                    {s.isExtraSet && <div className="text-[11px] text-neon">+1</div>}
                   </div>
                   <NumberInput
                     value={s.actualReps}
@@ -243,7 +241,7 @@ function HistoryDetail() {
         ))}
       </div>
 
-      <div className="mx-4 mt-4 rounded-3xl border border-white/[0.05] bg-surface p-4 sm:mx-5">
+      <div className="mx-4 mt-4 rounded-3xl border border-hairline bg-surface p-4 sm:mx-5">
         <div className="flex items-center gap-2 mb-2">
           <StickyNote className="size-4 text-neon" />
           <div className="text-sm font-bold">Workout notes</div>
@@ -322,9 +320,9 @@ function NumberInput({
 
 function Stat({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/[0.05] bg-surface p-2.5 text-center sm:p-3">
-      <div className="text-base font-extrabold tabular-nums">{value}</div>
-      <div className="flex items-center justify-center gap-1 truncate text-[9px] uppercase tracking-wide text-muted-foreground">
+    <div className="min-w-0 rounded-2xl border border-hairline bg-surface p-2.5 text-center sm:p-3">
+      <div className="text-base font-bold tabular-nums">{value}</div>
+      <div className="flex items-center justify-center gap-1 truncate text-[11px] uppercase tracking-wide text-muted-foreground">
         {icon} {label}
       </div>
     </div>

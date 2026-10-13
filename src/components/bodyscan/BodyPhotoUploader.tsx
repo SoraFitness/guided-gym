@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Camera, CheckCircle2, ImagePlus, Loader2, Upload, X } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle2, ImagePlus, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 export interface PhotoSlotProps {
@@ -9,7 +9,10 @@ export interface PhotoSlotProps {
   onChange: (dataUrl: string | null) => void;
   capture?: "user" | "environment";
   hint?: string;
+  /** Shortest-side requirement. Pass 0 to accept any size (internal tools). */
   minDimension?: number;
+  /** File-size ceiling in bytes. Pass Infinity to accept any file (internal tools). */
+  maxBytes?: number;
 }
 
 function fileToDataURL(file: File): Promise<string> {
@@ -28,20 +31,30 @@ export function PhotoSlot({
   onChange,
   capture = "environment",
   hint = "Use a clear, unfiltered photo in even lighting.",
-  minDimension = 480,
+  minDimension = 400,
+  maxBytes = 15 * 1024 * 1024,
 }: PhotoSlotProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
+  // Shown inline as well as in a toast, so a rejected photo never fails silently.
+  const [issue, setIssue] = useState<string | null>(null);
+  const reject = (message: string) => {
+    setIssue(message);
+    toast.error(message);
+  };
 
   const handle = async (f: File | undefined) => {
     if (!f) return;
+    setIssue(null);
     if (!f.type.startsWith("image/")) {
-      toast.error("Ascendr scans use a still photo, not a video. Take or choose a photo.");
+      reject("Ascendr scans use a still photo, not a video. Take or choose a photo.");
       return;
     }
-    if (f.size > 15 * 1024 * 1024) {
-      toast.error("That photo is over 15 MB. Choose a smaller image.");
+    if (f.size > maxBytes) {
+      reject(
+        `That photo is over ${Math.round(maxBytes / (1024 * 1024))} MB. Choose a smaller image.`,
+      );
       return;
     }
 
@@ -54,15 +67,15 @@ export function PhotoSlot({
         image.onerror = reject;
         image.src = url;
       });
-      if (Math.min(dimensions.width, dimensions.height) < minDimension) {
-        toast.error(
-          `Use a sharper photo that is at least ${minDimension} px on its shortest side.`,
+      if (minDimension > 0 && Math.min(dimensions.width, dimensions.height) < minDimension) {
+        reject(
+          `This photo is ${dimensions.width} × ${dimensions.height} px. Use one that is at least ${minDimension} px on its shortest side.`,
         );
         return;
       }
       onChange(url);
     } catch {
-      toast.error("Ascendr couldn't read that image. Try a JPEG, PNG, or WebP photo.");
+      reject("Ascendr couldn't read that image. Try a JPEG, PNG, or WebP photo.");
     } finally {
       setReading(false);
       if (cameraRef.current) cameraRef.current.value = "";
@@ -71,16 +84,16 @@ export function PhotoSlot({
   };
 
   return (
-    <div className="rounded-[28px] border border-white/[0.07] bg-surface p-4">
+    <div className="rounded-[24px] border border-hairline bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold">
           {label}{" "}
           {required ? (
-            <span className="text-neon text-[10px] ml-1 font-bold uppercase tracking-wider">
+            <span className="text-neon text-[12px] ml-1 font-bold uppercase tracking-wider">
               Required
             </span>
           ) : (
-            <span className="text-muted-foreground text-[10px] ml-1 uppercase tracking-wider">
+            <span className="text-muted-foreground text-[12px] ml-1 uppercase tracking-wider">
               Optional
             </span>
           )}
@@ -101,7 +114,7 @@ export function PhotoSlot({
         <div className="relative aspect-[3/4] overflow-hidden rounded-[22px] bg-black ring-1 ring-neon/20">
           <img src={value} alt={label} className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10" />
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-bold text-neon backdrop-blur">
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 text-[11px] font-bold text-neon backdrop-blur">
             <CheckCircle2 className="size-3" /> Photo ready
           </div>
         </div>
@@ -120,7 +133,7 @@ export function PhotoSlot({
               )}
             </div>
             <p className="mt-3 text-sm font-semibold">Add your photo</p>
-            <p className="mx-auto mt-1 max-w-[24ch] text-[10px] leading-relaxed text-muted-foreground">
+            <p className="mx-auto mt-1 max-w-[24ch] text-[12px] leading-relaxed text-muted-foreground">
               {hint}
             </p>
           </div>
@@ -162,7 +175,16 @@ export function PhotoSlot({
           onChange={(e) => handle(e.target.files?.[0])}
         />
       </div>
-      <p className="mt-2 text-center text-[9px] text-muted-foreground">
+      {issue && !value && (
+        <p
+          role="alert"
+          className="mt-3 flex items-start gap-2 rounded-[14px] border border-score-low/30 bg-score-low/10 px-3 py-2.5 text-[13px] font-medium text-score-low"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          {issue}
+        </p>
+      )}
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">
         Still photos only. Video recording is not used for AI scans.
       </p>
     </div>

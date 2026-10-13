@@ -37,6 +37,33 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- App Tracking Transparency. Required before the IDFA can be read; the
+	     TikTok SDK uses it for deterministic attribution when the user allows it. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Ascendr uses this to measure which ads brought members to the app, so we can keep improving what we show you.</string>
+	<!-- TikTok App Events SDK. Values come from build settings defined in
+	     ios/tiktok.xcconfig (git-ignored). Empty here on purpose: no credential
+	     is committed, and the SDK stays disabled when they are not supplied. -->
+	<key>TikTokAppID</key>
+	<string>$(TIKTOK_APP_ID)</string>
+	<key>TikTokAppStoreID</key>
+	<string>$(TIKTOK_APP_STORE_ID)</string>
+	<key>TikTokAppSecret</key>
+	<string>$(TIKTOK_APP_SECRET)</string>
+	<!-- SKAdNetwork: TikTok's own ad-network IDs, so Apple sends install
+	     postbacks for TikTok campaigns. The app had no SKAdNetworkItems array
+	     and no other MMP, so nothing is being overwritten here. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>238da6jt44.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>22mmun2rn5.skadnetwork</string>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Ascendr uses the camera when you choose to take a progress, food, face, or body scan photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

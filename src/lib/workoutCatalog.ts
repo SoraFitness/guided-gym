@@ -895,6 +895,86 @@ function buildExercise(
   };
 }
 
+interface ExercisePool {
+  /** Exercises that hit at least one of the blueprint's target muscles. */
+  targeted: ExerciseSeed[];
+  /** Same category and equipment but off-target; only used if targeted runs out. */
+  fallback: ExerciseSeed[];
+}
+
+const poolCache = new Map<string, ExercisePool>();
+
+function exercisePool(blueprint: Blueprint, setup: EquipmentSetup): ExercisePool {
+  const key = `${blueprint.id}-${setup}`;
+  const cached = poolCache.get(key);
+  if (cached) return cached;
+  const usable = E.filter(
+    (exercise) =>
+      exercise.equipment.includes(setup) && exercise.categories.includes(blueprint.category),
+  );
+  const pool = {
+    targeted: usable.filter((exercise) =>
+      exercise.targets.some((target) => blueprint.targetMuscles.includes(target)),
+    ),
+    fallback: usable.filter(
+      (exercise) => !exercise.targets.some((target) => blueprint.targetMuscles.includes(target)),
+    ),
+  };
+  poolCache.set(key, pool);
+  return pool;
+}
+
+const CORE_PATTERN = /core|abs|oblique/i;
+const ISOLATION_PATTERN = /curl|raise|extension|fly|flye|kickback|calf|shrug|pushdown|pullover/i;
+
+/** Big compound lifts first, then isolation work, then core and holds. */
+function movementRank(exercise: ExerciseSeed) {
+  if (CORE_PATTERN.test(exercise.muscleGroup) || exercise.targets.every((t) => t === "core")) {
+    return 2;
+  }
+  if (exercise.timed) return 2;
+  return ISOLATION_PATTERN.test(exercise.name) ? 1 : 0;
+}
+
+/**
+ * Picks a workout's exercises: rotates through the blueprint's target muscles so a
+ * full-body day covers chest, back, legs and core rather than whatever the shuffle
+ * landed on, and keeps off-target exercises out unless the pool runs dry.
+ */
+function selectExercises(blueprint: Blueprint, setup: EquipmentSetup, id: string, count: number) {
+  const pool = exercisePool(blueprint, setup);
+  const shuffled = (list: ExerciseSeed[]) =>
+    list
+      .map((exercise) => ({ exercise, key: hash(`${id}-${exercise.id}`) }))
+      .sort((a, b) => a.key - b.key)
+      .map(({ exercise }) => exercise);
+  const groups = blueprint.targetMuscles.map((muscle) =>
+    shuffled(
+      pool.targeted.filter(
+        (exercise) =>
+          exercise.targets.find((target) => blueprint.targetMuscles.includes(target)) === muscle,
+      ),
+    ),
+  );
+  const picked: ExerciseSeed[] = [];
+  while (picked.length < count && groups.some((group) => group.length)) {
+    for (const group of groups) {
+      const next = group.shift();
+      if (next && picked.length < count) picked.push(next);
+    }
+  }
+  for (const exercise of shuffled(pool.fallback)) {
+    if (picked.length >= count) break;
+    picked.push(exercise);
+  }
+  // Circuits keep their shuffled flow; strength days are ordered like a coach would.
+  if (blueprint.category !== "Strength") return picked;
+  return picked
+    .map((exercise, index) => ({ exercise, index }))
+    .sort((a, b) => movementRank(a.exercise) - movementRank(b.exercise) || a.index - b.index)
+    .map(({ exercise }) => exercise);
+}
+
 function buildWorkout(
   blueprint: Blueprint,
   setup: EquipmentSetup,
@@ -905,21 +985,12 @@ function buildWorkout(
 ): Workout {
   const id = `sora-${blueprint.id}-${setup}-${level}-${goal}-${duration}-${variant}`;
   const seed = hash(id);
-  const candidates = E.filter(
-    (exercise) =>
-      exercise.equipment.includes(setup) &&
-      exercise.categories.includes(blueprint.category) &&
-      exercise.targets.some((target) => blueprint.targetMuscles.includes(target)),
+  const selected = selectExercises(
+    blueprint,
+    setup,
+    id,
+    exerciseCount(duration, blueprint.category),
   );
-  const fallback = E.filter(
-    (exercise) =>
-      exercise.equipment.includes(setup) && exercise.categories.includes(blueprint.category),
-  );
-  const selected = [
-    ...new Map([...candidates, ...fallback].map((exercise) => [exercise.id, exercise])).values(),
-  ]
-    .sort((a, b) => hash(`${id}-${a.id}`) - hash(`${id}-${b.id}`))
-    .slice(0, exerciseCount(duration, blueprint.category));
   const title = `${SERIES[seed % SERIES.length]} ${blueprint.name}`;
   const levelMultiplier = level === "advanced" ? 1.18 : level === "beginner" ? 0.82 : 1;
   const categoryRate =
@@ -952,7 +1023,11 @@ function buildWorkout(
   };
 }
 
-export const GENERATED_WORKOUT_COUNT = 1800;
+// Every blueprint × equipment × level × goal × session length × 2 variants. The
+// catalog used to be randomly cut to 1,800, which left about half of members'
+// weekly sessions without a workout at their own level, goal, or session length.
+export const GENERATED_WORKOUT_COUNT =
+  BLUEPRINTS.length * EQUIPMENT.length * LEVELS.length * GOALS.length * DURATIONS.length * 2;
 
 export function createGeneratedWorkoutCatalog(): Workout[] {
   const combinations: Workout[] = [];
@@ -970,7 +1045,9 @@ export function createGeneratedWorkoutCatalog(): Workout[] {
     }
   }
 
+  // A stable shuffle so browsing the library doesn't list near-identical variants together.
   return combinations
-    .sort((a, b) => hash(`catalog-${a.id}`) - hash(`catalog-${b.id}`))
-    .slice(0, GENERATED_WORKOUT_COUNT);
+    .map((workout) => ({ workout, key: hash(`catalog-${workout.id}`) }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ workout }) => workout);
 }

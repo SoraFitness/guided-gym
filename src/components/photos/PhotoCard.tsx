@@ -22,7 +22,7 @@ export function PhotoCard({ photo }: { photo: ProgressPhotoRow }) {
             Image unavailable
           </div>
         )}
-        <span className="absolute top-2 left-2 text-[10px] uppercase tracking-wider font-bold bg-black/60 text-neon px-2 py-1 rounded-full">
+        <span className="absolute top-2 left-2 text-[12px] uppercase tracking-wider font-bold bg-black/60 text-neon px-2 py-1 rounded-full">
           {typeLabel(photo.photo_type)}
         </span>
       </div>
@@ -34,7 +34,7 @@ export function PhotoCard({ photo }: { photo: ProgressPhotoRow }) {
           )}
         </div>
         {photo.notes && (
-          <p className="text-[11px] text-muted-foreground line-clamp-1">{photo.notes}</p>
+          <p className="text-[13px] text-muted-foreground line-clamp-1">{photo.notes}</p>
         )}
       </div>
     </Link>

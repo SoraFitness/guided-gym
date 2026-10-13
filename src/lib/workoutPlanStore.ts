@@ -60,6 +60,22 @@ export function saveWorkoutPlan(plan: SavedWorkoutPlan) {
   replaceSavedWorkoutPlans([plan, ...getSavedWorkoutPlans().filter((item) => item.id !== plan.id)]);
 }
 
+/** The plan input a member's profile implies; a saved plan is active when they match. */
+export function planInputFromProfile(profile: Profile): WorkoutPlanInput {
+  return {
+    goal: profile.goal,
+    goals: getProfileGoals(profile),
+    experience: profile.experience,
+    currentWorkoutsPerWeek: profile.currentWorkoutsPerWeek,
+    equipment: profile.equipment,
+    focusAreas: profile.focusAreas,
+    daysPerWeek: profile.daysPerWeek,
+    sessionMinutes: profile.sessionMinutes,
+    workoutSplit: profile.workoutSplit ?? "auto",
+    notes: profile.injuries ?? "",
+  };
+}
+
 export function getActiveWorkoutPlan(plans: SavedWorkoutPlan[], profile: Profile | null) {
   if (!profile) return undefined;
   return plans.find((plan) => {

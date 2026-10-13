@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { BodyPortal } from "@/components/app/BodyPortal";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Trash2, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
@@ -157,25 +158,27 @@ function PhotoDetail() {
       </AlertDialog>
 
       {fullscreen && (
-        <div
-          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
-          onClick={() => setFullscreen(false)}
-        >
-          <button
-            className="absolute right-5 grid size-10 place-items-center rounded-full bg-white/10 text-white"
-            style={{ top: "max(1.25rem, calc(env(safe-area-inset-top) + 0.75rem))" }}
-            aria-label="Close"
+        <BodyPortal>
+          <div
+            className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+            onClick={() => setFullscreen(false)}
           >
-            <X className="size-5" />
-          </button>
-          {photo.signed_url && (
-            <img
-              src={photo.signed_url}
-              alt="Progress fullscreen"
-              className="max-w-full max-h-full object-contain"
-            />
-          )}
-        </div>
+            <button
+              className="absolute right-5 grid size-10 place-items-center rounded-full bg-white/10 text-white"
+              style={{ top: "max(1.25rem, calc(env(safe-area-inset-top) + 0.75rem))" }}
+              aria-label="Close"
+            >
+              <X className="size-5" />
+            </button>
+            {photo.signed_url && (
+              <img
+                src={photo.signed_url}
+                alt="Progress fullscreen"
+                className="max-w-full max-h-full object-contain"
+              />
+            )}
+          </div>
+        </BodyPortal>
       )}
     </div>
   );
@@ -185,7 +188,7 @@ function ReadView({ photo, onEdit }: { photo: ProgressPhotoRow; onEdit: () => vo
   return (
     <div className="mt-5 rounded-3xl bg-surface border border-border p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider font-bold bg-neon/15 text-neon px-2 py-1 rounded-full">
+        <span className="text-[12px] uppercase tracking-wider font-bold bg-neon/15 text-neon px-2 py-1 rounded-full">
           {typeLabel(photo.photo_type)}
         </span>
         <button onClick={onEdit} className="text-xs font-semibold text-neon">
@@ -195,7 +198,7 @@ function ReadView({ photo, onEdit }: { photo: ProgressPhotoRow; onEdit: () => vo
       <Row label="Date" value={formatPhotoDate(photo.taken_on)} />
       <Row label="Weight" value={photo.weight_kg !== null ? `${photo.weight_kg} kg` : "—"} />
       <div>
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Notes</div>
+        <div className="text-[13px] uppercase tracking-wider text-muted-foreground">Notes</div>
         <p className="mt-1 text-sm whitespace-pre-wrap">
           {photo.notes?.trim() ? (
             photo.notes
@@ -211,7 +214,7 @@ function ReadView({ photo, onEdit }: { photo: ProgressPhotoRow; onEdit: () => vo
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground text-[11px] uppercase tracking-wider">{label}</span>
+      <span className="text-muted-foreground text-[13px] uppercase tracking-wider">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>
   );
@@ -352,6 +355,6 @@ function EditView({
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{children}</span>
+    <span className="text-[13px] uppercase tracking-wider text-muted-foreground">{children}</span>
   );
 }

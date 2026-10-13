@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
 import { BodyScanReport } from "@/components/scans/BodyScanReport";
+import { scanTrendUpTo, useScanHistory } from "@/components/scans/useScanHistory";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
@@ -51,6 +52,7 @@ function NewBodyScan() {
   const pendingLoaded = useRef(false);
   const autoScanStarted = useRef(false);
   const [photo, setPhoto] = useState<string | null>(null);
+  const historyQuery = useScanHistory("body");
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [result, setResult] = useState<BodyScanAiResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -210,6 +212,7 @@ function NewBodyScan() {
           key="results"
           photo={photo}
           result={result}
+          history={submissionId ? scanTrendUpTo(historyQuery.data, submissionId) : undefined}
           onBack={() => navigate({ to: "/scan" })}
           onReset={reset}
           onHistory={() => navigate({ to: "/scan/body" })}
@@ -238,7 +241,7 @@ function NewBodyScan() {
               <ArrowLeft className="size-5" />
             </button>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon">
+              <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-neon">
                 AI physique analysis
               </p>
               <p className="text-sm font-semibold">Body Scan</p>
@@ -246,7 +249,7 @@ function NewBodyScan() {
           </header>
 
           <main className="mx-auto max-w-md px-5 pt-6">
-            <div className="relative overflow-hidden rounded-[30px] border border-neon/15 bg-gradient-to-br from-neon/[0.14] via-surface to-black p-6">
+            <div className="relative overflow-hidden rounded-[24px] border border-neon/15 bg-surface p-6">
               <div className="absolute -right-8 -top-8 size-36 rounded-full bg-neon/10 blur-3xl" />
               <div className="relative grid size-14 place-items-center rounded-2xl bg-neon/15 text-neon">
                 <ScanLine className="size-7" />
@@ -262,7 +265,7 @@ function NewBodyScan() {
                 {["9 muscle groups", "Strong areas", "Action plan"].map((label) => (
                   <span
                     key={label}
-                    className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70"
+                    className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold uppercase tracking-wider text-white/70"
                   >
                     {label}
                   </span>
@@ -288,7 +291,7 @@ function NewBodyScan() {
               />
             </div>
 
-            <div className="mt-4 rounded-[22px] border border-white/[0.06] bg-white/[0.025] p-4">
+            <div className="mt-4 rounded-[22px] border border-hairline bg-white/[0.025] p-4">
               <div className="flex items-center gap-2">
                 <LockKeyhole className="size-4 text-neon" />
                 <p className="text-xs font-semibold">Photo quality checklist</p>
@@ -301,13 +304,13 @@ function NewBodyScan() {
                 ].map((item) => (
                   <div
                     key={item}
-                    className="flex items-center gap-2 text-[11px] text-muted-foreground"
+                    className="flex items-center gap-2 text-[13px] text-muted-foreground"
                   >
                     <CheckCircle2 className="size-3.5 text-neon" /> {item}
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
                 Results are a visual fitness opinion, not a medical or body-composition measurement.
               </p>
             </div>

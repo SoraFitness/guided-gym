@@ -220,7 +220,7 @@ function NewPhoto() {
             "Save Progress Photo"
           )}
         </Button>
-        <p className="text-[11px] text-muted-foreground text-center">
+        <p className="text-[13px] text-muted-foreground text-center">
           {accountSession
             ? "Your progress photos are private and only visible to you."
             : "Saved privately on this device."}
@@ -232,7 +232,7 @@ function NewPhoto() {
 
 function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="text-[11px] uppercase tracking-wider text-muted-foreground">
+    <label htmlFor={htmlFor} className="text-[13px] uppercase tracking-wider text-muted-foreground">
       {children}
     </label>
   );

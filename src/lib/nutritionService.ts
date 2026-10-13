@@ -20,10 +20,8 @@ export function nutritionGoalType(profile: Profile): Profile["goal"] {
  * goal weight + target date. Pass an observed maintenance to recalibrate from
  * logged intake and weight.
  */
-export function suggestNutrition(
-  profile: Profile,
-  observedMaintenanceKcal?: number,
-): NutritionGoals {
+/** The full calorie plan (pace, warnings, effective goal) behind the daily targets. */
+export function nutritionPlanFor(profile: Profile, observedMaintenanceKcal?: number) {
   const targetDate = profile.goalTargetDate
     ? new Date(profile.goalTargetDate)
     : (() => {
@@ -31,8 +29,7 @@ export function suggestNutrition(
         d.setDate(d.getDate() + 84);
         return d;
       })();
-
-  const plan = computePlan({
+  return computePlan({
     gender: profile.gender,
     age: profile.age,
     heightCm: profile.heightCm,
@@ -45,6 +42,15 @@ export function suggestNutrition(
     bulkPace: profile.bulkPace,
     observedMaintenanceKcal,
   });
+}
 
-  return macrosFromPlan(plan, profile.currentWeightKg);
+export function suggestNutrition(
+  profile: Profile,
+  observedMaintenanceKcal?: number,
+): NutritionGoals {
+  const plan = nutritionPlanFor(profile, observedMaintenanceKcal);
+  return macrosFromPlan(plan, profile.currentWeightKg, {
+    heightCm: profile.heightCm,
+    goalWeightKg: profile.goalWeightKg,
+  });
 }

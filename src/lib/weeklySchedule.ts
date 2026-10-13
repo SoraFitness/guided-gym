@@ -6,6 +6,7 @@ import {
   type Difficulty,
 } from "./workouts";
 import type { SavedWorkoutPlan } from "./workoutPlanStore";
+import { programForProfile } from "./workoutProgram";
 import type { WorkoutSplitId } from "./workoutSplits";
 
 export type SplitLabel =
@@ -521,7 +522,9 @@ export const weeklyScheduleService = {
     const scheduleWeekStart = localDateISO(monday);
     const completion = loadCompletion();
     const splitId = profile.workoutSplit ?? "auto";
-    const planWorkouts = (Array.isArray(activePlan) ? activePlan : activePlan.workoutIds)
+    const savedIds = Array.isArray(activePlan) ? activePlan : activePlan.workoutIds;
+    // With no saved plan for the current profile, follow the program onboarding would build.
+    const planWorkouts = (savedIds.length ? savedIds : programForProfile(profile))
       .map(getWorkout)
       .filter((workout): workout is Workout => Boolean(workout));
     // A Smart Split plan is the member's program: its sessions run in order,

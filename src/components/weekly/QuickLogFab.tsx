@@ -63,7 +63,7 @@ function FabAction({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 pl-3 pr-4 h-11 rounded-full bg-surface border border-white/10 text-sm font-semibold active:scale-95 transition"
+      className="flex items-center gap-2 pl-3 pr-4 h-11 rounded-full bg-surface border border-hairline text-sm font-semibold active:scale-95 transition"
     >
       {icon}
       <span>{label}</span>

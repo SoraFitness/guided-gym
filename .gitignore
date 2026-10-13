@@ -40,3 +40,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# TikTok App Events credentials (see ios/tiktok.xcconfig.example)
+ios/tiktok.xcconfig

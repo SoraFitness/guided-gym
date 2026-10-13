@@ -21,20 +21,18 @@ export function LegalPage({
         <Link
           to="/profile"
           aria-label="Back to profile"
-          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/[0.06] bg-surface transition active:scale-95"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-hairline bg-surface transition active:scale-95"
         >
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0 flex-1 pt-0.5">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">{eyebrow}</p>
-          <h1 className="mt-1 text-[27px] font-extrabold leading-[1.05] tracking-[-0.04em]">
-            {title}
-          </h1>
-          <p className="mt-2 text-[10px] text-muted-foreground">Last updated {LEGAL_UPDATED}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">{eyebrow}</p>
+          <h1 className="mt-1 text-[27px] font-bold leading-[1.05] tracking-[-0.04em]">{title}</h1>
+          <p className="mt-2 text-[12px] text-muted-foreground">Last updated {LEGAL_UPDATED}</p>
         </div>
       </header>
 
-      <section className="relative mt-5 overflow-hidden rounded-[26px] border border-neon/20 bg-gradient-to-br from-neon/[0.1] via-surface to-surface p-5">
+      <section className="relative mt-5 overflow-hidden rounded-[24px] border border-neon/20 bg-surface p-5">
         <div className="absolute -right-10 -top-10 size-32 rounded-full bg-neon/10 blur-3xl" />
         <div className="relative flex items-start gap-3">
           <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-neon/15 text-neon">
@@ -46,7 +44,7 @@ export function LegalPage({
 
       <main className="mt-6 space-y-7">{children}</main>
 
-      <footer className="mt-9 rounded-[24px] border border-white/[0.06] bg-white/[0.025] p-4 text-center">
+      <footer className="mt-9 rounded-[24px] border border-hairline bg-white/[0.025] p-4 text-center">
         <p className="text-xs font-semibold">Questions about this policy?</p>
         <a
           href="mailto:help@ascendr.org"
@@ -56,22 +54,22 @@ export function LegalPage({
           help@ascendr.org
         </a>
         <nav className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2" aria-label="Legal">
-          <Link to="/terms" className="text-[10px] text-muted-foreground hover:text-neon">
+          <Link to="/terms" className="text-[12px] text-muted-foreground hover:text-neon">
             Terms
           </Link>
-          <Link to="/privacy" className="text-[10px] text-muted-foreground hover:text-neon">
+          <Link to="/privacy" className="text-[12px] text-muted-foreground hover:text-neon">
             Privacy
           </Link>
           <Link
             to="/health-disclaimer"
-            className="text-[10px] text-muted-foreground hover:text-neon"
+            className="text-[12px] text-muted-foreground hover:text-neon"
           >
             Health & AI
           </Link>
-          <Link to="/contact" className="text-[10px] text-muted-foreground hover:text-neon">
+          <Link to="/contact" className="text-[12px] text-muted-foreground hover:text-neon">
             Contact
           </Link>
-          <Link to="/delete-account" className="text-[10px] text-muted-foreground hover:text-neon">
+          <Link to="/delete-account" className="text-[12px] text-muted-foreground hover:text-neon">
             Delete Account
           </Link>
         </nav>
@@ -83,7 +81,7 @@ export function LegalPage({
 export function LegalSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="px-1">
-      <h2 className="text-base font-extrabold tracking-[-0.02em]">{title}</h2>
+      <h2 className="text-base font-bold tracking-[-0.02em]">{title}</h2>
       <div className="mt-2 space-y-3 text-xs leading-[1.7] text-muted-foreground">{children}</div>
     </section>
   );

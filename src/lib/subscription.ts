@@ -1,8 +1,13 @@
 import { Capacitor } from "@capacitor/core";
-import type { CustomerInfo, PurchasesPackage } from "@revenuecat/purchases-capacitor";
+import type {
+  CustomerInfo,
+  PurchasesEntitlementInfo,
+  PurchasesPackage,
+} from "@revenuecat/purchases-capacitor";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/authSession";
 import { subscriptionStatusFromEntitlement } from "@/lib/subscriptionState";
+import { trackTikTokSubscription, trackTikTokTrialStarted } from "@/lib/tiktokEvents";
 
 export type Plan = "weekly" | "monthly" | "yearly";
 
@@ -204,10 +209,60 @@ function createPlanPrice(
   };
 }
 
+/**
+ * Only report a subscription TikTok could plausibly have driven. Without this, the first
+ * launch after shipping TikTok would replay every existing member's long-past purchase as
+ * a fresh conversion. A renewal that lands inside the window is still deduplicated
+ * natively, because the key below is tied to the original purchase, not the latest one.
+ */
+const TIKTOK_PURCHASE_WINDOW_MS = 30 * 60 * 1000;
+
+function isRecent(isoDate: string | null | undefined, now = Date.now()) {
+  if (!isoDate) return false;
+  const parsed = Date.parse(isoDate);
+  return !Number.isNaN(parsed) && now - parsed <= TIKTOK_PURCHASE_WINDOW_MS && parsed <= now;
+}
+
+/**
+ * Reports StartTrial / Subscribe+Purchase to TikTok from the one place every RevenueCat
+ * update flows through. The native layer deduplicates, so repeated calls for the same
+ * subscription report at most once. RevenueCat behaviour is untouched: this only reads.
+ */
+function reportTikTokConversion(entitlement: PurchasesEntitlementInfo | undefined) {
+  if (!entitlement?.isActive || !isNativePlatform()) return;
+  if (!isRecent(entitlement.latestPurchaseDate)) return;
+
+  // Tied to the original purchase so renewals never re-report as new conversions.
+  const dedupeKey = `${entitlement.productIdentifier}:${entitlement.originalPurchaseDate}`;
+  const plan = planFromProductIdentifier(entitlement.productIdentifier);
+  const product = plan ? packagesByPlan[plan]?.product : undefined;
+
+  // An introductory offer is a trial start, not revenue; anything else is a paid period.
+  const periodType = entitlement.periodType?.toUpperCase();
+  if (periodType === "TRIAL" || periodType === "INTRO") {
+    void trackTikTokTrialStarted({
+      dedupeKey,
+      productId: entitlement.productIdentifier,
+      value: product?.price,
+      currency: product?.currencyCode,
+    });
+    return;
+  }
+
+  void trackTikTokSubscription({
+    dedupeKey,
+    productId: entitlement.productIdentifier,
+    value: product?.price,
+    currency: product?.currencyCode,
+  });
+}
+
 function applyCustomerInfo(customerInfo: CustomerInfo) {
   const entitlement = customerInfo.entitlements.all[ENTITLEMENT_ID];
   const status = subscriptionStatusFromEntitlement(entitlement);
   entitlementKnown = true;
+
+  reportTikTokConversion(entitlement);
 
   updateSubscription({
     ...status,

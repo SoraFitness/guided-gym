@@ -3,18 +3,29 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft,
-  CheckCircle2,
+  Gauge,
+  Gem,
   Loader2,
   LockKeyhole,
   RefreshCcw,
   ScanFace,
   Sparkles,
+  Target,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PhotoSlot } from "@/components/bodyscan/BodyPhotoUploader";
-import { FaceScanReport } from "@/components/scans/FaceScanReport";
+import { FaceScanReport, faceBreakdown } from "@/components/scans/FaceScanReport";
+import {
+  PhotoChecklist,
+  ScanPageHeader,
+  ScanSampleHero,
+  WhatYouGet,
+} from "@/components/scans/ScanIntro";
+import { scanTrendUpTo } from "@/components/scans/useScanHistory";
+import { primaryButtonClass } from "@/components/app/kit";
+import { FACE_SCAN_DEMO_PHOTO, FACE_SCAN_DEMO_RESULT } from "@/lib/faceScanDemo";
+import { cn } from "@/lib/utils";
 import { ScanAnalysisProgress } from "@/components/scans/ScanAnalysisProgress";
 import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
 import { ScanQuotaCard } from "@/components/scans/ScanQuotaCard";
@@ -225,6 +236,7 @@ function FaceScanPage() {
           key="results"
           photo={photo}
           result={result}
+          history={submissionId ? scanTrendUpTo(historyQuery.data, submissionId) : undefined}
           onBack={() => navigate({ to: "/scan" })}
           onReset={reset}
           onHistory={() => {
@@ -249,58 +261,29 @@ function FaceScanPage() {
           className="min-h-dvh"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2.5rem)" }}
         >
-          <header
-            className="mx-auto flex max-w-md items-center gap-3 px-5"
-            style={{ paddingTop: "calc(env(safe-area-inset-top) + 1.25rem)" }}
-          >
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/scan" })}
-              className="grid size-10 place-items-center rounded-full bg-surface"
-              aria-label="Back"
-            >
-              <ArrowLeft className="size-5" />
-            </button>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon">
-                AI appearance analysis
-              </p>
-              <p className="text-sm font-semibold">Face Scan</p>
-            </div>
-          </header>
+          <div className="mx-auto max-w-md px-4 sm:px-5">
+            <ScanPageHeader title="Face Scan" onBack={() => navigate({ to: "/scan" })} />
 
-          <main className="mx-auto max-w-md px-5 pt-6">
-            <div className="relative overflow-hidden rounded-[30px] border border-neon/15 bg-gradient-to-br from-neon/[0.14] via-surface to-black p-6">
-              <div className="absolute -right-8 -top-8 size-36 rounded-full bg-neon/10 blur-3xl" />
-              <div className="relative grid size-14 place-items-center rounded-2xl bg-neon/15 text-neon">
-                <ScanFace className="size-7" />
-              </div>
-              <h1 className="relative mt-8 text-3xl font-bold leading-tight">
-                See your facial potential.
-              </h1>
-              <p className="relative mt-3 text-sm leading-relaxed text-muted-foreground">
-                Upload one clear face photo for a personalized AI report covering appearance,
-                symmetry, jawline, skin, eye area, and looksmax potential.
-              </p>
-              <div className="relative mt-5 flex flex-wrap gap-2">
-                {["6 scores", "Strong features", "Action plan"].map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <ScanSampleHero
+              photo={FACE_SCAN_DEMO_PHOTO}
+              fit="contain"
+              scoreLabel="Overall appearance score"
+              score={FACE_SCAN_DEMO_RESULT.overallScore}
+              bars={faceBreakdown(FACE_SCAN_DEMO_RESULT)
+                .slice(0, 3)
+                .map((item) => ({ label: item.label, score: item.score }))}
+              headline="See your face score in seconds."
+              onOpenSample={() => navigate({ to: "/scan/face/$id", params: { id: "demo" } })}
+            />
 
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/scan/face/$id", params: { id: "demo" } })}
-              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.035] text-sm font-bold text-white/70 transition active:scale-[0.985]"
-            >
-              <ScanFace className="size-4 text-neon" /> View sample report
-            </button>
+            <WhatYouGet
+              items={[
+                { icon: Gauge, label: "Appearance score" },
+                { icon: ScanFace, label: "Feature map" },
+                { icon: Gem, label: "Your potential" },
+                { icon: Target, label: "Glow-up plan" },
+              ]}
+            />
 
             <ScanQuotaCard
               scanType="face"
@@ -321,32 +304,10 @@ function FaceScanPage() {
               />
             </div>
 
-            <div className="mt-4 rounded-[22px] border border-white/[0.06] bg-white/[0.025] p-4">
-              <div className="flex items-center gap-2">
-                <LockKeyhole className="size-4 text-neon" />
-                <p className="text-xs font-semibold">Photo quality checklist</p>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {[
-                  "Even front lighting",
-                  "Neutral, front-facing angle",
-                  "No filters, glasses, or hats",
-                ].map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-2 text-[11px] text-muted-foreground"
-                  >
-                    <CheckCircle2 className="size-3.5 text-neon" /> {item}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-                Results are subjective and photo-dependent, not a medical or objective assessment.
-              </p>
-            </div>
+            <PhotoChecklist items={["Even front light", "Face forward", "No filters or hats"]} />
 
             {error && (
-              <div className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">
+              <div className="mt-4 rounded-[18px] border border-destructive/25 bg-destructive/10 p-4 text-[14px] text-destructive">
                 {error}
               </div>
             )}
@@ -355,16 +316,16 @@ function FaceScanPage() {
               type="button"
               onClick={() => void runScan()}
               disabled={!photo || session === "loading" || busy || weeklyLimitReached}
-              className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon font-bold text-neon-foreground disabled:opacity-40"
+              className={cn(primaryButtonClass, "mt-6 disabled:opacity-40")}
             >
               {busy ? (
-                <Loader2 className="size-5 animate-spin" />
+                <Loader2 className="animate-spin" />
               ) : weeklyLimitReached || !accountSession ? (
-                <LockKeyhole className="size-5" />
+                <LockKeyhole />
               ) : error ? (
-                <RefreshCcw className="size-5" />
+                <RefreshCcw />
               ) : (
-                <Sparkles className="size-5" />
+                <Sparkles />
               )}
               {busy
                 ? "Starting Analysis"
@@ -377,6 +338,10 @@ function FaceScanPage() {
                       : "Analyze My Face"}
             </button>
 
+            <p className="mt-3 px-1 text-center text-[12px] text-muted-foreground">
+              Subjective and photo-dependent, not a medical or objective assessment.
+            </p>
+
             <div id="face-scan-history" className="scroll-mt-5">
               <ScanHistoryList
                 items={historyQuery.data ?? []}
@@ -386,7 +351,7 @@ function FaceScanPage() {
                 onDelete={removeScan}
               />
             </div>
-          </main>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

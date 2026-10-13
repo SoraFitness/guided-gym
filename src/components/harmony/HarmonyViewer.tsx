@@ -12,7 +12,7 @@ export interface HarmonyFrame {
 const NEON = "#b7ff3e";
 
 function scoreTone(metric: HarmonyMetric) {
-  if (!metric.reliable) return "border-white/10 bg-white/[0.05] text-white/45";
+  if (!metric.reliable) return "border-hairline bg-white/[0.05] text-white/45";
   if (metric.score === null) return "border-white/15 bg-white/[0.06] text-white/75";
   if (metric.score >= 8) return "border-neon/25 bg-neon/10 text-neon";
   if (metric.score >= 5) return "border-amber-400/25 bg-amber-400/10 text-amber-300";
@@ -170,7 +170,7 @@ export function HarmonyViewer({
   return (
     <div className="space-y-4">
       <section
-        className="relative overflow-hidden rounded-[28px] border border-white/[0.09] bg-black"
+        className="relative overflow-hidden rounded-[24px] border border-hairline bg-black"
         style={{ aspectRatio: String(aspect) }}
       >
         <svg
@@ -192,20 +192,20 @@ export function HarmonyViewer({
           {selected && <MetricOverlay metric={selected} unit={unit} />}
         </svg>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/90 to-transparent" />
-        <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-neon backdrop-blur">
+        <span className="absolute left-3 top-3 rounded-full border border-hairline bg-black/55 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-neon backdrop-blur">
           Ascendr harmony
         </span>
         {selected && (
           <div className="absolute inset-x-4 bottom-4 flex items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
                 {heading}
               </p>
               <p className="mt-1 text-base font-bold leading-tight">{selected.label}</p>
-              <p className="mt-0.5 text-[11px] text-white/60">{captionLine(selected)}</p>
+              <p className="mt-0.5 text-[13px] text-white/60">{captionLine(selected)}</p>
             </div>
             <p className="shrink-0 text-right">
-              <span className="text-4xl font-black tabular-nums">
+              <span className="text-4xl font-bold tabular-nums">
                 {selected.reliable && selected.score !== null ? selected.score.toFixed(1) : "—"}
               </span>
               <span className="text-xs font-bold text-white/45">/10</span>
@@ -216,28 +216,28 @@ export function HarmonyViewer({
 
       {toolbar}
 
-      <section className="rounded-[26px] border border-white/[0.08] bg-white/[0.035] p-4">
+      <section className="rounded-[24px] border border-hairline bg-white/[0.035] p-4">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neon">{heading}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neon">{heading}</p>
             <h3 className="mt-1 text-lg font-bold">Your ratios</h3>
             {scoredCount < report.metrics.length && (
-              <p className="mt-0.5 text-[10px] text-white/45">
+              <p className="mt-0.5 text-[12px] text-white/45">
                 Score uses {scoredCount} of {report.metrics.length} measurements
               </p>
             )}
           </div>
           <p className="text-right">
-            <span className="text-2xl font-black tabular-nums">
+            <span className="text-2xl font-bold tabular-nums">
               {report.score === null ? "—" : report.score.toFixed(1)}
             </span>
-            <span className="text-[10px] font-bold text-white/45">/10</span>
+            <span className="text-[12px] font-bold text-white/45">/10</span>
           </p>
         </div>
         {report.warnings.map((warning) => (
           <p
             key={warning}
-            className="mt-3 flex items-start gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] p-3 text-[11px] leading-relaxed text-amber-100/90"
+            className="mt-3 flex items-start gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/[0.07] p-3 text-[13px] leading-relaxed text-amber-100/90"
           >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
             {warning}
@@ -259,7 +259,7 @@ export function HarmonyViewer({
               <span className="min-w-0 text-[13px] font-semibold">{metric.label}</span>
               <span
                 className={cn(
-                  "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold tabular-nums",
+                  "shrink-0 rounded-full border px-2 py-0.5 text-[12px] font-bold tabular-nums",
                   scoreTone(metric),
                 )}
               >
@@ -271,22 +271,22 @@ export function HarmonyViewer({
       </section>
 
       {selected && (
-        <section className="rounded-[26px] border border-white/[0.08] bg-white/[0.035] p-4">
+        <section className="rounded-[24px] border border-hairline bg-white/[0.035] p-4">
           <div className="flex items-center gap-2 text-neon">
             <Info className="size-4" />
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">{selected.label}</h3>
+            <h3 className="text-[12px] font-bold uppercase tracking-[0.2em]">{selected.label}</h3>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-white/70">{selected.explanation}</p>
-          <p className="mt-2 text-[11px] text-white/45">{detailLine(selected)}</p>
+          <p className="mt-2 text-[13px] text-white/45">{detailLine(selected)}</p>
           {selected.source && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-white/35">
+            <p className="mt-1.5 text-[12px] leading-relaxed text-white/35">
               Source: {selected.source}
             </p>
           )}
         </section>
       )}
 
-      <p className="px-1 text-[10px] leading-relaxed text-white/40">
+      <p className="px-1 text-[12px] leading-relaxed text-white/40">
         Harmony compares proportions measured on your photo with published ranges. Camera angle,
         distance, and pose change the numbers, and the ranges are conventions, not a measure of
         worth or a medical diagnosis.

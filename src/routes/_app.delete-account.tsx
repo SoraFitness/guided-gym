@@ -92,7 +92,7 @@ function DeleteAccountPage() {
 
         <LegalSection title="Delete permanently">
           {session === "loading" ? (
-            <div className="flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 text-sm text-muted-foreground">
+            <div className="flex h-12 items-center justify-center gap-2 rounded-full border border-hairline text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> Checking your account
             </div>
           ) : accountSession ? (
@@ -131,7 +131,7 @@ function DeleteAccountPage() {
           </p>
           <a
             href={DELETE_REQUEST_URL}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/10 px-5 text-sm font-semibold transition active:scale-[0.98]"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-hairline px-5 text-sm font-semibold transition active:scale-[0.98]"
           >
             <Mail className="size-4" /> Email deletion request
           </a>
@@ -139,7 +139,7 @@ function DeleteAccountPage() {
       </LegalPage>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className="w-[calc(100%_-_2.5rem)] max-w-md rounded-[28px] border-white/10 bg-background">
+        <AlertDialogContent className="w-[calc(100%_-_2.5rem)] max-w-md rounded-[24px] border-hairline bg-background">
           <AlertDialogHeader>
             <div className="mb-2 grid size-11 place-items-center rounded-2xl bg-destructive/10 text-destructive">
               <AlertTriangle className="size-5" />

@@ -221,42 +221,70 @@ async function searchUSDA(query: string, accessToken: string): Promise<FoodSearc
 }
 
 // ============ Open Food Facts ============
-// https://world.openfoodfacts.org/cgi/search.pl
+// Search-a-licious (search.openfoodfacts.org) is OFF's current search API; the legacy
+// cgi/search.pl endpoint now answers 503 most of the time, so it is only a fallback.
+type OpenFoodFactsSearchHit = {
+  code?: string;
+  product_name?: string;
+  brands?: string | string[];
+  serving_size?: string;
+  image_thumb_url?: string;
+  nutriments?: Record<string, number>;
+};
+
+const OFF_FIELDS = "code,product_name,brands,serving_size,nutriments,image_thumb_url";
+
+async function fetchOpenFoodFactsSearchHits(query: string): Promise<OpenFoodFactsSearchHit[]> {
+  const headers = { "User-Agent": "Ascendr-Fitness/1.0" };
+  const q = encodeURIComponent(query);
+  try {
+    const res = await fetch(
+      `https://search.openfoodfacts.org/search?q=${q}&page_size=15&fields=${OFF_FIELDS}`,
+      { headers, signal: AbortSignal.timeout(6000) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { hits?: OpenFoodFactsSearchHit[] };
+      if (data.hits?.length) return data.hits;
+    }
+  } catch (err) {
+    console.error("[searchOpenFoodFacts] search-a-licious", err);
+  }
+  const res = await fetch(
+    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${q}&search_simple=1&action=process&json=1&page_size=15&fields=${OFF_FIELDS}`,
+    { headers, signal: AbortSignal.timeout(6000) },
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as { products?: OpenFoodFactsSearchHit[] };
+  return data.products ?? [];
+}
+
 async function searchOpenFoodFacts(query: string): Promise<FoodSearchResult[]> {
   try {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=15&fields=code,product_name,brands,serving_size,nutriments,image_thumb_url`;
-    const res = await fetch(url, { headers: { "User-Agent": "Ascendr-Fitness/1.0" } });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      products?: Array<{
-        code?: string;
-        product_name?: string;
-        brands?: string;
-        serving_size?: string;
-        image_thumb_url?: string;
-        nutriments?: Record<string, number>;
-      }>;
-    };
+    const products = await fetchOpenFoodFactsSearchHits(query);
 
     const out: FoodSearchResult[] = [];
-    for (const p of (data.products ?? []).slice(0, 15)) {
+    for (const p of products.slice(0, 15)) {
       if (!p.product_name) continue;
       const n = p.nutriments ?? {};
-      // Prefer per-serving when available, else per-100g
-      const kcal = Number(n["energy-kcal_serving"] ?? n["energy-kcal_100g"] ?? 0);
-      const protein = Number(n["proteins_serving"] ?? n["proteins_100g"] ?? 0);
-      const carbs = Number(n["carbohydrates_serving"] ?? n["carbohydrates_100g"] ?? 0);
-      const fat = Number(n["fat_serving"] ?? n["fat_100g"] ?? 0);
-      const fiber = optionalRound(n["fiber_serving"] ?? n["fiber_100g"]);
-      const sugars = optionalRound(n["sugars_serving"] ?? n["sugars_100g"]);
-      const saturatedFat = optionalRound(n["saturated-fat_serving"] ?? n["saturated-fat_100g"]);
-      const sodiumG = optionalRound(n["sodium_serving"] ?? n["sodium_100g"]);
+      // Per serving when the label has it, else per 100 g. Every value uses the same
+      // basis so a per-serving calorie count never sits next to per-100 g macros.
       const perServing = n["energy-kcal_serving"] != null;
+      const basis = perServing ? "_serving" : "_100g";
+      const value = (key: string) => n[`${key}${basis}`];
+      const kcal = Number(value("energy-kcal") ?? 0);
+      const protein = Number(value("proteins") ?? 0);
+      const carbs = Number(value("carbohydrates") ?? 0);
+      const fat = Number(value("fat") ?? 0);
+      const fiber = optionalRound(value("fiber"));
+      const sugars = optionalRound(value("sugars"));
+      const saturatedFat = optionalRound(value("saturated-fat"));
+      const sodiumG = optionalRound(value("sodium"));
       if (!kcal) continue;
+      const brand = Array.isArray(p.brands) ? p.brands[0] : p.brands?.split(",")[0];
       out.push({
         id: `off:${p.code ?? p.product_name}`,
         source: "openfoodfacts",
-        brand: p.brands?.split(",")[0]?.trim(),
+        brand: brand?.trim() || undefined,
         name: p.product_name,
         serving: perServing && p.serving_size ? p.serving_size : "100 g",
         kcal: Math.round(kcal),

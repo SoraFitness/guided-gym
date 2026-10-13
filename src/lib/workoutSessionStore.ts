@@ -208,6 +208,13 @@ export function useActiveSession(): WorkoutSession | null {
   return useSyncExternalStore(subscribe, readSession, () => null);
 }
 
+/** An active session for a different workout that already has logged sets. */
+export function unfinishedSessionFor(workoutId: string): WorkoutSession | null {
+  const existing = readSession();
+  if (!existing || existing.status !== "active" || existing.workoutId === workoutId) return null;
+  return existing.exercises.some((log) => log.sets.some((set) => set.completed)) ? existing : null;
+}
+
 export interface SeedExercise {
   id: string;
   name: string;

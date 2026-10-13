@@ -163,8 +163,11 @@ function effectiveGoalKind(
 ): "lose" | "gain" | "maintain" | "recomp" {
   if (goalType === "recomp") return "recomp";
   if (goalType === "maintain") return "maintain";
-  if (goalType === "build_muscle") return "gain";
-  if (goalType === "lose_weight") return "lose";
+  // Wants muscle but a lower weight: build while leaning out, not a surplus.
+  if (goalType === "build_muscle") return deltaKg > 0.5 ? "recomp" : "gain";
+  // Wants to lose fat but is already at (or under) the goal weight: a gentle
+  // recomposition deficit, never the surplus the weight maths would give.
+  if (goalType === "lose_weight") return deltaKg > 0.5 ? "lose" : "recomp";
   // get_stronger / endurance / overall → infer from weight delta
   if (deltaKg > 0.5) return "lose";
   if (deltaKg < -0.5) return "gain";
@@ -246,15 +249,19 @@ export function computePlan(input: PlanInput): PlanResult {
     const totalDeficitNeeded = estimatedTotalDeficitKcal(deltaKg); // kcal
     dailyDeficit = Math.round(totalDeficitNeeded / days);
 
-    // Safety: cap to safe weekly loss
+    // Safety: cap to safe weekly loss (≤1% body weight/week) and never more than
+    // a quarter of maintenance from one day's intake and training combined.
     const maxWeeklyKg = maxWeeklyLossKg(currentWeightKg);
-    const maxDailyDeficit = Math.round((maxWeeklyKg * KCAL_PER_KG_FAT) / 7);
+    const maxDailyDeficit = Math.min(
+      Math.round((maxWeeklyKg * KCAL_PER_KG_FAT) / 7),
+      Math.round(maintenance * 0.25),
+    );
 
     if (dailyDeficit > maxDailyDeficit) {
       isAggressive = true;
       // Build a safer alternative based on the cap
-      const safeWeeklyKg = maxWeeklyKg;
       const safeDailyDeficit = maxDailyDeficit;
+      const safeWeeklyKg = (safeDailyDeficit * 7) / KCAL_PER_KG_FAT;
       const safeDays = Math.ceil((deltaKg * KCAL_PER_KG_FAT) / safeDailyDeficit);
       const safeDate = addDays(new Date(), safeDays);
       const safeFood = Math.round(safeDailyDeficit * split.food);
@@ -268,8 +275,9 @@ export function computePlan(input: PlanInput): PlanResult {
         exerciseBurnTargetKcal: safeBurn,
       };
       warnings.push(
-        `Your target date is aggressive. A safer plan loses about ${kgToLbs(safeWeeklyKg).toFixed(1)} lb/wk and reaches your goal around ${safeDate.toLocaleDateString()}.`,
+        `Your target date is aggressive, so your plan uses a safer pace of about ${kgToLbs(safeWeeklyKg).toFixed(1)} lb/wk and reaches your goal around ${safeDate.toLocaleDateString()}.`,
       );
+      dailyDeficit = safeDailyDeficit;
     }
 
     foodDeficit = Math.round(dailyDeficit * split.food);
@@ -332,18 +340,57 @@ export interface MacroTargets {
   fat: number;
 }
 
-export function macrosFromPlan(plan: PlanResult, currentWeightKg: number): MacroTargets {
+/**
+ * The body weight protein is dosed against. Above a BMI of 25 the extra weight is
+ * mostly not muscle, so the reference drops toward a BMI-25 weight, but never
+ * below the member's own goal weight (muscular members can sit above BMI 25).
+ */
+export function proteinReferenceKg(
+  currentWeightKg: number,
+  heightCm?: number,
+  goalWeightKg?: number,
+) {
+  if (!heightCm) return currentWeightKg;
+  const bmi25Kg = 25 * (heightCm / 100) ** 2;
+  const goalFloor = goalWeightKg ? Math.min(goalWeightKg, currentWeightKg) : 0;
+  return Math.max(Math.min(currentWeightKg, bmi25Kg), goalFloor);
+}
+
+// Grams of protein per kg of reference weight. Within the 1.6–2.2 g/kg range that
+// sports-nutrition reviews (ISSN, Morton 2018) support, higher when cutting to
+// protect muscle.
+const PROTEIN_PER_KG: Record<PlanResult["effectiveGoal"], number> = {
+  lose: 2.0,
+  recomp: 2.0,
+  gain: 1.8,
+  maintain: 1.6,
+};
+
+export function macrosFromPlan(
+  plan: PlanResult,
+  currentWeightKg: number,
+  body: { heightCm?: number; goalWeightKg?: number } = {},
+): MacroTargets {
   const kcal = plan.recommendedIntakeKcal;
-  // Protein per kg scales with goal
-  const proteinPerKg =
-    plan.effectiveGoal === "lose" || plan.effectiveGoal === "recomp"
-      ? 2.2
-      : plan.effectiveGoal === "gain"
-        ? 2.0
-        : 1.8;
-  const protein = Math.round(currentWeightKg * proteinPerKg);
+  const referenceKg = proteinReferenceKg(currentWeightKg, body.heightCm, body.goalWeightKg);
+  const protein = Math.round(referenceKg * PROTEIN_PER_KG[plan.effectiveGoal]);
   const fatPct = plan.effectiveGoal === "gain" ? 0.25 : 0.28;
-  const fat = Math.round((kcal * fatPct) / 9);
+  // At least ~0.6 g/kg of fat for hormonal health, even on a low-calorie day.
+  const fat = Math.round(Math.max((kcal * fatPct) / 9, referenceKg * 0.6));
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   return { kcal, protein, carbs, fat };
+}
+
+/**
+ * Activity multiplier from training days and how much the member moves outside
+ * training. The Mifflin-St Jeor multipliers assume both, so asking only about
+ * workouts overstates a desk worker's burn.
+ */
+export function activityFromLifestyle(
+  daysPerWeek: number,
+  dailyMovement: "seated" | "mixed" | "active",
+): ActivityLevel {
+  if (dailyMovement === "active") return daysPerWeek >= 5 ? "athlete" : "very";
+  if (dailyMovement === "mixed") return daysPerWeek >= 4 ? "very" : "moderate";
+  return daysPerWeek >= 4 ? "moderate" : "light";
 }

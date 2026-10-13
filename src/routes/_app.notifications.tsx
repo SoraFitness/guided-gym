@@ -83,7 +83,7 @@ function NotificationsPage() {
                 }}
                 className={
                   "block rounded-2xl border p-4 " +
-                  (n.read_at ? "bg-surface border-white/[0.05]" : "bg-neon/5 border-neon/20")
+                  (n.read_at ? "bg-surface border-hairline" : "bg-neon/5 border-neon/20")
                 }
               >
                 <div className="flex items-start gap-3">
@@ -97,7 +97,7 @@ function NotificationsPage() {
                         {n.body as string}
                       </div>
                     )}
-                    <div className="text-[10px] text-muted-foreground mt-1.5">
+                    <div className="text-[12px] text-muted-foreground mt-1.5">
                       {new Date(n.created_at as string).toLocaleString()}
                     </div>
                   </div>

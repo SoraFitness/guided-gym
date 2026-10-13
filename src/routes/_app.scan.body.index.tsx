@@ -1,20 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  Dumbbell,
-  Loader2,
-  LockKeyhole,
-  ScanLine,
-  ShieldCheck,
-  Sparkles,
-  Target,
-} from "lucide-react";
+import { Droplet, Dumbbell, Gauge, Loader2, ScanLine, ShieldCheck, Target } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ScanHistoryList } from "@/components/scans/ScanHistoryList";
+import { bodyBreakdown } from "@/components/scans/BodyScanReport";
+import { ScanPageHeader, ScanSampleHero, WhatYouGet } from "@/components/scans/ScanIntro";
+import { primaryButtonClass } from "@/components/app/kit";
+import { BODY_SCAN_DEMO_PHOTO, BODY_SCAN_DEMO_RESULT } from "@/lib/bodyScanDemo";
+import { cn } from "@/lib/utils";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { deleteScanSubmission, listScanSubmissions } from "@/lib/scanSubmissions.functions";
 
@@ -51,103 +46,40 @@ function BodyScanIntro() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-5 pb-12 pt-5">
-      <header className="flex items-center gap-3">
-        <Link
-          to="/scan"
-          className="grid h-[44px] w-[44px] place-items-center rounded-full border border-white/[0.06] bg-surface"
-          aria-label="Back to scans"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.23em] text-neon">
-            Ascendr Vision
-          </p>
-          <h1 className="text-lg font-bold">Body Scan</h1>
-        </div>
-      </header>
+    <div className="mx-auto max-w-md px-4 pb-12 sm:px-5">
+      <ScanPageHeader title="Body Scan" onBack={() => navigate({ to: "/scan" })} />
 
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative mt-6 overflow-hidden rounded-[32px] border border-neon/15 bg-gradient-to-br from-neon/[0.12] via-surface to-black p-6"
-      >
-        <div className="absolute -right-16 -top-16 size-48 rounded-full bg-neon/10 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-            backgroundSize: "36px 36px",
-          }}
-        />
-        <div className="relative flex items-center justify-between">
-          <div className="grid size-14 place-items-center rounded-2xl bg-neon/15 text-neon">
-            <ScanLine className="size-7" />
-          </div>
-          <span className="flex items-center gap-1.5 rounded-full border border-neon/20 bg-black/30 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-neon">
-            <Sparkles className="size-3" /> AI report
-          </span>
-        </div>
-        <h2 className="relative mt-16 text-3xl font-bold leading-tight">
-          Turn one photo into a clearer plan.
-        </h2>
-        <p className="relative mt-3 max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
-          See visible muscularity, a broad body-fat range, proportions, potential, and nine distinct
-          muscle groups—then get your highest-impact next steps.
-        </p>
-        <div className="relative mt-5 grid grid-cols-3 gap-2">
-          {[
-            { value: "9", label: "Muscle groups" },
-            { value: "6", label: "Core metrics" },
-            { value: "1", label: "Action plan" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-2xl bg-black/25 p-3">
-              <p className="text-xl font-black text-neon">{item.value}</p>
-              <p className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-white/45">
-                {item.label}
-              </p>
-            </div>
-          ))}
-        </div>
-      </motion.section>
+      <ScanSampleHero
+        photo={BODY_SCAN_DEMO_PHOTO}
+        scoreLabel="Overall physique score"
+        score={BODY_SCAN_DEMO_RESULT.overallScore}
+        bars={bodyBreakdown(BODY_SCAN_DEMO_RESULT)
+          .slice(0, 3)
+          .map((item) => ({ label: item.label, score: item.score ?? 0 }))}
+        headline="Turn one photo into your physique score."
+        onOpenSample={() => navigate({ to: "/scan/body/$id", params: { id: "demo" } })}
+      />
+
+      <WhatYouGet
+        items={[
+          { icon: Gauge, label: "Physique score" },
+          { icon: Dumbbell, label: "9-muscle heatmap" },
+          { icon: Droplet, label: "Body-fat range" },
+          { icon: Target, label: "Your action plan" },
+        ]}
+      />
 
       <button
         type="button"
         onClick={() => navigate({ to: "/scan/body/new", search: { pending: undefined } })}
-        className="mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neon text-base font-bold text-neon-foreground shadow-[0_14px_40px_-14px_var(--neon)] transition active:scale-[0.985]"
+        className={cn(primaryButtonClass, "mt-5")}
       >
-        <Sparkles className="size-5" /> Start Body Scan
+        <ScanLine /> Start Body Scan
       </button>
 
-      <Link
-        to="/scan/body/$id"
-        params={{ id: "demo" }}
-        className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.035] text-sm font-bold text-white/70 transition active:scale-[0.985]"
-      >
-        <ScanLine className="size-4 text-neon" /> View sample report
-      </Link>
-
-      <section className="mt-5 grid grid-cols-3 gap-2">
-        {[
-          { icon: Dumbbell, label: "Clear muscle groups" },
-          { icon: Target, label: "Prioritized actions" },
-          { icon: LockKeyhole, label: "Private by default" },
-        ].map(({ icon: Icon, label }) => (
-          <div
-            key={label}
-            className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-center"
-          >
-            <Icon className="mx-auto size-4 text-neon" />
-            <p className="mt-2 text-[9px] font-semibold leading-snug text-white/55">{label}</p>
-          </div>
-        ))}
-      </section>
-
       {historyQuery.isLoading && (
-        <div className="mt-8 flex items-center justify-center gap-2 rounded-3xl border border-white/[0.06] bg-surface py-8 text-xs text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading your private history
+        <div className="mt-8 flex items-center justify-center gap-2 rounded-[24px] border border-hairline bg-surface py-8 text-[13px] text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading your history
         </div>
       )}
 
@@ -159,11 +91,11 @@ function BodyScanIntro() {
         onDelete={removeScan}
       />
 
-      <div className="mt-8 flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
-        <p className="text-[10px] leading-relaxed text-muted-foreground">
-          Photos and reports are stored in your private account. Results are photo-dependent visual
-          opinions, not medical or body-composition measurements.
+      <div className="mt-8 flex items-start gap-3 px-1">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          Photos and reports stay in your private account. Results are visual opinions, not medical
+          or body-composition measurements.
         </p>
       </div>
     </div>

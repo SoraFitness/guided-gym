@@ -238,7 +238,7 @@ function PhotoPicker({
 }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">{label}</div>
+      <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">{label}</div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
         {photos.map((p) => {
           const active = p.id === selectedId;
@@ -254,7 +254,7 @@ function PhotoPicker({
               {p.signed_url && (
                 <img src={p.signed_url} alt="" className="w-full h-full object-cover" />
               )}
-              <span className="absolute bottom-0.5 left-0.5 text-[9px] uppercase bg-black/60 text-white px-1 rounded">
+              <span className="absolute bottom-0.5 left-0.5 text-[11px] uppercase bg-black/60 text-white px-1 rounded">
                 {p.photo_type}
               </span>
             </button>
@@ -279,10 +279,10 @@ function SideBySide({ before, after }: { before: ProgressPhotoRow; after: Progre
             )}
           </div>
           <div className="px-2 py-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-neon font-bold">{label}</div>
-            <div className="text-[11px] font-semibold">{formatPhotoDate(p.taken_on)}</div>
+            <div className="text-[12px] uppercase tracking-wider text-neon font-bold">{label}</div>
+            <div className="text-[13px] font-semibold">{formatPhotoDate(p.taken_on)}</div>
             {p.weight_kg !== null && (
-              <div className="text-[11px] text-muted-foreground tabular-nums">{p.weight_kg} kg</div>
+              <div className="text-[13px] text-muted-foreground tabular-nums">{p.weight_kg} kg</div>
             )}
           </div>
         </div>
@@ -336,18 +336,15 @@ function SwipeSlider({ before, after }: { before: ProgressPhotoRow; after: Progr
           draggable={false}
         />
       )}
-      <div
-        className="absolute top-0 bottom-0 w-0.5 bg-neon shadow-[0_0_12px_var(--neon)]"
-        style={{ left: `${pos}%` }}
-      >
+      <div className="absolute top-0 bottom-0 w-0.5 bg-neon" style={{ left: `${pos}%` }}>
         <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 size-9 rounded-full bg-neon text-neon-foreground grid place-items-center">
           <ChevronsLeftRight className="size-4" />
         </div>
       </div>
-      <span className="absolute top-2 left-2 text-[10px] uppercase font-bold bg-black/60 text-white px-2 py-1 rounded-full">
+      <span className="absolute top-2 left-2 text-[12px] uppercase font-bold bg-black/60 text-white px-2 py-1 rounded-full">
         Before
       </span>
-      <span className="absolute top-2 right-2 text-[10px] uppercase font-bold bg-black/60 text-white px-2 py-1 rounded-full">
+      <span className="absolute top-2 right-2 text-[12px] uppercase font-bold bg-black/60 text-white px-2 py-1 rounded-full">
         After
       </span>
     </div>
@@ -393,14 +390,14 @@ function Stat({
     <div>
       <div
         className={cn(
-          "text-base font-extrabold tabular-nums",
+          "text-base font-bold tabular-nums",
           accent && "text-neon",
           warn && "text-amber-400",
         )}
       >
         {value}
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -415,7 +412,7 @@ function FeedbackCard({ feedback }: { feedback: AiFeedback }) {
       <p className="text-sm leading-relaxed">{feedback.summary}</p>
       {feedback.observations.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">
             What I noticed
           </div>
           <ul className="text-sm space-y-1 list-disc list-inside">
@@ -427,7 +424,7 @@ function FeedbackCard({ feedback }: { feedback: AiFeedback }) {
       )}
       {feedback.tips.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+          <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">
             Tips
           </div>
           <ul className="text-sm space-y-1 list-disc list-inside">
@@ -437,7 +434,7 @@ function FeedbackCard({ feedback }: { feedback: AiFeedback }) {
           </ul>
         </div>
       )}
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-[12px] text-muted-foreground">
         AI feedback is general and not medical advice.
       </p>
     </div>

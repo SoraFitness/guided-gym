@@ -239,18 +239,18 @@ export function AppTour({ open, steps, onClose }: Props) {
         >
           {arrow === "up" && (
             <div
-              className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 bg-surface border-l border-t border-white/10"
+              className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 bg-surface border-l border-t border-hairline"
               aria-hidden
             />
           )}
           {arrow === "down" && (
             <div
-              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 bg-surface border-r border-b border-white/10"
+              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 bg-surface border-r border-b border-hairline"
               aria-hidden
             />
           )}
 
-          <div className="relative rounded-3xl bg-surface border border-white/10 shadow-2xl overflow-hidden">
+          <div className="relative rounded-3xl bg-surface border border-hairline shadow-2xl overflow-hidden">
             {/* glow header */}
             <div
               className="absolute inset-x-0 top-0 h-24 pointer-events-none opacity-70"
@@ -265,10 +265,10 @@ export function AppTour({ open, steps, onClose }: Props) {
                   <Icon className="size-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] uppercase tracking-widest text-neon font-bold">
+                  <div className="text-[12px] uppercase tracking-widest text-neon font-bold">
                     Step {index + 1} of {N}
                   </div>
-                  <h3 className="mt-0.5 text-lg font-extrabold leading-tight">{step.title}</h3>
+                  <h3 className="mt-0.5 text-lg font-bold leading-tight">{step.title}</h3>
                 </div>
                 <button
                   onClick={handleSkip}
@@ -310,7 +310,7 @@ export function AppTour({ open, steps, onClose }: Props) {
                   <button
                     onClick={handleBack}
                     disabled={isFirst}
-                    className="h-10 px-4 rounded-full bg-white/[0.06] border border-white/[0.06] text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40"
+                    className="h-10 px-4 rounded-full bg-white/[0.06] border border-hairline text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40"
                   >
                     <ArrowLeft className="size-3.5" /> Back
                   </button>

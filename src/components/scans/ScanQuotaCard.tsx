@@ -19,20 +19,18 @@ export function ScanQuotaCard({ scanType, quota, loading, signedIn }: ScanQuotaC
   return (
     <div
       className={cn(
-        "mt-4 rounded-[22px] border p-4",
-        limitReached
-          ? "border-amber-400/25 bg-amber-400/[0.06]"
-          : "border-white/[0.06] bg-white/[0.025]",
+        "mt-4 rounded-[20px] border p-4",
+        limitReached ? "border-score-mid/30 bg-score-mid/[0.07]" : "border-hairline bg-surface",
       )}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className={cn("size-4", limitReached ? "text-amber-300" : "text-neon")} />
-          <p className="text-xs font-semibold">Weekly {label}</p>
+          <p className="text-[14px] font-semibold">Weekly {label}</p>
         </div>
         <span
           className={cn(
-            "rounded-full px-2.5 py-1 text-[10px] font-bold",
+            "rounded-full px-2.5 py-1 text-[12px] font-bold",
             limitReached ? "bg-amber-400/10 text-amber-200" : "bg-neon/10 text-neon",
           )}
         >
@@ -45,14 +43,14 @@ export function ScanQuotaCard({ scanType, quota, loading, signedIn }: ScanQuotaC
           <span
             key={index}
             className={cn(
-              "h-1.5 rounded-full",
+              "h-2 rounded-full",
               index < used ? (limitReached ? "bg-amber-300" : "bg-neon") : "bg-white/10",
             )}
           />
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-1.5 text-[10px] leading-relaxed text-muted-foreground">
+      <div className="mt-3 flex items-center gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
         <CalendarClock className="size-3.5 shrink-0" />
         <span>
           {signedIn

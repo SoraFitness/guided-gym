@@ -1,6 +1,6 @@
 import { createClientId } from "./clientId";
 
-export const ONBOARDING_FLOW_VERSION = "2026-08-conversion-v2";
+export const ONBOARDING_FLOW_VERSION = "2026-10-ascent-v3";
 const VISITOR_KEY = "ascendr:onboarding:visitor-id";
 
 export type OnboardingAttribution = {

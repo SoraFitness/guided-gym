@@ -10,6 +10,7 @@ import {
   BODY_SCAN_DEMO_RESULT,
 } from "@/lib/bodyScanDemo";
 import { getScanSubmission } from "@/lib/scanSubmissions.functions";
+import { scanTrendUpTo, useScanHistory } from "@/components/scans/useScanHistory";
 
 export const Route = createFileRoute("/_app/scan/body/$id")({
   head: () => ({ meta: [{ title: "Body Scan Report — Ascendr" }] }),
@@ -27,6 +28,7 @@ function BodyScanDetail() {
     enabled: !demo,
     retry: false,
   });
+  const historyQuery = useScanHistory("body");
 
   if (demo) {
     return (
@@ -54,6 +56,7 @@ function BodyScanDetail() {
       photo={detailQuery.data.photoUrl}
       result={result}
       createdAt={detailQuery.data.analyzedAt ?? detailQuery.data.createdAt}
+      history={scanTrendUpTo(historyQuery.data, id)}
       onBack={() => navigate({ to: "/scan/body" })}
       onReset={() => navigate({ to: "/scan/body/new", search: { pending: undefined } })}
       onHistory={() => navigate({ to: "/scan/body" })}
@@ -69,7 +72,7 @@ function ReportLoading({ label }: { label: string }) {
           <Loader2 className="size-6 animate-spin" />
         </div>
         <p className="mt-4 text-sm font-semibold">{label}</p>
-        <p className="mt-1 text-[11px] text-white/40">Opening your private report…</p>
+        <p className="mt-1 text-[13px] text-white/40">Opening your private report…</p>
       </div>
     </main>
   );
@@ -85,7 +88,7 @@ function ReportUnavailable({ label }: { label: string }) {
       >
         <ArrowLeft className="size-5" />
       </Link>
-      <div className="mt-20 rounded-[28px] border border-white/[0.07] bg-surface p-7 text-center">
+      <div className="mt-20 rounded-[24px] border border-hairline bg-surface p-7 text-center">
         <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-white/[0.04] text-neon">
           <ScanLine className="size-6" />
         </div>

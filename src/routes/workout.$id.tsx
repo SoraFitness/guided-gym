@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useProfile } from "@/lib/profile";
+import { personalizeWorkout } from "@/lib/workoutPersonalization";
 import {
   createFileRoute,
   Link,
@@ -54,7 +56,9 @@ function writeFavoriteWorkoutIds(ids: string[]) {
 }
 
 function WorkoutDetail() {
-  const w = Route.useLoaderData() as Workout;
+  const loaded = Route.useLoaderData() as Workout;
+  const { profile } = useProfile();
+  const w = useMemo(() => personalizeWorkout(loaded, profile), [loaded, profile]);
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isDetailPage = pathname.replace(/\/$/, "") === `/workout/${w.id}`;
@@ -164,7 +168,7 @@ function WorkoutDetail() {
           </button>
         </div>
         <div className="absolute inset-x-0 bottom-16 px-5 text-center">
-          <div className="inline-flex rounded-full bg-black/50 px-3 py-1.5 text-[11px] font-semibold backdrop-blur">
+          <div className="inline-flex rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-semibold backdrop-blur">
             Preview first exercise
           </div>
         </div>
@@ -186,7 +190,7 @@ function WorkoutDetail() {
           <span>·</span>
           <span>{w.difficulty}</span>
         </div>
-        <h1 className="mt-1 text-3xl font-extrabold">{w.title}</h1>
+        <h1 className="mt-1 text-3xl font-bold">{w.title}</h1>
         <p className="mt-3 text-muted-foreground leading-relaxed">{w.description}</p>
 
         <WorkoutMuscleMap
@@ -217,7 +221,7 @@ function WorkoutDetail() {
                 <Link
                   to="/workout/$id/demo/$exerciseId"
                   params={{ id: w.id, exerciseId: ex.id }}
-                  className="h-9 rounded-full bg-white/[0.05] border border-white/[0.06] text-[12px] font-semibold flex items-center justify-center gap-1.5"
+                  className="h-9 rounded-full bg-white/[0.05] border border-hairline text-[12px] font-semibold flex items-center justify-center gap-1.5"
                 >
                   <Eye className="size-3.5" /> 3D Demo
                 </Link>

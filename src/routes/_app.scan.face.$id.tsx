@@ -10,6 +10,7 @@ import {
   FACE_SCAN_DEMO_RESULT,
 } from "@/lib/faceScanDemo";
 import { getScanSubmission } from "@/lib/scanSubmissions.functions";
+import { scanTrendUpTo, useScanHistory } from "@/components/scans/useScanHistory";
 
 export const Route = createFileRoute("/_app/scan/face/$id")({
   head: () => ({ meta: [{ title: "Face Scan Report — Ascendr" }] }),
@@ -27,6 +28,7 @@ function FaceScanDetail() {
     enabled: !demo,
     retry: false,
   });
+  const historyQuery = useScanHistory("face");
 
   if (demo) {
     return (
@@ -50,7 +52,7 @@ function FaceScanDetail() {
             <Loader2 className="size-6 animate-spin" />
           </div>
           <p className="mt-4 text-sm font-semibold">Loading your Face Scan</p>
-          <p className="mt-1 text-[11px] text-white/40">Opening your private report…</p>
+          <p className="mt-1 text-[13px] text-white/40">Opening your private report…</p>
         </div>
       </main>
     );
@@ -68,7 +70,7 @@ function FaceScanDetail() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <div className="mt-20 rounded-[28px] border border-white/[0.07] bg-surface p-7 text-center">
+        <div className="mt-20 rounded-[24px] border border-hairline bg-surface p-7 text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-white/[0.04] text-neon">
             <ScanFace className="size-6" />
           </div>
@@ -93,6 +95,7 @@ function FaceScanDetail() {
       photo={detailQuery.data.photoUrl}
       result={result}
       createdAt={detailQuery.data.analyzedAt ?? detailQuery.data.createdAt}
+      history={scanTrendUpTo(historyQuery.data, id)}
       onBack={() => navigate({ to: "/scan/face", search: { pending: undefined } })}
       onReset={() => navigate({ to: "/scan/face", search: { pending: undefined } })}
       onHistory={() => navigate({ to: "/scan/face", search: { pending: undefined } })}

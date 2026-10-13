@@ -136,7 +136,7 @@ function SheetShell({
 
   return (
     <div
-      className="fixed inset-0 z-[60] overflow-y-auto bg-[#070907] text-white"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-background text-white"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -152,13 +152,13 @@ function SheetShell({
           <button
             type="button"
             onClick={onClose}
-            className="grid size-11 place-items-center rounded-full border border-white/10 bg-white/[0.05] transition active:scale-95"
+            className="grid size-11 place-items-center rounded-full border border-hairline bg-white/[0.05] transition active:scale-95"
             aria-label="Close harmony"
           >
             <X className="size-5" />
           </button>
           <div className="text-center">
-            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-neon">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
               Ascendr harmony
             </p>
             <h2 className="text-sm font-bold">{title}</h2>
@@ -184,7 +184,7 @@ function TabBar<T extends string>({
   return (
     <div
       className={cn(
-        "mt-4 grid gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1",
+        "mt-4 grid gap-1 rounded-full border border-hairline bg-white/[0.04] p-1",
         tabs.length === 3 ? "grid-cols-3" : "grid-cols-2",
       )}
     >
@@ -194,7 +194,7 @@ function TabBar<T extends string>({
           type="button"
           onClick={() => onChange(tab.id)}
           className={cn(
-            "h-10 rounded-full text-[10px] font-black uppercase tracking-[0.14em] transition",
+            "h-10 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition",
             active === tab.id ? "bg-white text-black" : "text-white/55",
           )}
         >
@@ -207,11 +207,11 @@ function TabBar<T extends string>({
 
 function Measuring({ label }: { label: string }) {
   return (
-    <div className="grid min-h-[22rem] place-items-center rounded-[28px] border border-white/[0.08] bg-white/[0.03] p-6 text-center">
+    <div className="grid min-h-[22rem] place-items-center rounded-[24px] border border-hairline bg-white/[0.03] p-6 text-center">
       <div>
         <Loader2 className="mx-auto size-7 animate-spin text-neon" />
         <p className="mt-4 text-sm font-semibold">{label}</p>
-        <p className="mx-auto mt-1 max-w-[30ch] text-[11px] leading-relaxed text-white/45">
+        <p className="mx-auto mt-1 max-w-[30ch] text-[13px] leading-relaxed text-white/45">
           Your photo stays on your device. The first time can take a few seconds while the measuring
           model loads.
         </p>
@@ -300,9 +300,9 @@ function PhotoRequest({
 }) {
   return (
     <div className="space-y-3">
-      <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.035] p-4">
+      <div className="rounded-[24px] border border-hairline bg-white/[0.035] p-4">
         <h3 className="text-sm font-bold">{prompt.title}</h3>
-        <p className="mt-1 text-[11px] leading-relaxed text-white/55">{prompt.body}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-white/55">{prompt.body}</p>
       </div>
       <PhotoSlot
         label={prompt.photoLabel}

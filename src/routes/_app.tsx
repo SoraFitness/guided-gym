@@ -7,7 +7,8 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Home, Dumbbell, Apple, Sparkles, ChartNoAxesCombined, ScanLine } from "lucide-react";
+import { motion } from "framer-motion";
+import { House, Dumbbell, Utensils, MessageSquare, ChartSpline, ScanFace } from "lucide-react";
 import { useProfile } from "@/lib/profile";
 import { isAccountSession, useAuthSession } from "@/lib/authSession";
 import { startCloudSync } from "@/lib/cloudSync";
@@ -27,12 +28,12 @@ export const Route = createFileRoute("/_app")({
 });
 
 const tabs = [
-  { to: "/home", label: "Home", Icon: Home },
+  { to: "/home", label: "Home", Icon: House },
   { to: "/workouts", label: "Train", Icon: Dumbbell },
-  { to: "/coach", label: "Coach", Icon: Sparkles },
-  { to: "/nutrition", label: "Fuel", Icon: Apple },
-  { to: "/scan", label: "Scans", Icon: ScanLine },
-  { to: "/progress", label: "Progress", Icon: ChartNoAxesCombined },
+  { to: "/nutrition", label: "Fuel", Icon: Utensils },
+  { to: "/scan", label: "Scan", Icon: ScanFace },
+  { to: "/coach", label: "Coach", Icon: MessageSquare },
+  { to: "/progress", label: "Progress", Icon: ChartSpline },
 ] as const;
 
 const SUBSCRIPTION_EXEMPT_PATHS = new Set([
@@ -204,10 +205,10 @@ function AppShell() {
     <div className="app-shell flex min-h-dvh min-w-0 flex-col overflow-x-clip bg-background">
       {hasPremiumAccess && accountUserId && <CloudSyncGate userId={accountUserId} />}
       <div
-        className="app-shell__content min-w-0 flex-1"
+        className="app-shell__content relative isolate min-w-0 flex-1"
         style={{
           paddingTop: hideTabs ? 0 : "env(safe-area-inset-top)",
-          paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 5.25rem)",
+          paddingBottom: hideTabs ? 0 : "calc(env(safe-area-inset-bottom) + 5rem)",
         }}
       >
         <div className="mx-auto w-full min-w-0 max-w-md overflow-x-clip">
@@ -217,14 +218,14 @@ function AppShell() {
       </div>
       {!hideTabs && (
         <nav
-          className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background via-background/95 to-transparent pt-2"
+          className="fixed inset-x-0 bottom-0 z-40"
           style={{
-            paddingBottom: "max(0.625rem, env(safe-area-inset-bottom))",
-            paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
-            paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+            paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
+            paddingLeft: "max(0.625rem, env(safe-area-inset-left))",
+            paddingRight: "max(0.625rem, env(safe-area-inset-right))",
           }}
         >
-          <div className="mx-auto flex h-[62px] max-w-md items-center justify-between gap-1 rounded-[22px] border border-white/10 bg-[color:var(--surface-glass)] px-1.5 shadow-[0_22px_55px_-24px_black] backdrop-blur-xl">
+          <div className="relative mx-auto flex max-w-md items-stretch justify-between rounded-[24px] border border-hairline bg-[color:var(--surface-glass)] px-1 shadow-[0_18px_44px_-16px_black] backdrop-blur-xl">
             {tabs.map(({ to, label, Icon }) => {
               const active =
                 pathname === to ||
@@ -235,18 +236,27 @@ function AppShell() {
                   key={to}
                   to={to}
                   aria-label={label}
-                  className={cn(
-                    "tap relative flex h-[50px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[17px] text-[9px] font-semibold transition-all duration-300",
-                    active
-                      ? "bg-neon text-neon-foreground shadow-[0_8px_24px_-10px_var(--neon)]"
-                      : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
-                  )}
+                  aria-current={active ? "page" : undefined}
+                  className="tap relative flex min-w-0 flex-1 flex-col items-center gap-1 pb-2 pt-2.5"
                 >
-                  <Icon className="size-[18px] shrink-0" />
+                  {active && (
+                    <motion.span
+                      layoutId="dock-marker"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      className="absolute -top-px left-1/2 h-[3px] w-7 -translate-x-1/2 rounded-b-full bg-neon"
+                    />
+                  )}
+                  <Icon
+                    className={cn(
+                      "size-[22px] transition-colors duration-300",
+                      active ? "text-neon" : "text-muted-foreground",
+                    )}
+                    strokeWidth={active ? 2.3 : 1.8}
+                  />
                   <span
                     className={cn(
-                      "max-w-full truncate px-0.5",
-                      active ? "opacity-100" : "opacity-70",
+                      "max-w-full truncate px-0.5 text-[11px] font-semibold transition-colors",
+                      active ? "text-foreground" : "text-muted-foreground",
                     )}
                   >
                     {label}

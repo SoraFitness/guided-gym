@@ -213,7 +213,7 @@ export function BarcodeScannerPanel({ onResult }: { onResult: (result: LookupRes
 
   return (
     <div>
-      <div className="aspect-[4/5] rounded-3xl bg-black/50 border border-white/[0.06] relative overflow-hidden">
+      <div className="aspect-[4/5] rounded-3xl bg-black/50 border border-hairline relative overflow-hidden">
         <video
           ref={videoRef}
           className="absolute inset-0 size-full object-cover"
@@ -274,14 +274,14 @@ export function BarcodeScannerPanel({ onResult }: { onResult: (result: LookupRes
         )}
       </div>
 
-      <p className="mt-3 text-[11px] text-muted-foreground text-center">
+      <p className="mt-3 text-[13px] text-muted-foreground text-center">
         Works with UPC, EAN, Code 128, and ITF product barcodes.
       </p>
 
       <div className="mt-4 grid gap-2">
         <form
           onSubmit={submitManual}
-          className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-2"
+          className="flex items-center gap-2 rounded-2xl border border-hairline bg-white/[0.04] p-2"
         >
           <Keyboard className="ml-2 size-4 shrink-0 text-muted-foreground" />
           <input
@@ -313,7 +313,7 @@ export function BarcodeScannerPanel({ onResult }: { onResult: (result: LookupRes
           type="button"
           disabled={busy}
           onClick={() => imageInputRef.current?.click()}
-          className="h-12 rounded-2xl border border-white/[0.06] bg-white/[0.04] text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-40"
+          className="h-12 rounded-2xl border border-hairline bg-white/[0.04] text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-40"
         >
           <Image className="size-4 text-neon" /> Upload a barcode photo
         </button>

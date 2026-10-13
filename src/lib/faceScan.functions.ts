@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/scanAnalysis.server";
 import { FACE_CHANGE_RULES, isReferenceComparison, isReliableChange } from "@/lib/scanProgress";
 
-const OPENROUTER_FACE_SCAN_MODEL = "qwen/qwen3-vl-32b-instruct";
+const OPENROUTER_FACE_SCAN_MODEL = "qwen/qwen3-vl-235b-a22b-instruct";
 const FACE_SCAN_ANALYSIS_VERSION = "face-progress-v1";
 
 const Input = z.object({
@@ -690,3 +690,53 @@ export const analyzeFaceScan = createServerFn({ method: "POST" })
       throw new Error(userMessage);
     }
   });
+
+/**
+ * Runs the standard first-time Face Scan analysis on a single photo without
+ * touching the member's scan history, weekly quota, or photo storage.
+ *
+ * Used by the internal marketing tool, where scans are run on other people and
+ * must never be saved to the operator's account.
+ */
+export const analyzeFacePhotoStandalone = createServerOnlyFn(
+  async ({
+    photo,
+    accessToken,
+  }: {
+    photo: string;
+    accessToken?: string;
+  }): Promise<FaceScanResult> => {
+    const response = await fetchAscendrAi(accessToken, "face-scan", {
+      model: OPENROUTER_FACE_SCAN_MODEL,
+      temperature: 0,
+      max_tokens: 1800,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "ascendr_face_scan",
+          strict: true,
+          schema: faceScanJsonSchema,
+        },
+      },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: [USER_PROMPT, BASELINE_COMPARISON_PROMPT].join("\n\n") },
+            { type: "image_url", image_url: { url: photo } },
+          ],
+        },
+      ],
+    });
+
+    const payload = (await response.json()) as OpenRouterResponse;
+    if (!response.ok) throw new Error(payload.error?.message ?? `OpenRouter ${response.status}`);
+
+    const result = normalizeResult(parseModelJson(contentText(payload)));
+    if (!result.photoUsable) {
+      throw new Error(result.photoIssue || "Use a clearer, front-facing photo and try again.");
+    }
+    return result;
+  },
+);

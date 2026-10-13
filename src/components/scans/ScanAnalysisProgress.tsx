@@ -87,14 +87,14 @@ export function ScanAnalysisProgress({
       />
 
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-end px-4 page-pb-safe sm:px-5">
-        <div className="rounded-[30px] border border-white/10 bg-black/70 p-5 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-[24px] border border-hairline bg-black/70 p-5 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="grid size-11 place-items-center rounded-2xl bg-neon/15 text-neon">
                 <Loader2 className="size-5 animate-spin" />
               </div>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-neon">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-neon">
                   Ascendr Vision
                 </p>
                 <h1 className="mt-0.5 text-lg font-bold">
@@ -106,7 +106,7 @@ export function ScanAnalysisProgress({
               <p className="flex items-center justify-end gap-1 text-xs font-bold text-neon">
                 <Clock3 className="size-3.5" /> {formatElapsed(elapsedSeconds)}
               </p>
-              <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider text-white/35">
+              <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/35">
                 {preview ? "No sign-in needed" : "Usually 20–70 sec"}
               </p>
             </div>
@@ -127,12 +127,12 @@ export function ScanAnalysisProgress({
               return (
                 <div key={step} className="flex items-center gap-3">
                   <div
-                    className={`grid size-6 shrink-0 place-items-center rounded-full border text-[10px] font-bold ${
+                    className={`grid size-6 shrink-0 place-items-center rounded-full border text-[12px] font-bold ${
                       complete
                         ? "border-neon bg-neon text-neon-foreground"
                         : active
                           ? "border-neon/50 bg-neon/10 text-neon"
-                          : "border-white/10 text-white/25"
+                          : "border-hairline text-white/25"
                     }`}
                   >
                     {complete ? <Check className="size-3.5" /> : index + 1}
@@ -151,7 +151,7 @@ export function ScanAnalysisProgress({
             ) : (
               <ShieldCheck className="mt-0.5 size-4 shrink-0 text-neon" />
             )}
-            <p className="text-[10px] leading-relaxed text-white/45">
+            <p className="text-[12px] leading-relaxed text-white/45">
               {preview
                 ? "This limited AI check creates your photo-specific score. Detailed factor numbers, body-fat insights, and your full report stay locked until you subscribe."
                 : nearlyTimedOut

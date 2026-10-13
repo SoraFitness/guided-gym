@@ -1,17 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  ArrowRight,
   Camera,
-  ChevronRight,
-  Clock3,
+  ChartSpline,
   LockKeyhole,
   ScanFace,
   ScanLine,
-  ShieldCheck,
   Sparkles,
-  Target,
-  Upload,
   type LucideIcon,
 } from "lucide-react";
+import {
+  AscentMark,
+  cardClass,
+  DeltaBadge,
+  Page,
+  PageHeader,
+  scoreColor,
+  SectionHeader,
+} from "@/components/app/kit";
+import { TrendChart } from "@/components/app/charts";
+import { scanTrendPoints, useScanHistory } from "@/components/scans/useScanHistory";
+import { BODY_SCAN_DEMO_PHOTO, BODY_SCAN_DEMO_RESULT } from "@/lib/bodyScanDemo";
+import { FACE_SCAN_DEMO_PHOTO, FACE_SCAN_DEMO_RESULT } from "@/lib/faceScanDemo";
+import type { ScanSubmissionSummary } from "@/lib/scanSubmissions.functions";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/scan/")({
   head: () => ({ meta: [{ title: "Scans — Ascendr" }] }),
@@ -19,186 +31,146 @@ export const Route = createFileRoute("/_app/scan/")({
 });
 
 function ScanHub() {
+  const body = useScanHistory("body");
+  const face = useScanHistory("face");
+
   return (
-    <div className="mx-auto max-w-md px-4 pb-32 pt-5 animate-slide-up sm:px-5">
-      <header className="px-1">
-        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neon">Ascendr vision</p>
-        <h1 className="mt-1 text-[29px] font-extrabold leading-[1.04] tracking-[-0.04em]">
-          See what to improve next.
-        </h1>
-        <p className="mt-2 max-w-[38ch] text-[11px] leading-relaxed text-muted-foreground">
-          Upload one clear photo and get a private visual assessment with scores, priorities, and an
-          actionable improvement plan.
-        </p>
-      </header>
+    <Page className="pb-32">
+      <PageHeader kicker="AI vision" title="Scan" />
 
-      <section className="mt-5 rounded-[24px] border border-white/[0.06] bg-surface p-3.5">
-        <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2">
-          <ProcessStep icon={Upload} step="1" label="Upload" />
-          <span className="h-px w-full bg-white/10" />
-          <ProcessStep icon={Sparkles} step="2" label="Analyze" />
-          <span className="h-px w-full bg-white/10" />
-          <ProcessStep icon={Target} step="3" label="Improve" />
-        </div>
-      </section>
-
-      <div className="mt-4 space-y-4">
-        <ScanCard
-          to="/scan/face"
-          icon={ScanFace}
-          eyebrow="Face analysis"
-          title="Face Scan"
-          description="Understand facial balance, standout features, grooming opportunities, and realistic looksmax potential."
-          metrics={["Overall", "Symmetry", "Potential"]}
-          badge="Popular"
-          accent
-        />
-
-        <ScanCard
-          to="/scan/body"
-          icon={ScanLine}
-          eyebrow="Physique analysis"
-          title="Body Scan"
-          description="Review muscle-group development, proportions, body-fat range, symmetry, and realistic physique potential."
-          metrics={["Physique", "9 groups", "V-taper"]}
-          badge="Detailed"
+      <div className="mt-5 space-y-3">
+        <ScanTile
+          kind="body"
+          items={body.data}
           tour="tour-bodyscan"
+          title="Body Scan"
+          detail="Physique score, muscle map, body fat"
+        />
+        <ScanTile
+          kind="face"
+          items={face.data}
+          title="Face Scan"
+          detail="Appearance score, features, potential"
         />
       </div>
 
-      <section className="mt-5 grid grid-cols-2 gap-3">
-        <TrustCard
-          icon={ShieldCheck}
-          title="Private by default"
-          detail="Photos stay in your private account."
-        />
-        <TrustCard
-          icon={Clock3}
-          title="Fast results"
-          detail="Clear scores and priorities in one report."
-        />
-      </section>
+      <SectionHeader className="mt-8" title="How it works" />
+      <div className={cn(cardClass, "grid grid-cols-3 gap-2 p-4")}>
+        <Step icon={Camera} label="Snap one photo" />
+        <Step icon={Sparkles} label="AI scores it" />
+        <Step icon={ChartSpline} label="Track progress" />
+      </div>
 
-      <div className="mt-4 flex items-start gap-3 rounded-[20px] border border-neon/15 bg-neon/[0.045] p-4">
-        <LockKeyhole className="mt-0.5 size-4 shrink-0 text-neon" />
-        <p className="text-[10px] leading-relaxed text-muted-foreground">
-          Ascendr provides a subjective appearance and fitness opinion—not a medical assessment.
-          Results can vary with lighting, angle, clothing, and image quality.
+      <div className="mt-5 flex items-start gap-3 px-1">
+        <LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          Photos stay in your private account. Scores are a subjective visual opinion, not a medical
+          assessment, and vary with light, angle and image quality.
         </p>
       </div>
-    </div>
+    </Page>
   );
 }
 
-function ScanCard({
-  to,
-  icon: Icon,
-  eyebrow,
+function ScanTile({
+  kind,
+  items,
   title,
-  description,
-  metrics,
-  badge,
-  accent = false,
+  detail,
   tour,
 }: {
-  to: "/scan/face" | "/scan/body";
-  icon: LucideIcon;
-  eyebrow: string;
+  kind: "body" | "face";
+  items?: ScanSubmissionSummary[];
   title: string;
-  description: string;
-  metrics: string[];
-  badge: string;
-  accent?: boolean;
+  detail: string;
   tour?: string;
 }) {
+  const latest = items?.[0];
+  const previous = items?.[1];
+  const sample = kind === "body" ? BODY_SCAN_DEMO_RESULT : FACE_SCAN_DEMO_RESULT;
+  const photo = latest?.photoUrl ?? (kind === "body" ? BODY_SCAN_DEMO_PHOTO : FACE_SCAN_DEMO_PHOTO);
+  const score = latest?.overallScore ?? sample.overallScore;
+  const trend = scanTrendPoints(items, 6);
+  const Icon = kind === "body" ? ScanLine : ScanFace;
+
   return (
     <Link
-      to={to}
+      to={kind === "body" ? "/scan/body" : "/scan/face"}
       data-tour={tour}
-      className="group relative block min-h-[248px] overflow-hidden rounded-[28px] border border-white/[0.075] bg-surface p-5 shadow-[0_24px_55px_-32px_oklch(0_0_0/0.95)] transition active:scale-[0.99]"
+      className="chamfer contour-texture relative flex min-h-[214px] overflow-hidden rounded-[24px] bg-surface shadow-[inset_0_0_0_1px_var(--hairline)] transition active:scale-[0.99]"
+      style={{ ["--chamfer" as string]: "26px" }}
     >
-      <div
-        className={
-          accent
-            ? "absolute inset-0 bg-[radial-gradient(circle_at_85%_10%,oklch(0.92_0.21_130/0.16),transparent_45%)]"
-            : "absolute inset-0 bg-[radial-gradient(circle_at_85%_10%,oklch(0.7_0.12_245/0.13),transparent_45%)]"
-        }
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-0 z-10 h-[3px] origin-top-left bg-neon"
+        style={{
+          left: "calc(100% - 26px)",
+          width: 26 * Math.SQRT2,
+          transform: "rotate(45deg) translateY(-1.5px)",
+        }}
       />
-      <div className="absolute -bottom-12 -right-10 size-40 rounded-full border border-white/[0.035]" />
-      <div className="absolute -bottom-5 right-4 size-24 rounded-full border border-white/[0.04]" />
+      <div className="relative w-[44%] shrink-0 overflow-hidden bg-black">
+        <img
+          src={photo}
+          alt=""
+          className={cn(
+            "absolute inset-0 size-full",
+            kind === "body" ? "object-cover object-top" : "object-cover object-center",
+          )}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
+        <span className="font-data absolute left-3 top-3 inline-flex items-center gap-1 rounded-[7px] bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-neon backdrop-blur-md">
+          <AscentMark className="size-1.5" /> {latest ? "Latest" : "Sample"}
+        </span>
+        <p className="absolute bottom-3 left-3 flex items-baseline gap-0.5">
+          <span
+            className="text-[44px] font-bold leading-none tracking-[-0.04em]"
+            style={{ color: scoreColor(score) }}
+          >
+            {score}
+          </span>
+          <span className="text-[14px] font-semibold text-white/80">/100</span>
+        </p>
+      </div>
 
-      <div className="relative">
-        <div className="flex items-start justify-between">
-          <span className="grid size-12 place-items-center rounded-2xl border border-white/[0.06] bg-white/[0.05] text-neon">
-            <Icon className="size-6" />
+      <div className="flex min-w-0 flex-1 flex-col p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="grid size-9 place-items-center rounded-[12px] bg-neon/12 text-neon">
+            <Icon className="size-[18px]" />
           </span>
-          <span className="rounded-full border border-neon/20 bg-neon/10 px-2.5 py-1 text-[8px] font-extrabold uppercase tracking-[0.14em] text-neon">
-            {badge}
-          </span>
+          {latest && previous ? (
+            <DeltaBadge value={latest.overallScore - previous.overallScore} />
+          ) : null}
         </div>
-        <p className="mt-5 text-[9px] font-bold uppercase tracking-[0.18em] text-neon">{eyebrow}</p>
-        <h2 className="mt-1 text-[24px] font-extrabold tracking-[-0.03em]">{title}</h2>
-        <p className="mt-2 max-w-[38ch] text-[11px] leading-relaxed text-white/60">{description}</p>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {metrics.map((metric) => (
-            <span
-              key={metric}
-              className="rounded-xl border border-white/[0.055] bg-black/20 px-2 py-2 text-center text-[8px] font-semibold uppercase tracking-wide text-white/65"
-            >
-              {metric}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
-            <Camera className="size-3.5 text-neon" /> Upload a photo
-          </span>
-          <span className="grid size-9 place-items-center rounded-full bg-neon text-neon-foreground transition group-active:translate-x-0.5">
-            <ChevronRight className="size-4" />
-          </span>
-        </div>
+        <h2 className="mt-3 text-[20px] font-bold tracking-[-0.02em]">{title}</h2>
+        <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{detail}</p>
+        {trend.length >= 2 ? (
+          <TrendChart points={trend} height={92} className="-mx-1 mt-2" />
+        ) : (
+          <p className="mt-2 text-[12px] text-muted-foreground">
+            {latest
+              ? `Last scan ${new Date(latest.analyzedAt ?? latest.createdAt).toLocaleDateString(
+                  undefined,
+                  { month: "short", day: "numeric" },
+                )}`
+              : "Get your first score"}
+          </p>
+        )}
+        <span className="font-data mt-auto inline-flex items-center gap-1.5 pt-3 text-[13px] font-semibold uppercase text-neon">
+          {latest ? "Scan again" : "Start scan"} <ArrowRight className="size-4" />
+        </span>
       </div>
     </Link>
   );
 }
 
-function ProcessStep({
-  icon: Icon,
-  step,
-  label,
-}: {
-  icon: LucideIcon;
-  step: string;
-  label: string;
-}) {
+function Step({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <div className="flex min-w-0 flex-col items-center">
-      <span className="grid size-8 place-items-center rounded-xl bg-neon/10 text-neon">
-        <Icon className="size-3.5" />
+    <div className="flex flex-col items-center text-center">
+      <span className="grid size-11 place-items-center rounded-[14px] bg-white/[0.06] text-neon">
+        <Icon className="size-5" />
       </span>
-      <span className="mt-1.5 truncate text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
-        {step}. {label}
-      </span>
-    </div>
-  );
-}
-
-function TrustCard({
-  icon: Icon,
-  title,
-  detail,
-}: {
-  icon: LucideIcon;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-[20px] border border-white/[0.055] bg-white/[0.025] p-3.5">
-      <Icon className="size-4 text-neon" />
-      <h3 className="mt-3 text-[11px] font-bold">{title}</h3>
-      <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">{detail}</p>
+      <span className="mt-2 text-[12px] font-semibold leading-tight">{label}</span>
     </div>
   );
 }
