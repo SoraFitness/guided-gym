@@ -1,4 +1,1 @@
 CAPACITOR_DEBUG = true
-
-// TikTok App Events configuration (optional; see tiktok.xcconfig.example).
-#include? "tiktok.xcconfig"
