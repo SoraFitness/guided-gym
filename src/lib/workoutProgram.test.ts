@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { getWorkout } from "./workouts";
 import { splitLabelForWorkout } from "./weeklySchedule";
 import type { WorkoutPlanInput } from "./workoutPlanStore";
-import { buildProgramCandidates, fallbackProgram, orderProgramSessions } from "./workoutProgram";
+import type { Profile } from "./profile";
+import {
+  buildProgramCandidates,
+  fallbackProgram,
+  orderProgramSessions,
+  swapWorkoutForSetup,
+} from "./workoutProgram";
 
 const lifter: WorkoutPlanInput = {
   goal: "build_muscle",
@@ -88,5 +94,50 @@ describe("smart split programs", () => {
     expect(runner.some((id) => ["Cardio", "HIIT"].includes(getWorkout(id)?.category ?? ""))).toBe(
       true,
     );
+  });
+});
+
+describe("injury limitations", () => {
+  const names = (ids: string[]) =>
+    ids.flatMap((id) => getWorkout(id)?.exercises.map((exercise) => exercise.name) ?? []);
+
+  it.each([
+    ["Avoid or modify movements that aggravate: Knees.", /squat|lunge|thruster|step up|jump/i],
+    ["Avoid or modify movements that aggravate: Shoulders.", /overhead|thruster|shoulder press/i],
+    ["Avoid or modify movements that aggravate: Lower back.", /deadlift|barbell row|swing/i],
+    ["my knee hurts when I jump", /squat|lunge|thruster|step up|jump/i],
+  ])("keeps ruled-out movements out of candidates and the fallback: %s", (notes, ruledOut) => {
+    const input = { ...lifter, notes };
+    const candidates = buildProgramCandidates(input);
+    expect(candidates.length).toBeGreaterThanOrEqual(4);
+    expect(
+      names(candidates.map(({ workout }) => workout.id)).filter((n) => ruledOut.test(n)),
+    ).toEqual([]);
+    const program = fallbackProgram(input, candidates);
+    expect(program.workoutIds).toHaveLength(input.daysPerWeek);
+  });
+
+  it("still builds a full week with every limitation at once", () => {
+    const input = { ...lifter, notes: "Knees, shoulders and lower back." };
+    expect(fallbackProgram(input).workoutIds).toHaveLength(input.daysPerWeek);
+  });
+
+  it("keeps ruled-out movements out when switching to a home workout", () => {
+    const notes = "Avoid or modify movements that aggravate: Knees.";
+    const profile = { ...lifter, injuries: notes } as unknown as Profile;
+    const swapped = buildProgramCandidates({ ...lifter, notes }).map(({ workout }) =>
+      swapWorkoutForSetup(workout, "none", profile),
+    );
+    expect(
+      names(swapped.map((workout) => workout.id)).filter((n) =>
+        /squat|lunge|thruster|step up|jump/i.test(n),
+      ),
+    ).toEqual([]);
+  });
+
+  it("changes nothing without a matching note", () => {
+    const ids = (notes: string) =>
+      buildProgramCandidates({ ...lifter, notes }).map(({ workout }) => workout.id);
+    expect(ids("I like morning sessions")).toEqual(ids(""));
   });
 });

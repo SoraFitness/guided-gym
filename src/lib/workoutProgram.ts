@@ -123,13 +123,42 @@ function fitsMember(workout: Workout, input: WorkoutPlanInput) {
   );
 }
 
+// The AI reads injury notes but still picked sessions that break them, so sessions with
+// these movements are removed before it sees them. Notes these don't cover are left to it.
+const LIMITATION_RULES = [
+  {
+    notes: /\bknees?\b/i,
+    exercises:
+      /squat|lunge|step up|jump|thruster|burpee|leg press|skater|wall sit|high knees|mountain climber|plank jacks/i,
+  },
+  {
+    notes: /shoulder|rotator cuff/i,
+    exercises: /overhead|\bohp\b|shoulder press|thruster|pike|triceps dips|lateral raise|burpee/i,
+  },
+  {
+    notes: /\b(lower|low) back|\bback (pain|injury|issue|problem)|spin(e|al)|\bdiscs?\b|sciatica/i,
+    exercises:
+      /deadlift|barbell row|bent-over row|pendlay|barbell squat|swing|superman|russian twist|burpee|thruster/i,
+  },
+];
+
+/** True when a workout has a movement the member's notes rule out. */
+export function aggravatesLimitation(workout: Workout, notes: string | undefined) {
+  if (!notes) return false;
+  return LIMITATION_RULES.some(
+    (rule) =>
+      rule.notes.test(notes) && workout.exercises.some(({ name }) => rule.exercises.test(name)),
+  );
+}
+
 /** The best few workouts of every session type that fit the member's equipment. */
 export function buildProgramCandidates(input: WorkoutPlanInput): ProgramCandidate[] {
   const ranked = workouts
     .filter(
       (workout) =>
         isProgramWorkout(workout) &&
-        (input.equipment === "mixed" || workout.equipment.includes(input.equipment)),
+        (input.equipment === "mixed" || workout.equipment.includes(input.equipment)) &&
+        !aggravatesLimitation(workout, input.notes),
     )
     .map((workout) => ({ workout, score: scoreCandidate(workout, input) }))
     .sort((a, b) => b.score - a.score);
@@ -225,7 +254,7 @@ export function swapWorkoutForSetup(
   if (builtForEquipment(workout, setup)) return workout;
   const generated = GENERATED_ID.exec(workout.id);
   const twin = generated && getWorkout(`sora-${generated[1]}-${setup}-${generated[2]}`);
-  if (twin) return twin;
+  if (twin && !aggravatesLimitation(twin, profile.injuries)) return twin;
 
   // Hand-written workouts have no twin, so look for the closest session of the same type.
   const input = { ...planInputFromProfile(profile), equipment: setup };

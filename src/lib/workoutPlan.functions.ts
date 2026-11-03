@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { generateText, Output } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { createOpenRouterProvider, OPENROUTER_COACH_MODEL } from "./openrouter.server";
 import { claimRateLimit } from "./rateLimit.server";
@@ -65,8 +65,21 @@ const SYSTEM_PROMPT = [
   "Return workoutIds as the ordered training sessions for one week: exactly request.daysPerWeek entries, session one first. Rest days are added automatically, so never include recovery or mobility sessions.",
   "A workout may repeat on non-consecutive sessions. Never schedule sessions that train the same primary muscles back to back.",
   "When workoutSplit is 'auto' or omitted, choose the structure (for example full body, upper/lower, or push/pull/legs) that best fits the member's days per week, goals, experience, current training frequency, equipment, session length, limitations, and focus areas. Follow an explicit workoutSplit when one is provided.",
-  "Do not make medical claims.",
+  "request.notes holds the member's injuries and limitations in their own words. Read each candidate's exercises against them and leave out any session that would aggravate a limitation, repeating a safe session instead when needed.",
+  "name is a short plan title under 40 characters. summary is one or two plain sentences to the member, under 200 characters, saying why this week suits their goals, schedule and equipment.",
+  "Do not make medical claims, and never promise that a plan is safe for an injury.",
+  'Respond with only a JSON object in exactly this shape: {"name": "...", "summary": "...", "workoutIds": ["..."]}.',
 ].join(" ");
+
+// This model writes its thinking into the reply unless told not to, and returns junk when
+// given a strict JSON response format, so it's asked for plain JSON text and parsed here.
+const NO_REASONING = { reasoning: { enabled: false } };
+
+function parseModelPlan(text: string) {
+  return ModelPlanSchema.parse(
+    JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)),
+  );
+}
 
 export const generateWorkoutPlan = createServerFn({ method: "POST" })
   .validator(InputSchema)
@@ -89,18 +102,28 @@ export const generateWorkoutPlan = createServerFn({ method: "POST" })
           muscles: workout.targetMuscles,
           exercises: workout.exercises.map((exercise) => exercise.name),
         }));
-        const { output } = await generateText({
+        const { text } = await generateText({
           model: provider(OPENROUTER_COACH_MODEL),
-          output: Output.object({ schema: ModelPlanSchema }),
           system: SYSTEM_PROMPT,
+          temperature: 0.2,
+          maxOutputTokens: 500,
+          providerOptions: { openrouter: NO_REASONING, "ascendr-ai-gateway": NO_REASONING },
           prompt: JSON.stringify({ request: input, candidates: candidateData }),
         });
+        const output = parseModelPlan(text);
         const allowed = new Set(candidateData.map((candidate) => candidate.id));
         const sessions = output.workoutIds
           .filter((id) => allowed.has(id))
           .slice(0, input.daysPerWeek);
         if (sessions.length === input.daysPerWeek) {
-          generated = { ...output, workoutIds: orderProgramSessions(sessions) };
+          // Told not to, the model still wrote "Knee-Safe" and "avoids spinal loading" when
+          // given injury notes, so members with notes keep the plain wording.
+          const wording = input.notes?.trim() ? generated : output;
+          generated = {
+            name: wording.name,
+            summary: wording.summary,
+            workoutIds: orderProgramSessions(sessions),
+          };
           source = "ai";
         }
       } catch (error) {
