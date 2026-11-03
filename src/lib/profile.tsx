@@ -2,26 +2,13 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { WorkoutSplitId } from "./workoutSplits";
 
 export type Goal =
-  | "lose_weight"
-  | "build_muscle"
-  | "recomp"
-  | "endurance"
-  | "maintain"
-  | "get_stronger"
-  | "overall";
+  "lose_weight" | "build_muscle" | "recomp" | "endurance" | "maintain" | "get_stronger" | "overall";
 export type Gender = "male" | "female" | "other";
 export type DemoModelPreference = "auto" | "male" | "female";
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 export type EquipmentSetup = "none" | "dumbbells" | "gym" | "mixed";
 export type FocusArea =
-  | "chest"
-  | "back"
-  | "legs"
-  | "glutes"
-  | "arms"
-  | "core"
-  | "cardio"
-  | "mobility";
+  "chest" | "back" | "legs" | "glutes" | "arms" | "core" | "cardio" | "mobility";
 export type NutritionPlan = "fat_loss" | "muscle_gain" | "maintenance" | "custom";
 
 export const GOAL_LABELS: Record<Goal, string> = {
@@ -118,6 +105,12 @@ export interface Profile {
   goalTargetDate: string; // ISO
   deficitSplit: "mostly_diet" | "balanced" | "mostly_exercise";
   bulkPace?: "lean" | "faster";
+  /** Scales formula maintenance so it survives weight changes (AI estimate or member's number). */
+  maintenanceFactor?: number;
+  /** Chosen pace in kg/week, negative = loss. Set: replaces the target-date calculation. */
+  weeklyChangeGoalKg?: number;
+  /** Daily calories the member set themselves. Wins over the pace. */
+  calorieTargetKcal?: number;
   // Nutrition
   nutritionPlan: NutritionPlan;
   // Misc
@@ -259,7 +252,11 @@ function migrate(raw: Record<string, unknown>): Profile {
     goalTargetDate: (raw.goalTargetDate as string) ?? defaultTarget.toISOString(),
     deficitSplit: (raw.deficitSplit as Profile["deficitSplit"]) ?? "balanced",
     bulkPace: (raw.bulkPace as Profile["bulkPace"]) ?? "lean",
+    maintenanceFactor: raw.maintenanceFactor as number | undefined,
+    weeklyChangeGoalKg: raw.weeklyChangeGoalKg as number | undefined,
+    calorieTargetKcal: raw.calorieTargetKcal as number | undefined,
     nutritionPlan: (raw.nutritionPlan as NutritionPlan) ?? "maintenance",
+    units: raw.units as Profile["units"],
     demoModelPreference: (raw.demoModelPreference as DemoModelPreference) ?? "auto",
     injuries: (raw.injuries as string) ?? "",
     equipmentItems:

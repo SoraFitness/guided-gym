@@ -41,6 +41,9 @@ export function nutritionPlanFor(profile: Profile, observedMaintenanceKcal?: num
     splitPreset: profile.deficitSplit,
     bulkPace: profile.bulkPace,
     observedMaintenanceKcal,
+    maintenanceFactor: profile.maintenanceFactor,
+    weeklyChangeGoalKg: profile.weeklyChangeGoalKg,
+    calorieTargetKcal: profile.calorieTargetKcal,
   });
 }
 

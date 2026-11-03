@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -70,10 +70,16 @@ import {
   activityFromLifestyle,
   ACTIVITY_LABELS,
   ACTIVITY_DESCRIPTIONS,
+  formulaCaloriePlan,
+  samePace,
+  snapWeeklyChangeKg,
   type ActivityLevel,
+  type CaloriePlanEstimate,
   type DeficitSplit,
   type BulkPace,
 } from "@/lib/calorieEngine";
+import { estimateCaloriePlan, type CaloriePlanInput } from "@/lib/caloriePlan.functions";
+import { CaloriePacePicker } from "@/components/nutrition/CaloriePacePicker";
 import { nutritionPlanFor, suggestNutrition } from "@/lib/nutritionService";
 import { saveGoals } from "@/lib/foods";
 import { fallbackProgram } from "@/lib/workoutProgram";
@@ -328,6 +334,11 @@ interface Draft {
   goalTargetDate: string;
   deficitSplit: DeficitSplit;
   bulkPace: BulkPace;
+  maintenanceFactor?: number;
+  weeklyChangeGoalKg?: number;
+  calorieTargetKcal?: number;
+  /** The estimate behind those three, and the answers it was made from. */
+  calorieInsight?: CaloriePlanEstimate & { signature: string };
   nutritionPlan: NutritionPlan;
   units: "metric" | "imperial";
   referralSource?: ReferralSource;
@@ -435,8 +446,8 @@ function profileFromDraft(draft: Draft, personalizedName: string): Profile {
     .filter(Boolean)
     .join("\n");
 
-  const { dailyMovement, ...profileFields } = profileDraft;
-  return {
+  const { dailyMovement, calorieInsight: _insight, ...profileFields } = profileDraft;
+  const profile: Profile = {
     ...profileFields,
     activityLevel: activityFromLifestyle(draft.daysPerWeek, dailyMovement ?? "seated"),
     // The member never picks a date in onboarding; a restored draft's default may be stale.
@@ -448,10 +459,30 @@ function profileFromDraft(draft: Draft, personalizedName: string): Profile {
     onboardingMotivation: motivation,
     completedAt: new Date().toISOString(),
   };
+  // With a chosen pace, the date follows from it rather than the other way round.
+  return profile.weeklyChangeGoalKg != null || profile.calorieTargetKcal != null
+    ? { ...profile, goalTargetDate: nutritionPlanFor(profile).estimatedGoalDate.toISOString() }
+    : profile;
+}
+
+function calorieAnswers(d: Draft): CaloriePlanInput {
+  return {
+    gender: d.gender,
+    age: d.age,
+    heightCm: d.heightCm,
+    currentWeightKg: d.currentWeightKg,
+    goalWeightKg: d.goalWeightKg,
+    bodyFatPct: d.bodyFatPct,
+    activity: activityFromLifestyle(d.daysPerWeek, d.dailyMovement ?? "seated"),
+    experience: d.experience,
+    daysPerWeek: d.daysPerWeek,
+    sessionMinutes: d.sessionMinutes,
+    currentWorkoutsPerWeek: d.currentWorkoutsPerWeek,
+  };
 }
 
 const ONBOARDING_NAME_STORAGE_KEY = "ascendr_onboarding_name";
-const TOTAL = 7;
+const TOTAL = 8;
 
 interface StoredOnboardingProgress {
   draft: Partial<Draft>;
@@ -558,6 +589,24 @@ function Onboarding() {
   });
 
   const update = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  // A new estimate replaces only what the member hasn't changed themselves.
+  const applyCalorieEstimate = (estimate: CaloriePlanEstimate, signature: string) =>
+    setD((prev) => {
+      const weeklyChangeKg = snapWeeklyChangeKg(estimate.weeklyChangeKg, prev.units);
+      const old = prev.calorieInsight;
+      const typedMaintenance = old != null && prev.maintenanceFactor !== old.maintenanceFactor;
+      const pickedPace =
+        old != null &&
+        prev.weeklyChangeGoalKg != null &&
+        !samePace(prev.weeklyChangeGoalKg, old.weeklyChangeKg) &&
+        Math.sign(prev.weeklyChangeGoalKg) === Math.sign(weeklyChangeKg);
+      return {
+        ...prev,
+        calorieInsight: { ...estimate, weeklyChangeKg, signature },
+        maintenanceFactor: typedMaintenance ? prev.maintenanceFactor : estimate.maintenanceFactor,
+        weeklyChangeGoalKg: pickedPace ? prev.weeklyChangeGoalKg : weeklyChangeKg,
+      };
+    });
   const welcomeCopy = WELCOME_COPY[language];
   const personalizedName = formatFirstName(d.name);
   const selectedLanguage =
@@ -765,6 +814,7 @@ function Onboarding() {
     "Your focus",
     "Your rhythm",
     "Your baseline",
+    "Your calories",
     "Your reason",
     "Your plan",
   ];
@@ -919,6 +969,14 @@ function Onboarding() {
                 />
               )}
               {step === 5 && (
+                <CalorieStep
+                  name={personalizedName}
+                  d={d}
+                  applyEstimate={applyCalorieEstimate}
+                  setD={setD}
+                />
+              )}
+              {step === 6 && (
                 <WhyNowStep
                   name={personalizedName}
                   motivation={d.motivation}
@@ -927,7 +985,7 @@ function Onboarding() {
                   onSourceChange={(source) => update("referralSource", source)}
                 />
               )}
-              {step === 6 && <PlanPreviewStep name={personalizedName} d={d} />}
+              {step === 7 && <PlanPreviewStep name={personalizedName} d={d} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -956,7 +1014,7 @@ function Onboarding() {
               ? "Create My Plan"
               : step === 0
                 ? welcomeCopy.getStarted
-                : step === 5
+                : step === 6
                   ? "See My Plan"
                   : "Continue"}
             <ArrowRight className="size-5" />
@@ -1461,6 +1519,75 @@ function BaselineProfileStep({
   );
 }
 
+function CalorieStep({
+  name,
+  d,
+  applyEstimate,
+  setD,
+}: {
+  name: string;
+  d: Draft;
+  applyEstimate: (estimate: CaloriePlanEstimate, signature: string) => void;
+  setD: Dispatch<SetStateAction<Draft>>;
+}) {
+  const estimatePlan = useServerFn(estimateCaloriePlan);
+  const [checking, setChecking] = useState(false);
+  const answers = calorieAnswers(d);
+  const signature = JSON.stringify({ ...answers, units: d.units });
+
+  useEffect(() => {
+    if (d.calorieInsight?.signature === signature && d.calorieInsight.source === "ai") return;
+    // The formula's numbers show at once, so nobody waits on the AI to continue.
+    if (d.calorieInsight?.signature !== signature) {
+      applyEstimate(formulaCaloriePlan(answers), signature);
+    }
+    let live = true;
+    setChecking(true);
+    Promise.race([
+      estimatePlan({ data: answers }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Calorie estimate timed out")), 15_000),
+      ),
+    ])
+      .then((estimate) => {
+        if (live) applyEstimate(estimate, signature);
+      })
+      .catch((error) => console.warn("[onboarding] AI calorie estimate failed", error))
+      .finally(() => {
+        if (live) setChecking(false);
+      });
+    return () => {
+      live = false;
+    };
+    // Re-estimates only when the answers themselves change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+
+  return (
+    <div>
+      <StepHeader
+        title={name ? `${name}, here’s your calorie plan.` : "Here’s your calorie plan."}
+        sub="Pick how fast you want to go. Change anything you know better."
+      />
+      <CaloriePacePicker
+        profile={profileFromDraft(d, name || "Athlete")}
+        value={{
+          maintenanceFactor: d.maintenanceFactor,
+          weeklyChangeGoalKg: d.weeklyChangeGoalKg,
+          calorieTargetKcal: d.calorieTargetKcal,
+        }}
+        onChange={(next) => setD((prev) => ({ ...prev, ...next }))}
+        suggestion={d.calorieInsight}
+        loading={checking}
+      />
+      <p className="mt-4 flex items-start gap-2.5 px-1 text-[12px] leading-relaxed text-muted-foreground">
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-neon" />
+        These are estimates, not medical advice. Log your weight and we’ll fine-tune them.
+      </p>
+    </div>
+  );
+}
+
 function WhyNowStep({
   name,
   motivation,
@@ -1619,9 +1746,10 @@ function PlanPreviewStep({ name, d }: { name: string; d: Draft }) {
           </span>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-2">
+        <div className="mt-5 grid grid-cols-2 gap-2">
           {(
             [
+              ["Eat", nutrition.kcal.toLocaleString(), "kcal per day"],
               ["Train", `${d.daysPerWeek}×`, "per week"],
               ["Session", `${d.sessionMinutes}`, "minutes"],
               ["Protein", `${nutrition.protein}g`, "per day"],

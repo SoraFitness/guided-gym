@@ -2,7 +2,7 @@
 // All math derives from user profile + goal weight + target date.
 // No hardcoded calorie or burn numbers anywhere downstream.
 
-import type { Gender, Goal } from "./profile";
+import type { ExperienceLevel, Gender, Goal } from "./profile";
 
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "very" | "athlete";
 export type DeficitSplit = "mostly_diet" | "balanced" | "mostly_exercise";
@@ -113,6 +113,180 @@ export function minSafeIntakeKcal(gender: Gender) {
   return 1400;
 }
 
+// ---------- Weekly pace (chosen in onboarding or the goal editor) ----------
+export type WeightDirection = "lose" | "gain" | "maintain";
+
+export function weightDirection(currentKg: number, goalKg: number): WeightDirection {
+  const delta = weightDeltaKg(currentKg, goalKg);
+  if (delta > 0.5) return "lose";
+  if (delta < -0.5) return "gain";
+  return "maintain";
+}
+
+const PACE_OPTIONS_KG: Record<"metric" | "imperial", Record<"lose" | "gain", number[]>> = {
+  metric: { lose: [0.25, 0.5, 0.75, 1], gain: [0.1, 0.2, 0.3, 0.45] },
+  imperial: {
+    lose: [0.5, 1, 1.5, 2].map(lbsToKg),
+    gain: [0.25, 0.5, 0.75, 1].map(lbsToKg),
+  },
+};
+
+/** The one-tap weekly paces (kg, unsigned) for a member's units and direction. */
+export function paceOptionsKg(units: "metric" | "imperial", direction: "lose" | "gain") {
+  return PACE_OPTIONS_KG[units][direction];
+}
+
+// Lets a round option through at the limit, e.g. 2 lb/wk for someone just under 200 lb.
+const PACE_TOLERANCE_KG = 0.02;
+
+export interface PaceBody {
+  gender: Gender;
+  age: number;
+  heightCm: number;
+  currentWeightKg: number;
+}
+
+const bmiOf = (kg: number, heightCm: number) => kg / (heightCm / 100) ** 2;
+
+/**
+ * The fastest weekly loss this app will plan: ≤1% of body weight, never below the
+ * sex-based intake floor. Under-18s are held to a slow pace, and a member who is
+ * already underweight gets no deficit at all.
+ */
+export function safeWeeklyLossKg(body: PaceBody, maintenanceKcal: number) {
+  if (bmiOf(body.currentWeightKg, body.heightCm) < 18.5) return 0;
+  const byBody = maxWeeklyLossKg(body.currentWeightKg);
+  const byAge = body.age < 18 ? Math.min(0.25, byBody) : byBody;
+  const byFloor = ((maintenanceKcal - minSafeIntakeKcal(body.gender)) * 7) / KCAL_PER_KG_FAT;
+  return Math.max(0, Math.min(byAge, byFloor));
+}
+
+/** Whether a one-tap pace is within what the plan allows for this member. */
+export function paceAllowed(
+  paceKg: number,
+  direction: "lose" | "gain",
+  body: PaceBody,
+  maintenanceKcal: number,
+) {
+  const limit =
+    direction === "lose"
+      ? safeWeeklyLossKg(body, maintenanceKcal)
+      : maxWeeklyGainKg(body.currentWeightKg);
+  return limit > 0 && paceKg <= limit + PACE_TOLERANCE_KG;
+}
+
+// Experienced lifters carry more lean mass and move more load per session than the
+// activity multiplier assumes; beginners do less. A small nudge, not a new formula.
+const EXPERIENCE_MAINTENANCE_FACTOR: Record<ExperienceLevel, number> = {
+  beginner: 0.97,
+  intermediate: 1,
+  advanced: 1.03,
+};
+
+// Share of body weight to lose per week. Beginners keep muscle more easily in a
+// deficit; experienced lifters have more muscle to lose, so they go slower.
+const LOSS_RATE_BY_EXPERIENCE: Record<ExperienceLevel, number> = {
+  beginner: 0.0075,
+  intermediate: 0.006,
+  advanced: 0.005,
+};
+const GAIN_KG_BY_EXPERIENCE: Record<ExperienceLevel, number> = {
+  beginner: 0.25,
+  intermediate: 0.2,
+  advanced: 0.1,
+};
+
+export interface CaloriePlanAnswers extends PaceBody {
+  goalWeightKg: number;
+  activity: ActivityLevel;
+  experience: ExperienceLevel;
+}
+
+/** Maintenance adjusted for training experience, with the factor that produced it. */
+export function estimateMaintenance(answers: CaloriePlanAnswers) {
+  const formula = tdee(
+    bmrMifflin({
+      gender: answers.gender,
+      weightKg: answers.currentWeightKg,
+      heightCm: answers.heightCm,
+      age: answers.age,
+    }),
+    answers.activity,
+  );
+  const factor = EXPERIENCE_MAINTENANCE_FACTOR[answers.experience];
+  return { formulaKcal: formula, factor, maintenanceKcal: formula * factor };
+}
+
+/** The signed weekly change (kg, negative = loss) we'd suggest for these answers. */
+export function recommendedWeeklyChangeKg(answers: CaloriePlanAnswers, maintenanceKcal: number) {
+  const direction = weightDirection(answers.currentWeightKg, answers.goalWeightKg);
+  if (direction === "lose") {
+    const target = answers.currentWeightKg * LOSS_RATE_BY_EXPERIENCE[answers.experience];
+    return -Math.min(target, safeWeeklyLossKg(answers, maintenanceKcal));
+  }
+  if (direction === "gain") {
+    return Math.min(
+      GAIN_KG_BY_EXPERIENCE[answers.experience],
+      maxWeeklyGainKg(answers.currentWeightKg),
+    );
+  }
+  return 0;
+}
+
+export interface CaloriePlanEstimate {
+  /** "ai" only when the model answered; otherwise the numbers are the app's own formula. */
+  source: "ai" | "formula";
+  maintenanceFactor: number;
+  /** Signed kg/week, negative = loss. */
+  weeklyChangeKg: number;
+  reason: string;
+}
+
+/** The app's own estimate: shown right away and used whenever the AI can't answer. */
+export function formulaCaloriePlan(answers: CaloriePlanAnswers): CaloriePlanEstimate {
+  const { factor, maintenanceKcal } = estimateMaintenance(answers);
+  return {
+    source: "formula",
+    maintenanceFactor: factor,
+    weeklyChangeKg: recommendedWeeklyChangeKg(answers, maintenanceKcal),
+    reason: "Set from your body, your training and how far you are from your goal.",
+  };
+}
+
+/** Holds a suggested weekly change to the right direction and the member's safe range. */
+export function clampWeeklyChangeKg(
+  weeklyKg: number,
+  answers: CaloriePlanAnswers,
+  maintenanceKcal: number,
+) {
+  const direction = weightDirection(answers.currentWeightKg, answers.goalWeightKg);
+  if (direction === "lose") {
+    const limit = safeWeeklyLossKg(answers, maintenanceKcal);
+    return -Math.min(Math.max(0, -weeklyKg), limit);
+  }
+  if (direction === "gain") {
+    return Math.min(Math.max(0, weeklyKg), maxWeeklyGainKg(answers.currentWeightKg));
+  }
+  return 0;
+}
+
+/** Moves a pace onto the nearest one-tap option at or under it, so a chip can show it. */
+export function snapWeeklyChangeKg(weeklyKg: number, units: "metric" | "imperial") {
+  if (!weeklyKg) return 0;
+  const direction = weeklyKg < 0 ? "lose" : "gain";
+  const size = Math.abs(weeklyKg);
+  const options = paceOptionsKg(units, direction).filter(
+    (option) => option <= size + PACE_TOLERANCE_KG,
+  );
+  const snapped = options.length ? options[options.length - 1] : size;
+  return direction === "lose" ? -snapped : snapped;
+}
+
+/** Whether two weekly changes are the same pace, allowing for unit-conversion rounding. */
+export function samePace(a: number | undefined, b: number | undefined) {
+  return a != null && b != null && Math.abs(a - b) < 0.005;
+}
+
 export interface PlanInput {
   gender: Gender;
   age: number;
@@ -126,6 +300,12 @@ export interface PlanInput {
   bulkPace?: BulkPace;
   /** Optional override for maintenance (e.g. from weekly recalibration). */
   observedMaintenanceKcal?: number;
+  /** Scales the formula maintenance, from the AI estimate or a number the member entered. */
+  maintenanceFactor?: number;
+  /** A chosen pace in kg/week, negative = loss. Replaces the target-date calculation. */
+  weeklyChangeGoalKg?: number;
+  /** A daily calorie target the member set themselves. Wins over any pace. */
+  calorieTargetKcal?: number;
 }
 
 export interface PlanResult {
@@ -174,6 +354,114 @@ function effectiveGoalKind(
   return "maintain";
 }
 
+/**
+ * A plan from a pace or calorie number the member chose. Maintenance already counts
+ * their training, so the whole change comes from food: nothing is left for workouts
+ * to "burn off", and what they're told to eat is what produces the pace they picked.
+ */
+function chosenPacePlan(
+  input: PlanInput,
+  bmrKcal: number,
+  formulaMaintenanceKcal: number,
+  maintenance: number,
+): PlanResult {
+  const { gender, age, heightCm, currentWeightKg, goalWeightKg, calorieTargetKcal } = input;
+  const body = { gender, age, heightCm, currentWeightKg };
+  const direction = weightDirection(currentWeightKg, goalWeightKg);
+  const safeLossKg = safeWeeklyLossKg(body, maintenance);
+  const maxGainKg = maxWeeklyGainKg(currentWeightKg);
+  const warnings: string[] = [];
+  const notes: string[] = [];
+  let isAggressive = false;
+  let isUnsafe = false;
+
+  let requested: number;
+  if (calorieTargetKcal != null) {
+    requested = calorieTargetKcal;
+  } else {
+    let weeklyKg = input.weeklyChangeGoalKg ?? 0;
+    // The goal has been reached or passed: hold steady rather than keep cutting or bulking.
+    if ((weeklyKg < 0 && direction !== "lose") || (weeklyKg > 0 && direction !== "gain")) {
+      if (weeklyKg !== 0) notes.push("You've reached your goal weight, so this holds you there.");
+      weeklyKg = 0;
+    }
+    if (weeklyKg < -(safeLossKg + PACE_TOLERANCE_KG)) {
+      weeklyKg = -safeLossKg;
+      isAggressive = true;
+      warnings.push(
+        `We slowed your pace to about ${kgToLbs(safeLossKg).toFixed(1)} lb/wk, the fastest that's safe for your body.`,
+      );
+    } else if (weeklyKg > maxGainKg + PACE_TOLERANCE_KG) {
+      weeklyKg = maxGainKg;
+      isAggressive = true;
+      warnings.push(
+        `We slowed your pace to about ${kgToLbs(maxGainKg).toFixed(2)} lb/wk. Gaining faster is mostly fat.`,
+      );
+    }
+    requested = maintenance + (weeklyKg * KCAL_PER_KG_FAT) / 7;
+  }
+
+  // Under-18s and underweight members can't type their way past the safe pace.
+  const restricted = age < 18 || bmiOf(currentWeightKg, heightCm) < 18.5;
+  const floor = Math.max(
+    minSafeIntakeKcal(gender),
+    restricted ? maintenance - (safeLossKg * KCAL_PER_KG_FAT) / 7 : 0,
+  );
+  let intake = requested;
+  if (intake < floor) {
+    isUnsafe = calorieTargetKcal != null;
+    intake = floor;
+    warnings.push(
+      `We raised this to ${Math.round(floor).toLocaleString()} kcal, the lowest we'll plan for you.`,
+    );
+  }
+
+  const dailyDeficit = maintenance - intake;
+  const weeklyChangeKg = -(dailyDeficit * 7) / KCAL_PER_KG_FAT;
+  if (-weeklyChangeKg > safeLossKg + PACE_TOLERANCE_KG) {
+    isAggressive = true;
+    warnings.push(
+      `${Math.round(intake).toLocaleString()} kcal works out to ${kgToLbs(-weeklyChangeKg).toFixed(1)} lb/wk, faster than the 1% of body weight per week we recommend.`,
+    );
+  }
+  if (bmiOf(goalWeightKg, heightCm) < 18.5 && direction === "lose") {
+    warnings.push(
+      "Your goal weight is below the healthy range for your height. Consider a higher goal, or check it with a doctor.",
+    );
+  }
+
+  const remainingKg = Math.abs(weightDeltaKg(currentWeightKg, goalWeightKg));
+  const movingToGoal =
+    (direction === "lose" && weeklyChangeKg < 0) || (direction === "gain" && weeklyChangeKg > 0);
+  const estimatedGoalDate = movingToGoal
+    ? addDays(new Date(), Math.ceil((remainingKg / Math.abs(weeklyChangeKg)) * 7))
+    : new Date(input.targetDate);
+
+  const kind: PlanResult["effectiveGoal"] =
+    dailyDeficit >= 50 ? "lose" : dailyDeficit <= -50 ? "gain" : "maintain";
+
+  return {
+    bmrKcal,
+    formulaMaintenanceKcal,
+    maintenanceKcal: Math.round(maintenance),
+    recommendedIntakeKcal: Math.round(intake),
+    dailyDeficitKcal: Math.round(dailyDeficit),
+    foodDeficitKcal: Math.round(Math.max(0, dailyDeficit)),
+    exerciseBurnTargetKcal: 0,
+    weeklyChangeKg,
+    weeklyChangeLb: kgToLbs(weeklyChangeKg),
+    estimatedGoalDate,
+    targetDate: input.targetDate,
+    daysToTarget: daysBetween(new Date(), estimatedGoalDate),
+    isAggressive,
+    isUnsafe,
+    warnings,
+    notes,
+    effectiveGoal: kind,
+    splitPreset: input.splitPreset,
+  };
+}
+
 export function computePlan(input: PlanInput): PlanResult {
   const {
     gender,
@@ -187,6 +475,9 @@ export function computePlan(input: PlanInput): PlanResult {
     splitPreset,
     bulkPace = "lean",
     observedMaintenanceKcal,
+    maintenanceFactor,
+    weeklyChangeGoalKg,
+    calorieTargetKcal,
   } = input;
 
   const bmr = bmrMifflin({ gender, weightKg: currentWeightKg, heightCm, age });
@@ -194,7 +485,11 @@ export function computePlan(input: PlanInput): PlanResult {
   const maintenance =
     observedMaintenanceKcal && observedMaintenanceKcal > 0
       ? observedMaintenanceKcal
-      : formulaMaintenance;
+      : formulaMaintenance * (maintenanceFactor ?? 1);
+
+  if (weeklyChangeGoalKg != null || calorieTargetKcal != null) {
+    return chosenPacePlan(input, Math.round(bmr), Math.round(formulaMaintenance), maintenance);
+  }
 
   const deltaKg = weightDeltaKg(currentWeightKg, goalWeightKg);
   const kind = effectiveGoalKind(goalType, deltaKg);

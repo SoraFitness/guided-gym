@@ -15,13 +15,15 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react";
-import { useProfile, GOAL_LABELS } from "@/lib/profile";
+import { useProfile, GOAL_LABELS, type Profile } from "@/lib/profile";
 import {
-  computePlan,
   ACTIVITY_LABELS,
+  estimateMaintenance,
+  formulaCaloriePlan,
   SPLIT_LABELS,
   kgToLbs,
   lbsToKg,
+  snapWeeklyChangeKg,
   type DeficitSplit,
   type ActivityLevel,
   type BulkPace,
@@ -37,7 +39,8 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { setNutritionGoals } from "@/lib/nutritionStore";
-import { nutritionGoalType, suggestNutrition } from "@/lib/nutritionService";
+import { nutritionPlanFor, suggestNutrition } from "@/lib/nutritionService";
+import { CaloriePacePicker, type CaloriePaceValue } from "@/components/nutrition/CaloriePacePicker";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,25 +60,9 @@ export function GoalPanel() {
     [profile],
   );
 
-  const plan = useMemo(
-    () =>
-      profile
-        ? computePlan({
-            gender: profile.gender,
-            age: profile.age,
-            heightCm: profile.heightCm,
-            currentWeightKg: profile.currentWeightKg,
-            goalWeightKg: profile.goalWeightKg,
-            // Same goal as the saved daily targets, so this panel and Fuel agree.
-            goalType: nutritionGoalType(profile),
-            activity: profile.activityLevel,
-            targetDate,
-            splitPreset: profile.deficitSplit,
-            bulkPace: profile.bulkPace,
-          })
-        : null,
-    [profile, targetDate],
-  );
+  // Same plan as the saved daily targets, so this panel and Fuel agree.
+  const plan = useMemo(() => (profile ? nutritionPlanFor(profile) : null), [profile]);
+  const paceChosen = profile?.weeklyChangeGoalKg != null || profile?.calorieTargetKcal != null;
 
   // Adaptive recalibration from logged weights + intake
   const recal = useMemo(() => {
@@ -129,7 +116,8 @@ export function GoalPanel() {
             <h2 className="font-bold">Goal & calories</h2>
           </div>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            {GOAL_LABELS[profile.goal]} · target {targetDate.toLocaleDateString()}
+            {GOAL_LABELS[profile.goal]} · target{" "}
+            {(paceChosen ? plan.estimatedGoalDate : targetDate).toLocaleDateString()}
           </p>
         </div>
         <button
@@ -179,7 +167,18 @@ export function GoalPanel() {
           value={Math.abs(plan.dailyDeficitKcal)}
           unit="kcal"
         />
-        <Tile icon={Bike} label="Workout burn" value={plan.exerciseBurnTargetKcal} unit="kcal" />
+        {paceChosen ? (
+          <Tile
+            icon={Bike}
+            label="Weekly pace"
+            value={Number(
+              (imperial ? Math.abs(plan.weeklyChangeLb) : Math.abs(plan.weeklyChangeKg)).toFixed(2),
+            )}
+            unit={imperial ? "lb" : "kg"}
+          />
+        ) : (
+          <Tile icon={Bike} label="Workout burn" value={plan.exerciseBurnTargetKcal} unit="kcal" />
+        )}
       </div>
 
       {/* Forecast */}
@@ -232,7 +231,7 @@ export function GoalPanel() {
       )}
 
       {/* Split selector (only when there's a deficit/surplus) */}
-      {plan.effectiveGoal === "lose" && (
+      {plan.effectiveGoal === "lose" && !paceChosen && (
         <div className="mt-4">
           <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">
             Deficit split
@@ -325,7 +324,17 @@ export function GoalPanel() {
             {ACTIVITY_LABELS[profile.activityLevel].toLowerCase()} multiplier ={" "}
             <span className="tabular-nums text-foreground">{plan.formulaMaintenanceKcal} kcal</span>
           </p>
-          {plan.effectiveGoal === "lose" && (
+          {paceChosen && (
+            <p>
+              <span className="text-foreground font-semibold">Your plan:</span> maintenance{" "}
+              <span className="tabular-nums text-foreground">{plan.maintenanceKcal} kcal</span>, eat{" "}
+              <span className="tabular-nums text-foreground">
+                {plan.recommendedIntakeKcal} kcal
+              </span>
+              . Your training is already counted in maintenance.
+            </p>
+          )}
+          {plan.effectiveGoal === "lose" && !paceChosen && (
             <>
               <p>
                 <span className="text-foreground font-semibold">Deficit:</span>{" "}
@@ -343,7 +352,7 @@ export function GoalPanel() {
               </p>
             </>
           )}
-          {plan.effectiveGoal === "gain" && (
+          {plan.effectiveGoal === "gain" && !paceChosen && (
             <p>
               <span className="text-foreground font-semibold">Surplus:</span> TDEE ×{" "}
               {profile.bulkPace === "faster" ? "12%" : "7%"} ={" "}
@@ -363,8 +372,10 @@ export function GoalPanel() {
 
       {/* Edit goal sheet */}
       <EditGoalSheet
+        key={editOpen ? "editing" : "closed"}
         open={editOpen}
         onClose={() => setEditOpen(false)}
+        profile={profile}
         currentKg={profile.currentWeightKg}
         goalKg={profile.goalWeightKg}
         targetDate={targetDate}
@@ -375,6 +386,10 @@ export function GoalPanel() {
         units={profile.units ?? "metric"}
         onSave={(patch) => {
           updateProfile(patch);
+          // A pace or calorie number is a decision, so the daily targets follow it now.
+          if (patch.weeklyChangeGoalKg != null || patch.calorieTargetKcal != null) {
+            setNutritionGoals(suggestNutrition({ ...profile, ...patch }));
+          }
           setEditOpen(false);
         }}
       />
@@ -430,6 +445,7 @@ function EditGoalSheet({
   open,
   onClose,
   onSave,
+  profile,
   currentKg,
   goalKg,
   targetDate,
@@ -441,7 +457,8 @@ function EditGoalSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (patch: Record<string, unknown>) => void;
+  onSave: (patch: Partial<Profile>) => void;
+  profile: Profile;
   currentKg: number;
   goalKg: number;
   targetDate: Date;
@@ -458,8 +475,37 @@ function EditGoalSheet({
   const [bf, setBf] = useState<string>(bodyFatPct?.toString() ?? "");
   const [steps, setSteps] = useState<string>(avgStepsPerDay?.toString() ?? "");
   const [bp, setBp] = useState<BulkPace>(bulkPace);
+  const [pace, setPace] = useState<CaloriePaceValue>({
+    maintenanceFactor: profile.maintenanceFactor,
+    weeklyChangeGoalKg: profile.weeklyChangeGoalKg,
+    calorieTargetKcal: profile.calorieTargetKcal,
+  });
 
   const imperial = units === "imperial";
+  const paceChosen = pace.weeklyChangeGoalKg != null || pace.calorieTargetKcal != null;
+  const draft: Profile = {
+    ...profile,
+    currentWeightKg: c,
+    goalWeightKg: g,
+    activityLevel: act,
+    ...pace,
+  };
+  const answers = {
+    gender: profile.gender,
+    age: profile.age,
+    heightCm: profile.heightCm,
+    currentWeightKg: c,
+    goalWeightKg: g,
+    activity: act,
+    experience: profile.experience,
+  };
+  const estimate = formulaCaloriePlan(answers);
+  const suggestion = {
+    ...estimate,
+    // Resets to what's saved (it may be the AI's estimate), else the app's own number.
+    maintenanceFactor: profile.maintenanceFactor ?? estimateMaintenance(answers).factor,
+    weeklyChangeKg: snapWeeklyChangeKg(estimate.weeklyChangeKg, units),
+  };
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -494,20 +540,30 @@ function EditGoalSheet({
             />
           </div>
 
-          <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
-            <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
-              Target date
-            </label>
-            <div className="mt-2 flex items-center gap-2">
-              <Calendar className="size-4 text-neon" />
-              <input
-                type="date"
-                value={dateStr}
-                onChange={(e) => setDateStr(e.target.value)}
-                className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-hairline px-3 text-base outline-none focus:border-neon/40 [color-scheme:dark]"
-              />
+          <CaloriePacePicker
+            profile={draft}
+            value={pace}
+            onChange={setPace}
+            suggestion={suggestion}
+            maintenanceLabel="Your saved estimate"
+          />
+
+          {!paceChosen && (
+            <div className="rounded-2xl bg-white/[0.03] border border-hairline p-4">
+              <label className="block text-[13px] uppercase tracking-wider text-muted-foreground">
+                Target date
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <Calendar className="size-4 text-neon" />
+                <input
+                  type="date"
+                  value={dateStr}
+                  onChange={(e) => setDateStr(e.target.value)}
+                  className="flex-1 h-11 rounded-xl bg-white/[0.04] border border-hairline px-3 text-base outline-none focus:border-neon/40 [color-scheme:dark]"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">
@@ -543,27 +599,29 @@ function EditGoalSheet({
             />
           </div>
 
-          <div>
-            <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">
-              Bulk pace
+          {!paceChosen && (
+            <div>
+              <div className="text-[13px] uppercase tracking-wider text-muted-foreground mb-2">
+                Bulk pace
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(["lean", "faster"] as BulkPace[]).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setBp(b)}
+                    className={cn(
+                      "h-11 rounded-xl border text-xs font-semibold capitalize",
+                      bp === b
+                        ? "border-neon bg-neon/10 text-neon"
+                        : "border-hairline bg-white/[0.03]",
+                    )}
+                  >
+                    {b} bulk
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {(["lean", "faster"] as BulkPace[]).map((b) => (
-                <button
-                  key={b}
-                  onClick={() => setBp(b)}
-                  className={cn(
-                    "h-11 rounded-xl border text-xs font-semibold capitalize",
-                    bp === b
-                      ? "border-neon bg-neon/10 text-neon"
-                      : "border-hairline bg-white/[0.03]",
-                  )}
-                >
-                  {b} bulk
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
 
         <SheetFooter className="mt-5">
@@ -572,12 +630,16 @@ function EditGoalSheet({
               const bfNum = parseFloat(bf);
               const stepsNum = parseFloat(steps);
               onSave({
+                ...pace,
                 currentWeightKg: c,
                 goalWeightKg: g,
-                // Local noon keeps the picked day in every time zone.
-                goalTargetDate: dateStr
-                  ? new Date(`${dateStr}T12:00:00`).toISOString()
-                  : targetDate.toISOString(),
+                // With a chosen pace the date follows from it. Otherwise local noon
+                // keeps the picked day in every time zone.
+                goalTargetDate: paceChosen
+                  ? nutritionPlanFor(draft).estimatedGoalDate.toISOString()
+                  : dateStr
+                    ? new Date(`${dateStr}T12:00:00`).toISOString()
+                    : targetDate.toISOString(),
                 activityLevel: act,
                 bodyFatPct: Number.isFinite(bfNum) && bfNum > 0 ? bfNum : undefined,
                 avgStepsPerDay: Number.isFinite(stepsNum) && stepsNum > 0 ? stepsNum : undefined,

@@ -48,6 +48,12 @@ import {
   WORKOUT_PLANS_CHANGE_EVT,
   type SavedWorkoutPlan,
 } from "./workoutPlanStore";
+import {
+  getWaterLogEntries,
+  replaceWaterLog,
+  WATER_CHANGE_EVT,
+  type WaterEntry,
+} from "./waterStore";
 
 const LB_PER_KG = 1 / 0.45359237;
 const KG_PER_LB = 0.45359237;
@@ -70,6 +76,7 @@ const DOMAIN_EVENTS: Record<Domain, string[]> = {
     "fitness:foodhistory-change",
     "fitness:session-change",
     WORKOUT_PLANS_CHANGE_EVT,
+    WATER_CHANGE_EVT,
   ],
 };
 
@@ -79,6 +86,7 @@ const APP_STATE_KEYS = {
   favorites: "foodFavorites",
   unit: "weightUnit",
   workoutPlans: "savedWorkoutPlans",
+  water: "waterLog",
 } as const;
 
 /* ---------------- row <-> store mapping ---------------- */
@@ -354,6 +362,7 @@ export function startCloudSync(userId: string): () => void {
             [APP_STATE_KEYS.favorites]: getFavoriteFoodsSnapshot() as unknown as Json,
             [APP_STATE_KEYS.unit]: getPreferredUnit() as unknown as Json,
             [APP_STATE_KEYS.workoutPlans]: getSavedWorkoutPlans() as unknown as Json,
+            [APP_STATE_KEYS.water]: getWaterLogEntries() as unknown as Json,
           };
           const snapshot = JSON.stringify(payload);
           if (lastPushed.get("appState") === snapshot) return;
@@ -531,6 +540,10 @@ export function startCloudSync(userId: string): () => void {
             b.createdAt.localeCompare(a.createdAt),
           ),
         );
+      }
+      const cloudWater = (state.get(APP_STATE_KEYS.water) as WaterEntry[] | null) ?? [];
+      if (Array.isArray(cloudWater) && cloudWater.length) {
+        replaceWaterLog(mergeById(getWaterLogEntries(), cloudWater, (entry) => entry.id));
       }
     } finally {
       applyingRemote = false;

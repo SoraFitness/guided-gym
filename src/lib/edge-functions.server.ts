@@ -15,7 +15,7 @@ const SCAN_MODEL = "qwen/qwen3-vl-235b-a22b-instruct";
 const SCAN_PROVIDER = { order: ["parasail/fp8"], allow_fallbacks: true };
 
 const LOCAL_PREVIEW_AI_OPERATIONS: Record<
-  "body-scan-preview" | "body-scan" | "face-scan" | "coach",
+  "body-scan-preview" | "body-scan" | "face-scan" | "coach" | "workout-plan",
   {
     model: string;
     maxTokens: number;
@@ -45,6 +45,11 @@ const LOCAL_PREVIEW_AI_OPERATIONS: Record<
     model: "qwen/qwen3.5-flash-02-23",
     maxTokens: 600,
     title: "Ascendr Fitness Coach",
+  },
+  "workout-plan": {
+    model: "qwen/qwen3.5-flash-02-23",
+    maxTokens: 1200,
+    title: "Ascendr Workout Plan",
   },
 };
 type LocalPreviewAiOperation = keyof typeof LOCAL_PREVIEW_AI_OPERATIONS;
@@ -79,7 +84,7 @@ function localPreviewAiConfig(operation: AiGatewayOperation) {
   const apiKey =
     operation === "face-scan"
       ? process.env.OPENROUTER_FACE_SCAN_API_KEY || process.env.OPENROUTER_API_KEY
-      : operation === "coach"
+      : operation === "coach" || operation === "workout-plan"
         ? process.env.OPENROUTER_API_KEY
         : process.env.OPENROUTER_BODY_SCAN_API_KEY || process.env.OPENROUTER_API_KEY;
   return apiKey ? { apiKey, ...LOCAL_PREVIEW_AI_OPERATIONS[operation] } : null;

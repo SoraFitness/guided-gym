@@ -6,7 +6,8 @@ import {
   type Difficulty,
 } from "./workouts";
 import type { SavedWorkoutPlan } from "./workoutPlanStore";
-import { programForProfile } from "./workoutProgram";
+import { programForProfile, swapWorkoutForSetup } from "./workoutProgram";
+import { getTrainingSetupOverride } from "./trainingLocation";
 import type { WorkoutSplitId } from "./workoutSplits";
 
 export type SplitLabel =
@@ -489,13 +490,19 @@ function trainingDay(
   day: ScheduleDayBase,
   profile: Profile,
   label: Exclude<SplitLabel, "Rest">,
-  workout: Workout | undefined,
+  scheduled: Workout | undefined,
 ): WeeklyScheduleDay {
+  // Only today can be moved to another setup; the rest of the week stays as planned.
+  const setup = (day.isToday && getTrainingSetupOverride()) || profile.equipment;
+  const workout =
+    scheduled && setup !== profile.equipment
+      ? swapWorkoutForSetup(scheduled, setup, profile)
+      : scheduled;
   const duration = profile.sessionMinutes;
   const caloriesPerMin = workout ? workout.calories / workout.duration : 7;
   const exercises =
     workout?.exercises.map((exercise) => exercise.name) ??
-    EXERCISE_POOLS[profile.equipment][exercisePoolLabel(label)] ??
+    EXERCISE_POOLS[setup][exercisePoolLabel(label)] ??
     [];
   return {
     ...day,
@@ -505,7 +512,7 @@ function trainingDay(
     focus: focusFor(label),
     duration,
     difficulty: difficultyFor(profile.experience),
-    equipment: EQUIPMENT_LABEL[profile.equipment],
+    equipment: EQUIPMENT_LABEL[setup],
     estimatedCalories: Math.round(caloriesPerMin * duration),
     exercises: exercises.slice(0, 5),
     isRestDay: false,
@@ -588,7 +595,7 @@ export const weeklyScheduleService = {
     const lastMonday = mondayFor(lastDay);
     const schedule: WeeklyScheduleDay[] = [];
 
-    for (let weekStart = firstMonday; weekStart <= lastMonday; ) {
+    for (let weekStart = firstMonday; weekStart <= lastMonday;) {
       schedule.push(...weeklyScheduleService.generateSchedule(profile, activePlan, weekStart));
       const nextWeek = new Date(weekStart);
       nextWeek.setDate(nextWeek.getDate() + 7);

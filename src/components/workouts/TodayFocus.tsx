@@ -1,5 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarDays, Check, ChevronRight, Flame, HeartPulse, Play, Timer } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Dumbbell,
+  Flame,
+  HeartPulse,
+  Home,
+  Layers,
+  Play,
+  Timer,
+} from "lucide-react";
 import { useMemo } from "react";
 import {
   AnatomyFigure,
@@ -19,8 +31,13 @@ import {
   SectionHeader,
   type DayStripItem,
 } from "@/components/app/kit";
-import { FOCUS_LABELS, useProfile, type FocusArea } from "@/lib/profile";
+import { FOCUS_LABELS, useProfile, type EquipmentSetup, type FocusArea } from "@/lib/profile";
 import { useProgress } from "@/lib/progressStore";
+import {
+  setTrainingSetupOverride,
+  trainingLocationOptions,
+  useTrainingSetupOverride,
+} from "@/lib/trainingLocation";
 import { weeklyScheduleService, type WeeklyScheduleDay } from "@/lib/weeklySchedule";
 import { getActiveWorkoutPlan, useSavedWorkoutPlans } from "@/lib/workoutPlanStore";
 import { getWorkout, type Exercise, type Workout } from "@/lib/workouts";
@@ -67,13 +84,16 @@ export function useTodayTraining() {
   const completed = useCompletedWorkouts();
   const session = useActiveSession();
   const progress = useProgress(profile?.sessionMinutes ?? 30);
+  const setupOverride = useTrainingSetupOverride();
   const activePlan = useMemo(
     () => getActiveWorkoutPlan(savedPlans, profile),
     [savedPlans, profile],
   );
   const schedule = useMemo(
     () => (profile ? weeklyScheduleService.generateSchedule(profile, activePlan ?? []) : []),
-    [profile, activePlan],
+    // The schedule reads today's setup override itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profile, activePlan, setupOverride],
   );
   const todayPlan = schedule.find((day) => day.isToday);
   const isRestDay = !todayPlan || todayPlan.isRestDay || !todayPlan.workoutId;
@@ -140,6 +160,66 @@ export function useTodayTraining() {
 }
 
 export type TodayTraining = ReturnType<typeof useTodayTraining>;
+
+const LOCATION_ICONS: Record<EquipmentSetup, typeof Home> = {
+  gym: Building2,
+  dumbbells: Dumbbell,
+  mixed: Layers,
+  none: Home,
+};
+
+/** Change where today's session happens. Tomorrow goes back to the plan by itself. */
+export function TrainingLocationSwitch({
+  training,
+  className,
+}: {
+  training: TodayTraining;
+  className?: string;
+}) {
+  const override = useTrainingSetupOverride();
+  const { profile, isRestDay, liveSession } = training;
+  if (!profile || isRestDay) return null;
+  const current = override ?? profile.equipment;
+  const locked = Boolean(liveSession);
+  return (
+    <div className={className}>
+      <div
+        role="group"
+        aria-label="Where are you training today?"
+        className="grid grid-cols-3 gap-1 rounded-[16px] border border-hairline bg-black/25 p-1"
+      >
+        {trainingLocationOptions(profile).map(({ setup, label }) => {
+          const Icon = LOCATION_ICONS[setup];
+          const active = current === setup;
+          return (
+            <button
+              key={setup}
+              type="button"
+              disabled={locked}
+              aria-pressed={active}
+              onClick={() => setTrainingSetupOverride(setup === profile.equipment ? null : setup)}
+              className={cn(
+                "flex h-10 items-center justify-center gap-1.5 rounded-[12px] text-[13px] font-semibold transition",
+                active ? "bg-neon text-neon-foreground" : "text-muted-foreground",
+                locked && !active && "opacity-40",
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {(override || locked) && (
+        <p className="mt-1.5 px-1 text-[12px] text-muted-foreground">
+          {locked
+            ? "Finish this session to switch."
+            : "Swapped for today. Your plan picks back up tomorrow."}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function TodayFocusCard({
   training,

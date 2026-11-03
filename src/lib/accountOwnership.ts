@@ -16,6 +16,8 @@ const ACCOUNT_SCOPED_STORAGE_KEYS = [
   "fitness:activeSession:v2",
   "fitness:weightUnit",
   "fitness:weightlog",
+  "fitness:waterlog",
+  "fitness:trainingLocation",
   "fitness:workoutLog",
   "fitness:foodrecent",
   "fitness:foodfavs",

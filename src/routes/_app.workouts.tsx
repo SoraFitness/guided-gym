@@ -73,8 +73,10 @@ import {
   TodayExerciseList,
   TodayFocusCard,
   TodayStartButton,
+  TrainingLocationSwitch,
   useTodayTraining,
 } from "@/components/workouts/TodayFocus";
+import { useProfileForToday, useTrainingSetupOverride } from "@/lib/trainingLocation";
 import { getWorkoutSplitOption, WORKOUT_SPLIT_OPTIONS } from "@/lib/workoutSplits";
 import { useCompletedWorkouts } from "@/lib/workoutSessionStore";
 import { generateWorkoutPlan } from "@/lib/workoutPlan.functions";
@@ -141,7 +143,8 @@ function WorkoutsPage() {
 
       {profile && (
         <>
-          <TodayFocusCard training={training} className="mt-5" />
+          <TrainingLocationSwitch training={training} className="mt-5" />
+          <TodayFocusCard training={training} className="mt-3" />
           <div className="mt-3">
             <TodayStartButton training={training} />
           </div>
@@ -201,6 +204,7 @@ function WorkoutsPage() {
 
 function RecommendedView() {
   const { profile } = useProfile();
+  const todayProfile = useProfileForToday();
   const [showPlanBuilder, setShowPlanBuilder] = useState(false);
   const savedPlans = useSavedWorkoutPlans();
   const history = useCompletedWorkouts();
@@ -213,11 +217,11 @@ function RecommendedView() {
       }),
     [history, profile?.experience, profile?.focusAreas],
   );
-  if (!profile) return null;
+  if (!profile || !todayProfile) return null;
   const activePlan = getActiveWorkoutPlan(savedPlans, profile);
   const activeIds = new Set(activePlan?.workoutIds ?? []);
   const list = workoutRecommendationService
-    .recommend(profile, 14)
+    .recommend(todayProfile, 14)
     .filter((workout) => !activeIds.has(workout.id));
   const topPick = activePlan?.workoutIds[0] ? getWorkout(activePlan.workoutIds[0]) : list[0];
   const quickPicks = list.slice(activePlan ? 0 : 1, activePlan ? 4 : 5);
@@ -687,7 +691,7 @@ const categoryChips = ["All", "Strength", "HIIT", "Cardio", "Core", "Mobility"] 
 type CatChip = (typeof categoryChips)[number];
 
 function AllWorkoutsView() {
-  const { profile } = useProfile();
+  const profile = useProfileForToday();
   const [chip, setChip] = useState<CatChip>("All");
   const [q, setQ] = useState("");
   const [visibleCount, setVisibleCount] = useState(40);
@@ -763,6 +767,7 @@ function WeeklyScheduleView() {
   const { profile, updateProfile } = useProfile();
   const completedWorkouts = useCompletedWorkouts();
   const savedPlans = useSavedWorkoutPlans();
+  const setupOverride = useTrainingSetupOverride();
   const activePlan = useMemo(
     () => getActiveWorkoutPlan(savedPlans, profile),
     [savedPlans, profile],
@@ -785,7 +790,7 @@ function WeeklyScheduleView() {
       const todayIndex = nextSchedule.findIndex((day) => day.isToday);
       setActiveDayIndex(todayIndex >= 0 ? todayIndex : 0);
     }
-  }, [profile, activePlan]);
+  }, [profile, activePlan, setupOverride]);
 
   if (!profile) return null;
 
@@ -952,6 +957,7 @@ function WeeklyScheduleView() {
         />
       ) : (
         <MonthlyTrainingCalendar
+          key={setupOverride ?? "plan"}
           profile={profile}
           activePlan={activePlan ?? []}
           completedWorkouts={completedWorkouts}

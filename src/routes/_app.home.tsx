@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Bell,
   ChevronRight,
+  Droplet,
   Dumbbell,
   Flame,
   HeartPulse,
@@ -36,6 +37,7 @@ import {
   Kicker,
   DeltaBadge,
   iconButtonClass,
+  LevelMeter,
   MACRO_COLORS,
   Page,
   PageHeader,
@@ -48,10 +50,14 @@ import { TrendChart } from "@/components/app/charts";
 import {
   focusTitle,
   scheduleToStrip,
+  TrainingLocationSwitch,
   useTodayTraining,
   type TodayTraining,
 } from "@/components/workouts/TodayFocus";
 import { scanTrendPoints, useScanHistory } from "@/components/scans/useScanHistory";
+import { useProfileForToday } from "@/lib/trainingLocation";
+import { useWaterLog, formatWater, waterGoalMl, waterOn, waterTotalMl } from "@/lib/waterStore";
+import { WATER_COLOR } from "@/components/nutrition/WaterCard";
 import type { ScanSubmissionSummary } from "@/lib/scanSubmissions.functions";
 
 export const Route = createFileRoute("/_app/home")({
@@ -61,6 +67,8 @@ export const Route = createFileRoute("/_app/home")({
 
 function HomePage() {
   const { profile } = useProfile();
+  const todayProfile = useProfileForToday();
+  const waterToday = waterTotalMl(waterOn(useWaterLog(), new Date()));
   const session = useAuthSession();
   const signedIn = isAccountSession(session);
   const displayName =
@@ -74,13 +82,13 @@ function HomePage() {
 
   const recommended = useMemo(
     () =>
-      profile
+      todayProfile
         ? workoutRecommendationService
-            .recommend(profile, 10)
+            .recommend(todayProfile, 10)
             .filter((workout) => workout.id !== training.workout?.id)
             .slice(0, 5)
         : [],
-    [profile, training.workout?.id],
+    [todayProfile, training.workout?.id],
   );
   const adaptiveInsight = useMemo(
     () => getAdaptiveTrainingInsight(completedWorkouts, training.workout, recommended),
@@ -188,6 +196,20 @@ function HomePage() {
             />
             <MacroStat label="Fat" value={totals.fat} goal={goals.fat} color={MACRO_COLORS.fat} />
           </div>
+          {profile && (
+            <div className="mt-4 flex items-center gap-2.5 border-t border-dashed border-white/10 pt-4">
+              <Droplet className="size-4 shrink-0" style={{ color: WATER_COLOR }} />
+              <LevelMeter
+                value={waterToday / waterGoalMl(profile)}
+                color={WATER_COLOR}
+                className="min-w-0 flex-1"
+              />
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-muted-foreground">
+                {formatWater(waterToday, profile.units)} /{" "}
+                {formatWater(waterGoalMl(profile), profile.units)}
+              </span>
+            </div>
+          )}
         </Link>
       </section>
 
@@ -308,7 +330,9 @@ function TodayCard({ training }: { training: TodayTraining }) {
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-[1fr_auto] gap-2.5">
+      <TrainingLocationSwitch training={training} className="mt-5" />
+
+      <div className={cn("grid grid-cols-[1fr_auto] gap-2.5", isRestDay ? "mt-5" : "mt-3")}>
         {isRestDay ? (
           <Link
             to="/workout/$id"

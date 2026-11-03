@@ -211,6 +211,37 @@ export function fallbackProgram(
   };
 }
 
+const GENERATED_ID = /^sora-([a-z]+)-(?:none|dumbbells|gym|mixed)-(.+)$/;
+
+/**
+ * The same training session built for another setup, so skipping the gym keeps the
+ * day's muscles, level, goal and length. Returns the workout unchanged if nothing fits.
+ */
+export function swapWorkoutForSetup(
+  workout: Workout,
+  setup: Profile["equipment"],
+  profile: Profile,
+): Workout {
+  if (builtForEquipment(workout, setup)) return workout;
+  const generated = GENERATED_ID.exec(workout.id);
+  const twin = generated && getWorkout(`sora-${generated[1]}-${setup}-${generated[2]}`);
+  if (twin) return twin;
+
+  // Hand-written workouts have no twin, so look for the closest session of the same type.
+  const input = { ...planInputFromProfile(profile), equipment: setup };
+  const type = splitLabelForWorkout(workout);
+  const builtForSetup = buildProgramCandidates(input).filter((candidate) =>
+    builtForEquipment(candidate.workout, setup),
+  );
+  for (const sessionType of [type, ...(RELATED_SESSIONS[type] ?? [])]) {
+    const match = builtForSetup.find(
+      (candidate) => splitLabelForWorkout(candidate.workout) === sessionType,
+    );
+    if (match) return match.workout;
+  }
+  return workout;
+}
+
 const profilePrograms = new Map<string, string[]>();
 
 /**

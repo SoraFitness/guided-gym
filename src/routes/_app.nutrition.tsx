@@ -84,6 +84,7 @@ import {
 } from "@/lib/nutritionQuality";
 import { compressImage } from "@/lib/imageCompress";
 import { FoodCameraPanel } from "@/components/nutrition/FoodCameraPanel";
+import { WaterCard } from "@/components/nutrition/WaterCard";
 import { readNutritionLabel } from "@/lib/nutritionLabel.functions";
 import { useProfile, type Goal, type Profile } from "@/lib/profile";
 import {
@@ -262,6 +263,8 @@ function NutritionPage() {
           </div>
         )
       )}
+
+      {profile && <WaterCard profile={profile} day={day} />}
 
       {isToday && profile && <TargetRefreshCard goals={goals} profile={profile} />}
 

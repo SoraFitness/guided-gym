@@ -47,6 +47,8 @@ export function findFinisherExercise(exerciseId: string, level: ExperienceLevel 
   return item ? finisherExercise(item, level) : undefined;
 }
 
+const GEAR_RANK: Record<EquipmentSetup, number> = { none: 0, dumbbells: 1, mixed: 2, gym: 3 };
+
 /** The workout as this member should do it. Returns the same object when nothing changes. */
 export function personalizeWorkout(workout: Workout, profile: Profile | null | undefined): Workout {
   if (!profile?.focusAreas?.includes("core") || workout.category !== "Strength") return workout;
@@ -55,11 +57,15 @@ export function personalizeWorkout(workout: Workout, profile: Profile | null | u
   if (needed <= 0) return workout;
 
   const taken = new Set(workout.exercises.map((exercise) => exercise.name));
-  const finisher = FINISHER_ORDER[profile.equipment]
+  // A workout lists the setup it was built for first. The finisher uses that or the
+  // member's own, whichever needs less gear, so a home day never asks for a cable machine.
+  const builtFor = workout.equipment[0];
+  const setup = GEAR_RANK[profile.equipment] < GEAR_RANK[builtFor] ? profile.equipment : builtFor;
+  const finisher = FINISHER_ORDER[setup]
     .map((id) => EXERCISE_LIBRARY.find((item) => item.id === id))
     .filter(
       (item): item is ExerciseLibraryItem =>
-        Boolean(item) && item!.equipment.includes(profile.equipment) && !taken.has(item!.name),
+        Boolean(item) && item!.equipment.includes(setup) && !taken.has(item!.name),
     )
     .slice(0, needed)
     .map((item) => finisherExercise(item, profile.experience));

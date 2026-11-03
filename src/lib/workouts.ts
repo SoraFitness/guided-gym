@@ -580,6 +580,8 @@ function scoreWorkout(w: Workout, p: Profile): number {
   let s = 0;
   // Hard requirement: equipment must match
   if (!matchesEquipment(w, p.equipment)) s -= 1000;
+  // At the gym, show gym sessions first rather than the bodyweight ones any setup can do.
+  if (w.equipment[0] === p.equipment) s += 20;
   // Goal match
   const selectedGoals = getProfileGoals(p);
   const matchedGoals = selectedGoals.filter((goal) => w.recommendedForGoals.includes(goal));
